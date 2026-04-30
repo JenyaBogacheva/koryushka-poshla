@@ -7,15 +7,24 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "demo": "tsx scripts/demo-game.ts"
+    "demo": "tsx scripts/demo-game.ts",
+    "start": "NODE_ENV=production tsx server/index.ts",
+    "dev:server": "tsx watch server/index.ts"
   },
   "devDependencies": {
+    "@types/express": "^4.17.25",
     "@types/node": "^20.11.0",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^8.2.2",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0",
     "vitest": "^1.4.0"
   },
   "optionalDependencies": {
     "@rollup/rollup-darwin-arm64": "^4.60.2"
+  },
+  "dependencies": {
+    "express": "^4.22.1",
+    "ws": "^8.20.0"
   }
 }
