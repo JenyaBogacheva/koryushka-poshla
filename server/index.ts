@@ -8,17 +8,17 @@ import type { GameState } from '@shared/types';
 import { buildScriptedGame, runScriptedGame } from './scripted-game.js';
 
 export type ServerOptions = {
-  port?: number;       // 0 means ephemeral; default 3000
-  delayMs?: number;    // scripted runner delay; default 2000 (live), 0 (tests)
-  serveStatic?: boolean; // serve client/dist; default = NODE_ENV==='production'
+  port?: number;
+  delayMs?: number;
+  serveStatic?: boolean;
 };
 
 export type RunningServer = {
   httpServer: HttpServer;
   wss: WebSocketServer;
   port: number;
-  /** Resolves when the scripted runner finishes (game ends). */
-  done: Promise<void>;
+  /** Starts the scripted runner. Returns a Promise that resolves when the game ends. */
+  start: () => Promise<void>;
   close: () => Promise<void>;
 };
 
@@ -38,7 +38,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
-  const snapshots: GameState[] = [];
+  let latest: GameState | null = null;
 
   function broadcast(message: object): void {
     const payload = JSON.stringify(message);
@@ -48,23 +48,22 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   }
 
   wss.on('connection', (socket) => {
-    // Replay full snapshot history so late-connecting clients see every mutation.
-    for (const state of snapshots) {
-      socket.send(JSON.stringify({ type: 'state', state }));
-    }
+    if (latest) socket.send(JSON.stringify({ type: 'state', state: latest }));
   });
 
   await new Promise<void>((resolve) => httpServer.listen(port, resolve));
   const actualPort = (httpServer.address() as AddressInfo).port;
 
-  const game = buildScriptedGame();
-  const done = runScriptedGame(game, {
-    delayMs,
-    onSnapshot: (state) => {
-      snapshots.push(state);
-      broadcast({ type: 'state', state });
-    },
-  });
+  const start = (): Promise<void> => {
+    const game = buildScriptedGame();
+    return runScriptedGame(game, {
+      delayMs,
+      onSnapshot: (state) => {
+        latest = state;
+        broadcast({ type: 'state', state });
+      },
+    });
+  };
 
   const close = async (): Promise<void> => {
     for (const client of wss.clients) client.terminate();
@@ -72,13 +71,13 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   };
 
-  return { httpServer, wss, port: actualPort, done, close };
+  return { httpServer, wss, port: actualPort, start, close };
 }
 
-// Direct CLI invocation: `tsx server/index.ts` or `npm start`.
 const isMain = import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
-  startServer().then(({ port }) => {
-    console.log(`[scrabble] listening on http://localhost:${port} (ws: /ws)`);
+  startServer().then((server) => {
+    console.log(`[scrabble] listening on http://localhost:${server.port} (ws: /ws)`);
+    server.start();
   });
 }
