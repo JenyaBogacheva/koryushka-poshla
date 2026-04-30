@@ -23,7 +23,6 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.7.0",
     "concurrently": "^8.2.2",
-    "lightningcss": "^1.32.0",
     "postcss": "^8.5.12",
     "tailwindcss": "^4.2.4",
     "tsx": "^4.7.0",
@@ -32,7 +31,8 @@
     "vitest": "^1.4.0"
   },
   "optionalDependencies": {
-    "@rollup/rollup-darwin-arm64": "^4.60.2"
+    "@rollup/rollup-darwin-arm64": "^4.60.2",
+    "lightningcss": "^1.32.0"
   },
   "dependencies": {
     "express": "^4.22.1",
