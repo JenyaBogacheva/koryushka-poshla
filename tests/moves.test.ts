@@ -153,4 +153,31 @@ describe('validateMove', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe('duplicate-target');
   });
+
+  it('rejects duplicate tileId across placements', () => {
+    const b = createEmptyBoard();
+    const rack = [tile('a', 'А'), tile('b', 'Б')];
+    // Same tileId 'a' used in two different cells
+    const placements: Placement[] = [
+      { tileId: 'a', row: 7, col: 6, playedAs: 'А' },
+      { tileId: 'a', row: 7, col: 7, playedAs: 'А' },
+    ];
+    const result = validateMove(b, rack, placements, true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('duplicate-tile');
+  });
+
+  it('first move with disconnected group is rejected even if center is covered', () => {
+    const b = createEmptyBoard();
+    const rack = [tile('a', 'А'), tile('b', 'Б'), tile('c', 'В')];
+    // One tile at center (7,7), and a disconnected pair at (0,0)-(0,1)
+    const placements: Placement[] = [
+      { tileId: 'a', row: 7, col: 7, playedAs: 'А' },
+      { tileId: 'b', row: 0, col: 0, playedAs: 'Б' },
+      { tileId: 'c', row: 0, col: 1, playedAs: 'В' },
+    ];
+    const result = validateMove(b, rack, placements, true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('first-move-must-be-one-group');
+  });
 });
