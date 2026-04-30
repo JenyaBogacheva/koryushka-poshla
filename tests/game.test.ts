@@ -197,3 +197,30 @@ describe('Game — claimBlank', () => {
     expect(() => g.claimBlank(0, 7, 7, 'irrelevant')).toThrow();
   });
 });
+
+describe('Game — endGame', () => {
+  it('any player may end; phase becomes finished', () => {
+    const g = makeReadyGame(1);
+    g.endGame(2); // not their turn — still allowed per spec
+    expect(g.snapshot().phase).toBe('finished');
+  });
+
+  it('after endGame, further turn-actions are rejected', () => {
+    const g = makeReadyGame(1);
+    g.endGame(0);
+    const r = g.submitMove(0, []);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe('not-playing');
+  });
+});
+
+describe('Game — toggleRackVisibility', () => {
+  it('flips a player\'s visibility', () => {
+    const g = makeReadyGame(1);
+    expect(g.snapshot().players[1]!.rackVisible).toBe(true);
+    g.toggleRackVisibility(1, false);
+    expect(g.snapshot().players[1]!.rackVisible).toBe(false);
+    g.toggleRackVisibility(1, true);
+    expect(g.snapshot().players[1]!.rackVisible).toBe(true);
+  });
+});

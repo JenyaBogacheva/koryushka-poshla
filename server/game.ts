@@ -160,6 +160,15 @@ export class Game {
     };
   }
 
+  endGame(_slot: Slot): void {
+    if (this.state.phase !== 'playing') return; // idempotent if already finished/paused
+    this.state.phase = 'finished';
+  }
+
+  toggleRackVisibility(slot: Slot, visible: boolean): void {
+    this.state.players[slot]!.rackVisible = visible;
+  }
+
   private assertTurn(slot: Slot): void {
     if (this.state.phase !== 'playing') throw new Error('Game is not in playing phase');
     if (slot !== this.state.turnIndex) throw new Error(`Not slot ${slot}'s turn`);
