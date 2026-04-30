@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PREMIUMS } from '../server/premiums';
+import { PREMIUMS } from '@shared/premiums';
 
 describe('premium-square map', () => {
   it('is 15×15', () => {

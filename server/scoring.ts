@@ -1,5 +1,5 @@
 import type { Board, Placement, WordFormed } from '@shared/types';
-import { PREMIUMS } from './premiums.js';
+import { PREMIUMS } from '@shared/premiums.js';
 import { loadTileDistribution } from './data/index.js';
 
 const POINTS_BY_LETTER: Map<string, number> = (() => {
