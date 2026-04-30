@@ -34,7 +34,7 @@ A real-time, online, three-player Russian Scrabble game ("Эрудит") for a f
 | **Blank-swap ("claim blank")** | When a blank tile is on the board representing letter X, any player who has a real X tile in their rack may, on their own turn (before submitting a move), claim the blank: the real X takes the cell, the blank moves to the player's rack. **First-come-first-served** — first valid claim wins. |
 | **Challenges** | None — there is no challenge mechanic. The dictionary advisory replaces it. |
 | **Time limits** | None. |
-| **Game end** | Game ends when (a) the bag is empty *and* one player has emptied their rack, or (b) all three players pass consecutively (3 passes in a row, no other moves between). At end: each player's remaining-tile points are subtracted from their score; if ended via (a), the unused-tile point sum is added to the player who emptied their rack. Highest score wins. |
+| **Game end** | No automatic end. Any player can end the game at any time via an "End game" button (single confirmation modal to avoid accidents). Scores are taken as-is — no remaining-tile-point adjustment. Highest score wins; ties are ties. |
 
 ## 4. Architecture
 
@@ -95,7 +95,7 @@ scrabble/
 │   │   ├── Square.tsx              # Single board cell (bonus styling, placed tile, pending tile)
 │   │   ├── Rack.tsx                # Own rack, draggable tiles
 │   │   ├── PlayerCard.tsx          # Right-column card: name, score, rack (visible/hidden), turn highlight
-│   │   ├── ActionBar.tsx           # Submit / Swap / Pass / Redraw / Toggle visibility
+│   │   ├── ActionBar.tsx           # Submit / Swap / Pass / Redraw / Toggle visibility / End game
 │   │   ├── BlankPicker.tsx         # Dialog when placing a blank
 │   │   ├── SubstitutionPicker.tsx  # Dialog when placing Ё/Ъ/Ш/Й (pick: itself or substitute)
 │   │   ├── HistoryPanel.tsx        # List of past games (date, scores, winner)
@@ -175,6 +175,7 @@ All messages are JSON with a `type` field.
 | `pass` | `{}` | Skip turn. |
 | `redraw` | `{}` | Free redraw when rack is all-vowel or all-consonant; does not end turn. |
 | `toggleRackVisible` | `{ visible: boolean }` | Show/hide own rack. |
+| `endGame` | `{}` | End the game now (after client-side confirmation). Phase → `finished`; game archived to history. |
 
 **Server → client:**
 
