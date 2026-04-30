@@ -1,6 +1,6 @@
 import express from 'express';
 import { createServer, type Server as HttpServer } from 'node:http';
-import { AddressInfo } from 'node:net';
+import type { AddressInfo } from 'node:net';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -76,8 +76,13 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
 
 const isMain = import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
-  startServer().then((server) => {
-    console.log(`[scrabble] listening on http://localhost:${server.port} (ws: /ws)`);
-    server.start();
-  });
+  startServer()
+    .then(async (server) => {
+      console.log(`[scrabble] listening on http://localhost:${server.port} (ws: /ws)`);
+      await server.start();
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
 }

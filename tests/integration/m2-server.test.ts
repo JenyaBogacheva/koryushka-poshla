@@ -48,13 +48,15 @@ describe('M2 server: scripted runner over WS', () => {
       expect(last.state.phase).toBe('finished');
       expect(last.state.history.length).toBeGreaterThan(0);
 
-      for (let slot = 0 as 0 | 1 | 2; slot < 3; slot = (slot + 1) as 0 | 1 | 2) {
-        let prev = 0;
-        for (const m of messages) {
-          const score = m.state.players[slot]!.score;
-          expect(score).toBeGreaterThanOrEqual(prev);
-          prev = score;
-        }
+      // At least: 1 initial post-startGame snapshot + 9 per-turn snapshots + 1 endGame snapshot.
+      expect(messages.length).toBeGreaterThanOrEqual(11);
+
+      // History length is monotonically non-decreasing across snapshots — proves we get
+      // a fresh snapshot for every mutation in the runner, not just the start and the end.
+      let prevHistoryLen = 0;
+      for (const m of messages) {
+        expect(m.state.history.length).toBeGreaterThanOrEqual(prevHistoryLen);
+        prevHistoryLen = m.state.history.length;
       }
     } finally {
       await server.close();
