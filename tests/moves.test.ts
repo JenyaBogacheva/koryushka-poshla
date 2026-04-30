@@ -135,6 +135,19 @@ describe('validateMove', () => {
     expect(validateMove(b, rack, placements, true).ok).toBe(true);
   });
 
+  it('rejects a blank played as a non-Cyrillic-letter value', () => {
+    const b = createEmptyBoard();
+    const rack = [tile('a', '', true), tile('b', 'А'), tile('c', 'Б')];
+    const placements: Placement[] = [
+      { tileId: 'a', row: 7, col: 7, playedAs: '' as never },
+      { tileId: 'b', row: 7, col: 8, playedAs: 'А' },
+      { tileId: 'c', row: 7, col: 9, playedAs: 'Б' },
+    ];
+    const result = validateMove(b, rack, placements, true);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe('illegal-blank-letter');
+  });
+
   it('rejects empty placements', () => {
     const b = createEmptyBoard();
     const result = validateMove(b, [], [], true);

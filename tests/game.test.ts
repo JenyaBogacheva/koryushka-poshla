@@ -135,6 +135,17 @@ describe('Game — swapTiles', () => {
     const remaining = new Set(after.players[0]!.rack.map((t) => t.id));
     for (const id of ids) expect(remaining.has(id)).toBe(false);
   });
+
+  it('rejects duplicate tile ids without mutating the rack', () => {
+    const g = makeReadyGame(1);
+    const before = g.snapshot();
+    const dupId = before.players[0]!.rack[0]!.id;
+    expect(() => g.swapTiles(0, [dupId, dupId])).toThrow();
+    const after = g.snapshot();
+    expect(after.players[0]!.rack.length).toBe(7);
+    expect(after.players[0]!.rack.map((t) => t.id)).toContain(dupId);
+    expect(after.turnIndex).toBe(before.turnIndex);
+  });
 });
 
 describe('Game — redrawRack', () => {

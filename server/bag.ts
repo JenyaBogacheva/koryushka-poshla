@@ -16,7 +16,7 @@ export function makeRng(seed: number): Rng {
 }
 
 export type Bag = {
-  tiles: Tile[]; // index 0 is "top of bag" — drawTiles pulls from the end for O(1) pop.
+  tiles: Tile[]; // last index is "top of bag" — drawTiles pops the end for O(1).
   rng: Rng;
 };
 

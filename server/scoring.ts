@@ -29,7 +29,6 @@ export function scoreMove(
   newPlacements: Placement[],
   opts: ScoreMoveOpts,
 ): ScoreMoveResult {
-  const newSet = new Set(newPlacements.map((p) => `${p.row},${p.col}`));
   let total = 0;
   const perWord: Array<WordFormed & { score: number }> = [];
 
@@ -57,7 +56,7 @@ export function scoreMove(
   const bingoBonus = newPlacements.length === 7;
   if (bingoBonus) total += 10;
 
-  const centerNowUsed = newSet.has('7,7');
+  const centerNowUsed = newPlacements.some((p) => p.row === 7 && p.col === 7);
 
   return { totalScore: total, perWord, bingoBonus, centerNowUsed };
 }

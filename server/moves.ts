@@ -1,5 +1,5 @@
 import type { Board, Placement, Tile } from '@shared/types';
-import { isSubstitutionAllowed } from './letters.js';
+import { isSubstitutionAllowed, isCyrillicLetter } from './letters.js';
 
 export const SIZE = 15;
 
@@ -11,6 +11,7 @@ export type MoveError =
   | { kind: 'cell-occupied'; row: number; col: number }
   | { kind: 'tile-not-in-rack'; tileId: string }
   | { kind: 'illegal-substitution'; tileLetter: string; playedAs: string }
+  | { kind: 'illegal-blank-letter'; playedAs: string }
   | { kind: 'first-move-must-cover-center' }
   | { kind: 'first-move-must-be-one-group' }
   | { kind: 'group-not-connected'; row: number; col: number };
@@ -53,8 +54,12 @@ export function validateMove(
     }
     const tile = rackById.get(p.tileId);
     if (!tile) return { ok: false, error: { kind: 'tile-not-in-rack', tileId: p.tileId } };
-    // Blanks may be played as any single Cyrillic letter.
-    if (!tile.isBlank && !isSubstitutionAllowed(tile.letter, p.playedAs)) {
+    if (tile.isBlank) {
+      // Blanks may be played as any single Cyrillic letter.
+      if (!isCyrillicLetter(p.playedAs)) {
+        return { ok: false, error: { kind: 'illegal-blank-letter', playedAs: p.playedAs } };
+      }
+    } else if (!isSubstitutionAllowed(tile.letter, p.playedAs)) {
       return { ok: false, error: { kind: 'illegal-substitution', tileLetter: tile.letter, playedAs: p.playedAs } };
     }
   }

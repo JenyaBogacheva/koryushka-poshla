@@ -109,6 +109,9 @@ export class Game {
 
   swapTiles(slot: Slot, tileIds: string[]): void {
     this.assertTurn(slot);
+    if (new Set(tileIds).size !== tileIds.length) {
+      throw new Error('Duplicate tile id in swap request');
+    }
     const player = this.state.players[slot]!;
     const removed = removeTilesFromRack(player.rack, tileIds);
     returnTiles(this.bag, removed);
