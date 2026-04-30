@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useGameStore } from './store.js';
 import { Board } from './components/Board.js';
+import { PlayerCard } from './components/PlayerCard.js';
 
 export function App() {
   const state = useGameStore((s) => s.state);
@@ -12,11 +13,13 @@ export function App() {
   return (
     <main className="flex h-full items-start justify-center gap-8 p-8">
       <Board board={state.board} />
-      <aside className="w-64">
-        <p className="text-sm uppercase tracking-wide text-ink/60">Phase</p>
-        <p className="mb-4 text-lg">{state.phase}</p>
-        <p className="text-sm uppercase tracking-wide text-ink/60">Turn</p>
-        <p className="text-lg">{state.players[state.turnIndex]?.name ?? '—'}</p>
+      <aside className="flex w-72 flex-col gap-3">
+        <header className="text-sm uppercase tracking-wide text-ink/60">
+          {state.phase === 'finished' ? 'Game over' : `${state.players[state.turnIndex]?.name ?? '—'}'s turn`}
+        </header>
+        {state.players.map((p) => (
+          <PlayerCard key={p.slot} player={p} isCurrentTurn={p.slot === state.turnIndex && state.phase === 'playing'} />
+        ))}
       </aside>
     </main>
   );
