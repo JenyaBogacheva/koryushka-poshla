@@ -133,6 +133,33 @@ export class Game {
     // turn not advanced
   }
 
+  /**
+   * Swap a real letter from `slot`'s rack onto a board cell holding a blank with the matching playedAs.
+   * On success, the blank moves to `slot`'s rack. Allowed on the claimer's own turn, before submitMove.
+   */
+  claimBlank(slot: Slot, row: number, col: number, myTileId: string): void {
+    this.assertTurn(slot);
+    const cell = this.state.board[row]?.[col];
+    if (!cell || !cell.fromBlank) throw new Error('Cell does not hold a blank');
+    const player = this.state.players[slot]!;
+    const idx = player.rack.findIndex((t) => t.id === myTileId);
+    if (idx === -1) throw new Error('Tile not in rack');
+    const real = player.rack[idx]!;
+    if (real.isBlank) throw new Error('Cannot claim with another blank');
+    if (real.letter !== cell.playedAs) {
+      throw new Error(`Tile letter ${real.letter} does not match blank's playedAs ${cell.playedAs}`);
+    }
+    // Perform swap.
+    const blank = cell.tile;
+    player.rack.splice(idx, 1);
+    player.rack.push(blank);
+    this.state.board[row]![col] = {
+      tile: real,
+      playedAs: cell.playedAs,
+      fromBlank: false,
+    };
+  }
+
   private assertTurn(slot: Slot): void {
     if (this.state.phase !== 'playing') throw new Error('Game is not in playing phase');
     if (slot !== this.state.turnIndex) throw new Error(`Not slot ${slot}'s turn`);
