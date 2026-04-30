@@ -1,6 +1,6 @@
 import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed } from '@shared/types';
-import { createBag, drawTiles, makeRng, type Bag } from './bag.js';
-import { addTilesToRack, removeTilesFromRack } from './rack.js';
+import { createBag, drawTiles, returnTiles, makeRng, type Bag } from './bag.js';
+import { addTilesToRack, removeTilesFromRack, redrawEligible } from './rack.js';
 import { createEmptyBoard, applyPlacements, isEmpty, extractWordsFormed } from './board.js';
 import { validateMove, type MoveError } from './moves.js';
 import { scoreMove } from './scoring.js';
@@ -100,5 +100,41 @@ export class Game {
 
   snapshot(): GameState {
     return structuredClone(this.state);
+  }
+
+  passTurn(slot: Slot): void {
+    this.assertTurn(slot);
+    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+  }
+
+  swapTiles(slot: Slot, tileIds: string[]): void {
+    this.assertTurn(slot);
+    const player = this.state.players[slot]!;
+    const removed = removeTilesFromRack(player.rack, tileIds);
+    returnTiles(this.bag, removed);
+    const drawn = drawTiles(this.bag, removed.length);
+    addTilesToRack(player.rack, drawn);
+    this.state.bag = this.bag.tiles;
+    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+  }
+
+  redrawRack(slot: Slot): void {
+    this.assertTurn(slot);
+    const player = this.state.players[slot]!;
+    if (!redrawEligible(player.rack)) {
+      throw new Error('Rack is not eligible for free redraw (must be all vowels or all consonants)');
+    }
+    const allIds = player.rack.map((t) => t.id);
+    const removed = removeTilesFromRack(player.rack, allIds);
+    returnTiles(this.bag, removed);
+    const drawn = drawTiles(this.bag, 7);
+    addTilesToRack(player.rack, drawn);
+    this.state.bag = this.bag.tiles;
+    // turn not advanced
+  }
+
+  private assertTurn(slot: Slot): void {
+    if (this.state.phase !== 'playing') throw new Error('Game is not in playing phase');
+    if (slot !== this.state.turnIndex) throw new Error(`Not slot ${slot}'s turn`);
   }
 }

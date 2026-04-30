@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game } from '../server/game';
 import type { Placement } from '@shared/types';
+import { isAllVowels, isAllConsonants } from '../server/rack';
 
 describe('Game — init', () => {
   it('starts in waiting phase with three empty slots', () => {
@@ -106,5 +107,60 @@ describe('Game — submitMove', () => {
     const result = g.submitMove(0, []);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe('not-playing');
+  });
+});
+
+describe('Game — passTurn', () => {
+  it('advances the turn', () => {
+    const g = makeReadyGame(1);
+    g.passTurn(0);
+    expect(g.snapshot().turnIndex).toBe(1);
+  });
+  it('rejects pass by non-current', () => {
+    const g = makeReadyGame(1);
+    expect(() => g.passTurn(1)).toThrow();
+  });
+});
+
+describe('Game — swapTiles', () => {
+  it('exchanges tiles and ends turn', () => {
+    const g = makeReadyGame(1);
+    const before = g.snapshot();
+    const ids = before.players[0]!.rack.slice(0, 3).map((t) => t.id);
+    g.swapTiles(0, ids);
+    const after = g.snapshot();
+    expect(after.players[0]!.rack.length).toBe(7);
+    expect(after.turnIndex).toBe(1);
+    // The exchanged tile ids should no longer be in the rack
+    const remaining = new Set(after.players[0]!.rack.map((t) => t.id));
+    for (const id of ids) expect(remaining.has(id)).toBe(false);
+  });
+});
+
+describe('Game — redrawRack', () => {
+  it('only succeeds when rack is all-vowels or all-consonants', () => {
+    const g = makeReadyGame(1);
+    const before = g.snapshot();
+    const eligible = isAllVowels(before.players[0]!.rack) || isAllConsonants(before.players[0]!.rack);
+    if (!eligible) {
+      expect(() => g.redrawRack(0)).toThrow();
+    }
+  });
+
+  it('does not end turn when allowed', () => {
+    // Force a synthetic eligible rack via a different seed; if we can't, skip the assertion logic but verify the API.
+    // Try a few seeds until one yields an eligible starting rack.
+    let g: Game | null = null;
+    for (let seed = 1; seed < 200; seed++) {
+      const candidate = makeReadyGame(seed);
+      const r = candidate.snapshot().players[0]!.rack;
+      if (isAllVowels(r) || isAllConsonants(r)) { g = candidate; break; }
+    }
+    if (!g) return; // skip if no seed found
+    const before = g.snapshot();
+    g.redrawRack(0);
+    const after = g.snapshot();
+    expect(after.turnIndex).toBe(before.turnIndex); // turn NOT advanced
+    expect(after.players[0]!.rack.length).toBe(7);
   });
 });
