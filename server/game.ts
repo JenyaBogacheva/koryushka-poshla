@@ -34,7 +34,7 @@ export class Game {
       bag: this.bag.tiles,
       centerBonusUsed: false,
       history: [],
-      recentGames: [],
+      startedAt: null,
     };
   }
 
@@ -54,6 +54,7 @@ export class Game {
     }
     this.state.phase = 'playing';
     this.state.bag = this.bag.tiles;
+    this.state.startedAt = Date.now();
   }
 
   submitMove(slot: Slot, placements: Placement[]): SubmitResult {
@@ -164,7 +165,7 @@ export class Game {
   }
 
   endGame(_slot: Slot): void {
-    if (this.state.phase !== 'playing') return; // idempotent if already finished/paused
+    if (this.state.phase !== 'playing') return; // idempotent if already finished
     this.state.phase = 'finished';
   }
 

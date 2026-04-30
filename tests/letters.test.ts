@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isVowel, isConsonant, isSign, isSubstitutionAllowed } from '../server/letters';
+import { isVowel, isConsonant, isSubstitutionAllowed } from '../server/letters';
 
 describe('letters', () => {
   it('identifies vowels', () => {
@@ -18,7 +18,6 @@ describe('letters', () => {
 
   it('treats Ъ and Ь as signs (neither vowel nor consonant)', () => {
     for (const s of ['Ъ', 'Ь']) {
-      expect(isSign(s)).toBe(true);
       expect(isVowel(s)).toBe(false);
       expect(isConsonant(s)).toBe(false);
     }

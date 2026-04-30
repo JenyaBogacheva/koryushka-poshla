@@ -27,7 +27,7 @@ const sampleState = (): GameState => ({
   bag: [],
   centerBonusUsed: false,
   history: [],
-  recentGames: [],
+  startedAt: 1_700_000_000_000,
 });
 
 describe('persistence', () => {

@@ -52,7 +52,7 @@ export type Player = {
   score: number;
 };
 
-export type GamePhase = 'waiting' | 'playing' | 'paused' | 'finished';
+export type GamePhase = 'waiting' | 'playing' | 'finished';
 
 export type GameState = {
   phase: GamePhase;
@@ -62,8 +62,7 @@ export type GameState = {
   bag: Tile[];
   centerBonusUsed: boolean;
   history: MoveRecord[];
-  pausedReason?: { disconnectedSlot: Slot; pausedAt: number };
-  recentGames: GameSummary[];
+  startedAt: number | null;
 };
 
 export type GameSummary = {

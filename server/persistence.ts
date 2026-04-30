@@ -26,7 +26,7 @@ export function archiveFinishedGame(dataDir: string): GameSummary {
   const winnerSlot: Slot | null = winners.length === 1 ? winners[0]!.slot : null;
   const summary: GameSummary = {
     id,
-    startedAt: 0, // M1 doesn't track game start; can be added later
+    startedAt: state.startedAt ?? Date.now(),
     finishedAt: Date.now(),
     players,
     winnerSlot,

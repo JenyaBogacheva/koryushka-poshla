@@ -22,10 +22,6 @@ export function isConsonant(letter: Letter): boolean {
   return CONSONANTS.has(letter);
 }
 
-export function isSign(letter: Letter): boolean {
-  return SIGNS.has(letter);
-}
-
 export function isCyrillicLetter(value: string): boolean {
   return VOWELS.has(value) || CONSONANTS.has(value) || SIGNS.has(value);
 }
