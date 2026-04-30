@@ -1,4 +1,4 @@
-import type { Board, Cell, Placement, Tile } from '@shared/types';
+import type { Board, Cell, Placement, Tile, WordFormed } from '@shared/types';
 
 export const SIZE = 15;
 
@@ -36,4 +36,54 @@ export function applyPlacements(board: Board, placements: Placement[], tiles: Ti
       fromBlank: tile.isBlank,
     };
   }
+}
+
+type Axis = 'H' | 'V';
+const DIR: Record<Axis, { dr: number; dc: number }> = {
+  H: { dr: 0, dc: 1 },
+  V: { dr: 1, dc: 0 },
+};
+
+function runThrough(board: Board, row: number, col: number, axis: Axis) {
+  const { dr, dc } = DIR[axis];
+  // walk back to start
+  let r = row, c = col;
+  while (inRange(r - dr, c - dc) && board[r - dr]![c - dc] !== null) {
+    r -= dr; c -= dc;
+  }
+  // walk forward, collecting cells
+  const cells: { row: number; col: number; cell: Cell }[] = [];
+  while (inRange(r, c) && board[r]![c] !== null) {
+    cells.push({ row: r, col: c, cell: board[r]![c]! });
+    r += dr; c += dc;
+  }
+  return cells;
+}
+
+function cellKey(row: number, col: number) { return `${row},${col}`; }
+
+export function extractWordsFormed(board: Board, newPlacements: Placement[]): WordFormed[] {
+  const newSet = new Set(newPlacements.map((p) => cellKey(p.row, p.col)));
+  const seenRuns = new Set<string>();
+  const result: WordFormed[] = [];
+
+  for (const p of newPlacements) {
+    for (const axis of ['H', 'V'] as const) {
+      const run = runThrough(board, p.row, p.col, axis);
+      if (run.length < 2) continue;
+      // dedupe: identify run by start cell + axis
+      const startKey = `${axis}:${run[0]!.row},${run[0]!.col}:${run.length}`;
+      if (seenRuns.has(startKey)) continue;
+      seenRuns.add(startKey);
+      // require at least one new placement in the run
+      const hasNew = run.some((x) => newSet.has(cellKey(x.row, x.col)));
+      if (!hasNew) continue;
+      result.push({
+        word: run.map((x) => x.cell.playedAs).join(''),
+        cells: run.map((x) => ({ row: x.row, col: x.col })),
+        score: 0, // computed in scoring.ts
+      });
+    }
+  }
+  return result;
 }
