@@ -92,6 +92,12 @@ export type RevertRecord = {
   timestamp: number;
 };
 
+export type DrawState = {
+  round: number;            // 1 = initial three-way; 2+ = tiebreak rounds
+  candidates: Slot[];       // slots still in contention this round (subset of [0,1,2])
+  draws: { slot: Slot; letter: Letter | null }[]; // already-revealed draws this round (null = blank)
+};
+
 export type DrawForOrderRecord = {
   kind: 'drawForOrder';
   draws: { slot: Slot; letter: Letter | null }[]; // null = blank; one entry per player in slot order
@@ -122,7 +128,7 @@ export type Player = {
   canRevert: boolean;       // this player just acted and no one else has acted since
 };
 
-export type GamePhase = 'waiting' | 'playing' | 'finished';
+export type GamePhase = 'waiting' | 'drawing' | 'playing' | 'finished';
 
 export type GameState = {
   phase: GamePhase;
@@ -133,6 +139,7 @@ export type GameState = {
   centerBonusUsed: boolean;
   events: GameEvent[];
   startedAt: number | null;
+  drawState: DrawState | null;
 };
 
 export type GameSummary = {
@@ -166,7 +173,8 @@ export type ClientMessage =
   | { type: 'toggleRackVisible'; visible: boolean }
   | { type: 'endGame' }
   | { type: 'revertLastTurn' }
-  | { type: 'newGame' };
+  | { type: 'newGame' }
+  | { type: 'drawTile' };
 
 export type ServerMessage =
   | { type: 'lobby'; slots: [LobbySlot, LobbySlot, LobbySlot] }
