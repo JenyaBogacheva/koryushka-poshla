@@ -1,4 +1,4 @@
-import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed } from '@shared/types';
+import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed, GameEvent } from '@shared/types';
 import { createBag, drawTiles, returnTiles, makeRng, bagFromTiles, type Bag } from './bag.js';
 import { addTilesToRack, removeTilesFromRack, redrawEligible, isAllVowels } from './rack.js';
 import { createEmptyBoard, applyPlacements, isEmpty, extractWordsFormed } from './board.js';
@@ -18,6 +18,9 @@ export class Game {
   // Single-level undo. Captured pre-mutation by submitMove/passTurn/redrawRack/claimBlank.
   // Cleared the moment a different slot acts. Not persisted to disk.
   private lastSnapshot: { state: GameState; bySlot: Slot } | null = null;
+  // Records appended by the most recent action, kept so revert can preserve
+  // them in the log even after restoring `state` from `lastSnapshot`.
+  private lastActionRecords: GameEvent[] | null = null;
 
   constructor(opts: GameOpts) {
     this.bag = createBag(makeRng(opts.seed));
@@ -48,10 +51,11 @@ export class Game {
     const cloned = structuredClone(state);
     const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
     cloned.bag = bag.tiles;
-    type Mutable = { bag: Bag; state: GameState; lastSnapshot: null };
+    type Mutable = { bag: Bag; state: GameState; lastSnapshot: null; lastActionRecords: null };
     (g as unknown as Mutable).bag = bag;
     (g as unknown as Mutable).state = cloned;
     (g as unknown as Mutable).lastSnapshot = null;
+    (g as unknown as Mutable).lastActionRecords = null;
     return g;
   }
 
@@ -114,11 +118,13 @@ export class Game {
       helperSlot: null,            // assist wired in Task 8
       timestamp: Date.now(),
     };
+    const startLen = this.state.events.length;
     this.state.events.push(moveRecord);
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
 
     const dictionaryWarnings = checkWords(words.map((w) => w.word));
-    this.armRevert(slot, preStateForRevert);
+    const appended = this.state.events.slice(startLen);
+    this.armRevert(slot, preStateForRevert, appended);
     return { ok: true, moveRecord, dictionaryWarnings };
   }
 
@@ -135,9 +141,11 @@ export class Game {
     this.assertTurn(slot);
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
+    const startLen = this.state.events.length;
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
     this.state.events.push({ kind: 'pass', slot, timestamp: Date.now() });
-    this.armRevert(slot, pre);
+    const appended = this.state.events.slice(startLen);
+    this.armRevert(slot, pre, appended);
   }
 
   redrawRack(slot: Slot): void {
@@ -151,6 +159,7 @@ export class Game {
     const tileCount = player.rack.length;
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
+    const startLen = this.state.events.length;
     const allIds = player.rack.map((t) => t.id);
     const removed = removeTilesFromRack(player.rack, allIds);
     returnTiles(this.bag, removed);
@@ -159,7 +168,8 @@ export class Game {
     this.state.bag = this.bag.tiles;
     // turn not advanced
     this.state.events.push({ kind: 'redraw', slot, reason, tileCount, timestamp: Date.now() });
-    this.armRevert(slot, pre);
+    const appended = this.state.events.slice(startLen);
+    this.armRevert(slot, pre, appended);
   }
 
   /**
@@ -180,6 +190,7 @@ export class Game {
     }
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
+    const startLen = this.state.events.length;
     // Perform swap.
     const blank = cell.tile;
     player.rack.splice(idx, 1);
@@ -197,7 +208,8 @@ export class Game {
       letterAs: cell.playedAs,
       timestamp: Date.now(),
     });
-    this.armRevert(slot, pre);
+    const appended = this.state.events.slice(startLen);
+    this.armRevert(slot, pre, appended);
   }
 
   endGame(slot: Slot): void {
@@ -216,20 +228,43 @@ export class Game {
   revertLastTurn(slot: Slot): void {
     if (this.lastSnapshot === null) throw new Error('Nothing to revert');
     if (this.lastSnapshot.bySlot !== slot) throw new Error('Only the action author can revert');
-    this.state = this.lastSnapshot.state;
+    const restored = this.lastSnapshot.state;
+    const appended = this.lastActionRecords ?? [];
+
+    // Roll game state back to the pre-action snapshot.
+    this.state = restored;
     // Keep the existing seeded rng closure; rewind the bag's tile array to the restored state.
     this.bag.tiles = [...this.state.bag];
     this.state.bag = this.bag.tiles;
+
+    // Re-attach the original action records so the log shows what happened…
+    for (const rec of appended) this.state.events.push(rec);
+
+    // …and append matching revert records in reverse order
+    // (so an AssistRecord pushed AFTER a MoveRecord is reverted FIRST).
+    const ts = Date.now();
+    for (let i = appended.length - 1; i >= 0; i--) {
+      this.state.events.push({
+        kind: 'revert',
+        slot,
+        revertedKind: appended[i]!.kind,
+        timestamp: ts,
+      });
+    }
+
     this.lastSnapshot = null;
+    this.lastActionRecords = null;
   }
 
-  private armRevert(slot: Slot, preState: GameState): void {
+  private armRevert(slot: Slot, preState: GameState, appended: GameEvent[]): void {
     this.lastSnapshot = { state: preState, bySlot: slot };
+    this.lastActionRecords = appended;
   }
 
   private maybeClearRevertOnActionBy(slot: Slot): void {
     if (this.lastSnapshot !== null && this.lastSnapshot.bySlot !== slot) {
       this.lastSnapshot = null;
+      this.lastActionRecords = null;
     }
   }
 

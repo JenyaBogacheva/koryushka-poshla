@@ -426,3 +426,81 @@ describe('revert across action types', () => {
     expect(g2.snapshot().players[0]!.rack.map((t) => t.id).sort()).toEqual(beforeRack);
   });
 });
+
+describe('Game.revertLastTurn — append-only RevertRecord log', () => {
+  function makeReadyGame2(seed: number) {
+    const g = new Game({ seed });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    return g;
+  }
+
+  it('revertLastTurn after submitMove appends RevertRecord(kind="move") and rolls back state', () => {
+    // seed 7 is also used by the existing submitMove revert test; 2-tile placement guarantees non-zero score.
+    const g = makeReadyGame2(7);
+    const before = g.snapshot();
+    const p0 = before.players[0]!;
+    const t0 = p0.rack[0]!;
+    const t1 = p0.rack[1]!;
+    const result = g.submitMove(0, [
+      { tileId: t0.id, row: 7, col: 7, playedAs: t0.isBlank ? 'А' : t0.letter },
+      { tileId: t1.id, row: 7, col: 8, playedAs: t1.isBlank ? 'А' : t1.letter },
+    ]);
+    if (!result.ok) return; // skip if placement invalid for this seed
+    const scoreAfter = g.snapshot().players[0]!.score;
+    expect(scoreAfter).toBeGreaterThan(0);
+
+    g.revertLastTurn(0);
+    const snap = g.snapshot();
+    expect(snap.players[0]!.score).toBe(0);
+    const tail = snap.events.slice(-2);
+    expect(tail[0]!.kind).toBe('move');
+    expect(tail[1]!.kind).toBe('revert');
+    if (tail[1]!.kind === 'revert') {
+      expect(tail[1]!.revertedKind).toBe('move');
+      expect(tail[1]!.slot).toBe(0);
+    }
+  });
+
+  it('revertLastTurn after passTurn appends RevertRecord(kind="pass")', () => {
+    const g = makeReadyGame2(1);
+    g.passTurn(0);
+    g.revertLastTurn(0);
+    const tail = g.snapshot().events.slice(-2);
+    expect(tail[0]!.kind).toBe('pass');
+    expect(tail[1]!.kind).toBe('revert');
+    if (tail[1]!.kind === 'revert') expect(tail[1]!.revertedKind).toBe('pass');
+  });
+
+  it('revertLastTurn after redrawRack appends RevertRecord(kind="redraw")', () => {
+    const g = makeReadyGame2(11);
+    const s = g.snapshot();
+    s.players[0]!.rack = s.players[0]!.rack.map((t, i) =>
+      ({ ...t, letter: ['А','Е','И','О','У','Ы','Э'][i % 7]!, points: 1, isBlank: false }),
+    );
+    const g2 = Game.fromState(s);
+    g2.redrawRack(0);
+    g2.revertLastTurn(0);
+    const tail = g2.snapshot().events.slice(-2);
+    expect(tail[0]!.kind).toBe('redraw');
+    expect(tail[1]!.kind).toBe('revert');
+    if (tail[1]!.kind === 'revert') expect(tail[1]!.revertedKind).toBe('redraw');
+  });
+
+  it('revertLastTurn after claimBlank appends RevertRecord(kind="claimBlank")', () => {
+    const g = makeReadyGame2(1);
+    const s = g.snapshot();
+    const blankTile: import('@shared/types').Tile = { id: 't-blank-test', letter: '', points: 0, isBlank: true };
+    const realA: import('@shared/types').Tile = { id: 't-realA-test', letter: 'А', points: 1, isBlank: false };
+    s.players[0]!.rack = [realA];
+    s.board[7]![7] = { tile: blankTile, playedAs: 'А', fromBlank: true };
+    s.turnIndex = 0;
+    const g2 = Game.fromState(s);
+    g2.claimBlank(0, 7, 7, realA.id);
+    g2.revertLastTurn(0);
+    const tail = g2.snapshot().events.slice(-2);
+    expect(tail[0]!.kind).toBe('claimBlank');
+    expect(tail[1]!.kind).toBe('revert');
+    if (tail[1]!.kind === 'revert') expect(tail[1]!.revertedKind).toBe('claimBlank');
+  });
+});
