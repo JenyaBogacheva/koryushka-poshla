@@ -11,8 +11,8 @@ let knownNormalized: Set<string> | null = null;
 function load(): void {
   if (knownRaw !== null) return;
   const candidates = [
+    path.resolve(import.meta.dirname, 'data/nouns.txt'),
     path.resolve(process.cwd(), 'server/data/nouns.txt'),
-    path.resolve(import.meta.dirname ?? '.', 'data/nouns.txt'),
   ];
   const file = candidates.find((c) => existsSync(c));
   if (!file) {
