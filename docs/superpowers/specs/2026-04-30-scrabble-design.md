@@ -178,6 +178,7 @@ All messages are JSON with a `type` field.
 | `redraw` | `{}` | Free redraw when rack is all-vowel or all-consonant; does not end turn. |
 | `toggleRackVisible` | `{ visible: boolean }` | Show/hide own rack. |
 | `endGame` | `{}` | End the game now (after client-side confirmation). Phase → `finished`; game archived to history. |
+| `drawTile` | `{}` | During `phase: 'drawing'`, reveal one tile for the sender's slot in the current жребий round. |
 
 **Server → client:**
 
@@ -232,6 +233,10 @@ Sent as `claimBlank` (separate from `submitMove`). Allowed only on the sender's 
 
 After every rack draw, the server checks the player's 7 tiles. If all vowels or all consonants, the `redraw` action becomes available to that player (advertised in their state snapshot). Using it returns all 7 tiles to the bag, reshuffles, draws 7 fresh ones, and does not consume the turn.
 
+### 9.6 Жребий (draw-for-order)
+
+When all three players are seated, the game enters `phase: 'drawing'`. Each player clicks their own face-down tile (client message `drawTile`); the server reveals that slot's letter and returns the tile to the bag. After all candidates have drawn, the player whose letter is earliest in the Russian alphabet (`compareLetterOrder`) goes first. On a tie, only the tied players draw again in a subsequent round (`drawState.round` increments, `candidates` shrinks to the tied set); this repeats until a unique winner emerges. Racks are dealt and `phase` becomes `'playing'` only after resolution. The persisted `DrawForOrderRecord` event captures the **initial** three-way draw and the eventual `firstSlot`; tiebreak rounds are not retained in the event log. The transient `drawState: DrawState | null` on `GameState` is what the UI renders during the ritual; it is `null` outside the drawing phase, persisted across server restarts so a mid-draw reload resumes correctly.
+
 ## 10. Identity & Session Flow
 
 1. **First visit (any laptop):** page shows `<SlotPicker>` with the three slots (free or claimed). User picks a free slot, types a name, clicks Join. Browser stores `{ slot, name }` in `localStorage`.
@@ -265,7 +270,7 @@ Three layers, in priority order:
 5. **M5 — Polish.** Split into two slices:
    - **M5a** (see `docs/superpowers/specs/2026-05-01-m5a-snapshots-assist-log-design.md`): live move log, finished-game snapshots + Past Games viewer, "мама помогла" assist credit.
    - **M5b**: disconnect/pause overlay, dictionary advisory warnings, animations, "Новая игра" / play-again flow on the finished-game screen, deploy to Render.
-6. **M6 — Gamification.** Cross-game leaderboard (aggregated from archived snapshots) and badges/achievements (e.g., long-word, game wins, most-helped, most-helping, highest single-move, bingo). Brainstorm + spec deferred; depends on M5 archive format.
+6. **M6 — Gamification.** Cross-game leaderboard (aggregated from archived snapshots) and badges/achievements (e.g., long-word, game wins, most-helped, most-helping, highest single-move, bingo), game-end celebration. Brainstorm + spec deferred; depends on M5 archive format.
 
 Each milestone is end-to-end playable or testable before moving on.
 
