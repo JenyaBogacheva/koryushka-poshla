@@ -10,7 +10,7 @@ import { SlotPicker } from './components/SlotPicker.js';
 import { LetterPicker } from './components/LetterPicker.js';
 import { WaitingRoom } from './components/WaitingRoom.js';
 import { ActionBar } from './components/ActionBar.js';
-import { MoveLog } from './components/MoveLog.js';
+import { MoveLog, formatDrawForOrder } from './components/MoveLog.js';
 import { BagIndicator } from './components/BagIndicator.js';
 import { CYRILLIC_LETTERS } from './letters.js';
 import { PastGamesList } from './components/PastGamesList.js';
@@ -53,6 +53,7 @@ export function App() {
 
   useEffect(() => {
     if (events.length > 1) setDrawBannerDismissed(true);
+    else setDrawBannerDismissed(false);
   }, [events.length]);
 
   function handleJoin(slot: Slot, name: string, password: string) {
@@ -130,15 +131,8 @@ export function App() {
   }
 
   const drawEvent = (lastEvent?.kind === 'drawForOrder' && onlyDrawEvent) ? lastEvent : null;
-  const drawBannerText = drawEvent !== null
-    ? (() => {
-        const names = (slot: number) => state.players[slot]?.name ?? `Слот ${slot}`;
-        const draws = drawEvent.draws.map((d) => `${names(d.slot)} — ${d.letter ?? '★'}`).join(', ');
-        const firstName = names(drawEvent.firstSlot);
-        const adj = (() => { const l = firstName.trim().slice(-1).toLowerCase(); return l === 'а' || l === 'я' ? 'ой' : 'ым'; })();
-        return `🎲 ${draws}. Перв${adj} ходит ${firstName}.`;
-      })()
-    : null;
+  const nameOf = (slot: number): string => state.players[slot]?.name ?? `Слот ${slot}`;
+  const drawBannerText = drawEvent !== null ? formatDrawForOrder(drawEvent, nameOf) : null;
 
   return (
     <DndContext onDragEnd={onDragEnd}>

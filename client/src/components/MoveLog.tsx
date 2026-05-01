@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { GameEvent, GameState } from '@shared/types';
+import type { DrawForOrderRecord, GameEvent, GameState } from '@shared/types';
 
 type Props = { state: GameState };
 
@@ -70,11 +70,17 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
     }
     case 'revert':
       return <span className="ml-4 text-ink/50 line-through">↳ отменено</span>;
-    case 'drawForOrder': {
-      const draws = e.draws.map((d) => `${nameOf(d.slot)} — ${d.letter ?? '★'}`).join(', ');
-      return <span className="text-ink/70">🎲 {draws}. Перв{firstAdj(nameOf(e.firstSlot))} ходит {nameOf(e.firstSlot)}.</span>;
-    }
+    case 'drawForOrder':
+      return <span className="text-ink/70">{formatDrawForOrder(e, nameOf)}</span>;
   }
+}
+
+export function formatDrawForOrder(
+  ev: DrawForOrderRecord,
+  nameOf: (slot: number) => string,
+): string {
+  const draws = ev.draws.map((d) => `${nameOf(d.slot)} — ${d.letter ?? '★'}`).join(', ');
+  return `🎲 ${draws}. Перв${firstAdj(nameOf(ev.firstSlot))} ходит ${nameOf(ev.firstSlot)}.`;
 }
 
 // Best-effort feminine ending for "помог/помогла". Names ending in 'а' or 'я' get the feminine form.
