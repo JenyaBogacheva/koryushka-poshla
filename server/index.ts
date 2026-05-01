@@ -213,6 +213,22 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'toggleRackVisible':
           sendMsg(ws, { type: 'error', message: 'not yet implemented' });
           return;
+        case 'newGame': {
+          if (game !== null) return; // ignore if game already running (race)
+          if (!allSeated(seats)) {
+            sendMsg(ws, { type: 'error', message: 'Не все игроки подключены' });
+            return;
+          }
+          game = new Game({ seed: Date.now() });
+          const names = namesInSlotOrder(seats);
+          game.joinPlayer(0, names[0]);
+          game.joinPlayer(1, names[1]);
+          game.joinPlayer(2, names[2]);
+          game.startGame();
+          try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
+          broadcastState();
+          return;
+        }
         default:
           sendMsg(ws, { type: 'error', message: 'Unknown message type' });
       }
