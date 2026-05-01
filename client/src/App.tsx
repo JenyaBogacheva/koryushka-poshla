@@ -9,6 +9,7 @@ import { ErrorBanner } from './components/ErrorBanner.js';
 import { SlotPicker } from './components/SlotPicker.js';
 import { LetterPicker } from './components/LetterPicker.js';
 import { WaitingRoom } from './components/WaitingRoom.js';
+import { ActionBar } from './components/ActionBar.js';
 import { CYRILLIC_LETTERS } from './letters.js';
 
 type PendingDrop = { tile: TileT; row: number; col: number };
@@ -105,6 +106,7 @@ export function App() {
           {state.players.map((p) => (
             <PlayerCard key={p.slot} player={p} isCurrentTurn={p.slot === state.turnIndex && state.phase === 'playing'} />
           ))}
+          <ActionBar />
         </aside>
       </main>
       {pendingBlank !== null && (
