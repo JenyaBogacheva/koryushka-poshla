@@ -1,5 +1,5 @@
 import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed } from '@shared/types';
-import { createBag, drawTiles, returnTiles, makeRng, type Bag } from './bag.js';
+import { createBag, drawTiles, returnTiles, makeRng, bagFromTiles, type Bag } from './bag.js';
 import { addTilesToRack, removeTilesFromRack, redrawEligible } from './rack.js';
 import { createEmptyBoard, applyPlacements, isEmpty, extractWordsFormed } from './board.js';
 import { validateMove, type MoveError } from './moves.js';
@@ -36,6 +36,16 @@ export class Game {
       history: [],
       startedAt: null,
     };
+  }
+
+  static fromState(state: GameState): Game {
+    const g = Object.create(Game.prototype) as Game;
+    const cloned = structuredClone(state);
+    const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
+    cloned.bag = bag.tiles;
+    (g as unknown as { bag: Bag; state: GameState }).bag = bag;
+    (g as unknown as { bag: Bag; state: GameState }).state = cloned;
+    return g;
   }
 
   joinPlayer(slot: Slot, name: string): void {
