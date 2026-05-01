@@ -15,6 +15,7 @@ import { BagIndicator } from './components/BagIndicator.js';
 import { CYRILLIC_LETTERS } from './letters.js';
 import { PastGamesList } from './components/PastGamesList.js';
 import { PastGamesDetail } from './components/PastGamesDetail.js';
+import { FinishedScreen } from './components/FinishedScreen.js';
 
 type PendingDrop = { tile: TileT; row: number; col: number };
 
@@ -120,14 +121,14 @@ export function App() {
 
   return (
     <DndContext onDragEnd={onDragEnd}>
-      <main className="flex h-full items-start justify-center gap-8 p-8">
+      <main className="relative flex h-full items-start justify-center gap-8 p-8">
         <div>
           <Board board={state.board} />
           <ErrorBanner />
         </div>
         <aside className="flex h-full w-72 flex-col gap-3">
           <header className="flex items-baseline justify-between text-sm uppercase tracking-wide text-ink/60">
-            <span>{state.phase === 'finished' ? 'Game over' : `${state.players[state.turnIndex]?.name ?? '—'}'s turn`}</span>
+            <span>{state.phase === 'finished' ? 'Игра окончена' : `Ход: ${state.players[state.turnIndex]?.name ?? '—'}`}</span>
             <a href="#past" className="normal-case text-xs text-ink/50 hover:underline">Прошлые игры</a>
           </header>
           <BagIndicator count={state.bag.length} />
@@ -137,6 +138,7 @@ export function App() {
           <ActionBar />
           <MoveLog state={state} />
         </aside>
+        {state.phase === 'finished' && <FinishedScreen state={state} />}
       </main>
       {pendingBlank !== null && (
         <LetterPicker
