@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { ClientMessage, ServerMessage, GameState, Slot } from '@shared/types';
 import { Game } from './game.js';
+import { createEmptyBoard } from './board.js';
 import { createSeats, seat, unseat, allSeated, namesInSlotOrder, type Seats } from './connections.js';
 import { saveActiveGame, loadActiveGame } from './persistence.js';
 
@@ -64,7 +65,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         score: 0,
       })) as unknown as GameState['players'],
       turnIndex: 0,
-      board: Array.from({ length: 15 }, () => Array<null>(15).fill(null)),
+      board: createEmptyBoard(),
       bag: [],
       centerBonusUsed: false,
       history: [],

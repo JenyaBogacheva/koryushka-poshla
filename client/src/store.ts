@@ -30,7 +30,11 @@ export const useGameStore = create<Store>((set) => ({
   setConnected: (connected) => set({ connected }),
   setIdentity: (mySlot, myName) => set({ mySlot, myName }),
   addPending: (p) =>
-    set((s) => ({ pendingPlacements: [...s.pendingPlacements, p], lastError: null })),
+    set((s) =>
+      s.pendingPlacements.some((x) => x.tileId === p.tileId)
+        ? s
+        : { pendingPlacements: [...s.pendingPlacements, p], lastError: null },
+    ),
   removePending: (tileId) =>
     set((s) => ({
       pendingPlacements: s.pendingPlacements.filter((x) => x.tileId !== tileId),

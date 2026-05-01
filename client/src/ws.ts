@@ -53,10 +53,11 @@ export function connect(): void {
         store.setState(msg.state);
         // Drop any pending placements that reference tiles no longer in my rack.
         const after = useGameStore.getState();
-        if (after.mySlot !== null) {
-          const myRackIds = new Set(after.state!.players[after.mySlot]!.rack.map((t) => t.id));
-          for (const p of after.pendingPlacements) {
-            if (!myRackIds.has(p.tileId)) after.removePending(p.tileId);
+        if (after.mySlot !== null && after.pendingPlacements.length > 0) {
+          const myRackIds = new Set(msg.state.players[after.mySlot]!.rack.map((t) => t.id));
+          const next = after.pendingPlacements.filter((p) => myRackIds.has(p.tileId));
+          if (next.length !== after.pendingPlacements.length) {
+            useGameStore.setState({ pendingPlacements: next });
           }
         }
         return;
