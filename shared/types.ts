@@ -72,3 +72,20 @@ export type GameSummary = {
   players: { slot: Slot; name: string; finalScore: number }[];
   winnerSlot: Slot | null;
 };
+
+// --- WebSocket protocol (M3 subset; M4 fills in the deferred actions) ---
+
+export type ClientMessage =
+  | { type: 'submitMove'; placements: Placement[] }
+  | { type: 'swapTiles'; tileIds: string[] }
+  | { type: 'claimBlank'; row: number; col: number; myTileId: string }
+  | { type: 'pass' }
+  | { type: 'redraw' }
+  | { type: 'toggleRackVisible'; visible: boolean }
+  | { type: 'endGame' };
+
+export type ServerMessage =
+  | { type: 'state'; state: GameState }
+  | { type: 'moveAccepted'; moveRecord: MoveRecord; dictionaryWarnings: string[] }
+  | { type: 'moveRejected'; reason: string }
+  | { type: 'error'; message: string };
