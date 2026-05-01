@@ -1,9 +1,8 @@
 import { createReadStream, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 
-const SOURCE = process.argv[2];
+const SOURCE: string = process.argv[2] ?? (() => { console.error('usage: tsx scripts/build-dictionary.ts <dict.opcorpora.xml> [out]'); process.exit(1); })();
 const OUT = process.argv[3] ?? 'server/data/nouns.txt';
-if (!SOURCE) { console.error('usage: tsx scripts/build-dictionary.ts <dict.opcorpora.xml> [out]'); process.exit(1); }
 
 const EXCLUDE = new Set(['Geox', 'Name', 'Surn', 'Patr', 'Abbr', 'Trad', 'Init']);
 
