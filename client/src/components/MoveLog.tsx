@@ -70,6 +70,10 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
     }
     case 'revert':
       return <span className="ml-4 text-ink/50 line-through">↳ отменено</span>;
+    case 'drawForOrder': {
+      const draws = e.draws.map((d) => `${nameOf(d.slot)} — ${d.letter ?? '★'}`).join(', ');
+      return <span className="text-ink/70">🎲 {draws}. Перв{firstAdj(nameOf(e.firstSlot))} ходит {nameOf(e.firstSlot)}.</span>;
+    }
   }
 }
 
@@ -77,4 +81,10 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
 function femEnding(name: string): string {
   const last = name.trim().slice(-1).toLowerCase();
   return last === 'а' || last === 'я' ? 'ла' : '';
+}
+
+// Russian adjective agreement for "первой/первым ходит". Names ending in 'а' or 'я' → feminine.
+function firstAdj(name: string): string {
+  const last = name.trim().slice(-1).toLowerCase();
+  return last === 'а' || last === 'я' ? 'ой' : 'ым';
 }

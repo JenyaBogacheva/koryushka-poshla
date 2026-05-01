@@ -39,11 +39,21 @@ export function App() {
   const pendingPlacements = useGameStore((s) => s.pendingPlacements);
 
   const [pendingBlank, setPendingBlank] = useState<PendingDrop | null>(null);
+  const [drawBannerDismissed, setDrawBannerDismissed] = useState(false);
 
   useEffect(() => {
     connect();
     return () => disconnect();
   }, []);
+
+  const events = state?.events ?? [];
+  const lastEvent = events[events.length - 1];
+  const onlyDrawEvent = events.length === 1 && lastEvent?.kind === 'drawForOrder';
+  const showDrawBanner = state?.phase === 'playing' && onlyDrawEvent && !drawBannerDismissed;
+
+  useEffect(() => {
+    if (events.length > 1) setDrawBannerDismissed(true);
+  }, [events.length]);
 
   function handleJoin(slot: Slot, name: string, password: string) {
     setIdentity(slot, name, password);
@@ -119,10 +129,27 @@ export function App() {
     return <WaitingRoom players={state.players} mySlot={identity.slot} />;
   }
 
+  const drawEvent = (lastEvent?.kind === 'drawForOrder' && onlyDrawEvent) ? lastEvent : null;
+  const drawBannerText = drawEvent !== null
+    ? (() => {
+        const names = (slot: number) => state.players[slot]?.name ?? `Слот ${slot}`;
+        const draws = drawEvent.draws.map((d) => `${names(d.slot)} — ${d.letter ?? '★'}`).join(', ');
+        const firstName = names(drawEvent.firstSlot);
+        const adj = (() => { const l = firstName.trim().slice(-1).toLowerCase(); return l === 'а' || l === 'я' ? 'ой' : 'ым'; })();
+        return `🎲 ${draws}. Перв${adj} ходит ${firstName}.`;
+      })()
+    : null;
+
   return (
     <DndContext onDragEnd={onDragEnd}>
       <main className="relative flex h-full items-start justify-center gap-8 p-8">
         <div>
+          {showDrawBanner && drawBannerText !== null && (
+            <div className="mb-2 flex items-center justify-between rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 shadow-sm">
+              <span>{drawBannerText}</span>
+              <button type="button" className="ml-3 text-amber-700 hover:text-amber-900" onClick={() => setDrawBannerDismissed(true)}>✕</button>
+            </div>
+          )}
           <Board board={state.board} />
           <ErrorBanner />
         </div>
