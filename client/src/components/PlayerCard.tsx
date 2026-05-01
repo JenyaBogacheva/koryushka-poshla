@@ -28,9 +28,12 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   }
 
   return (
-    <div className={`rounded-md ${bg} p-3 shadow-sm`}>
+    <div className={`rounded-md ${bg} p-3 shadow-sm ${isMine ? 'ring-2 ring-sage' : ''}`}>
       <div className="mb-2 flex items-baseline justify-between">
-        <span className="text-base font-semibold">{player.name || `Slot ${player.slot}`}</span>
+        <span className="text-base font-semibold">
+          {player.name || `Slot ${player.slot}`}
+          {isMine && <span className="ml-2 rounded bg-sage px-1.5 py-0.5 text-xs font-medium text-ink">ты</span>}
+        </span>
         <span className="text-xl font-bold tabular-nums">{player.score}</span>
       </div>
       <Rack slot={player.slot} tiles={player.rack} />
