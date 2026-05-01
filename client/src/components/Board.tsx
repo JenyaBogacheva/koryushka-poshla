@@ -21,6 +21,8 @@ export function Board({ board }: Props) {
         row.map((cell, c) => (
           <Square
             key={`${r},${c}`}
+            row={r}
+            col={c}
             cell={cell}
             premium={PREMIUMS[r]![c]!}
             size={SQUARE_SIZE}
