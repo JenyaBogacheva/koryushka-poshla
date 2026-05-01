@@ -7,7 +7,7 @@ export function FinishedScreen({ state }: Props) {
   const sorted = [...state.players].sort((a, b) => b.score - a.score);
   const winner = sorted[0]!;
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="w-[28rem] max-w-[90vw] rounded-xl bg-white p-6 text-center shadow-2xl">
         <div className="mb-1 text-2xl font-bold">Игра окончена</div>
         <div className="mb-4 text-lg">
