@@ -198,12 +198,13 @@ describe('persistence: revert window is not preserved', () => {
     const g = new Game({ seed: 3 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
     g.startGame();
-    g.passTurn(0);
-    expect(g.snapshot().players[0]!.canRevert).toBe(true);
+    const first = g.snapshot().turnIndex;
+    g.passTurn(first);
+    expect(g.snapshot().players[first]!.canRevert).toBe(true);
     saveActiveGame(dir, g.snapshot());
     const loaded = loadActiveGame(dir)!;
     const g2 = Game.fromState(loaded);
-    expect(g2.snapshot().players[0]!.canRevert).toBe(false);
-    expect(() => g2.revertLastTurn(0)).toThrow();
+    expect(g2.snapshot().players[first]!.canRevert).toBe(false);
+    expect(() => g2.revertLastTurn(first)).toThrow();
   });
 });

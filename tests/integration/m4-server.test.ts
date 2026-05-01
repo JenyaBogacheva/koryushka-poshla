@@ -191,20 +191,22 @@ describe('M4a server: lobby → join → state', () => {
     const { server, url } = await freshServer();
     try {
       const [b0, b1, b2] = await Promise.all([buffered(url), buffered(url), buffered(url)]);
+      const bs = [b0, b1, b2];
       await waitFor(b0, isType('lobby'));
       join(b0, 0, 'A'); join(b1, 1, 'B'); join(b2, 2, 'C');
       const playing = await waitFor(b0, isStateWithPhase('playing'));
 
-      const r0 = playing.state.players[0]!.rack;
-      const real = r0.filter((t) => !t.isBlank).slice(0, 2);
-      send(b0, {
+      const first = playing.state.turnIndex;
+      const rack = playing.state.players[first]!.rack;
+      const real = rack.filter((t) => !t.isBlank).slice(0, 2);
+      send(bs[first]!, {
         type: 'submitMove',
         placements: [
           { tileId: real[0]!.id, row: 7, col: 7, playedAs: real[0]!.letter },
           { tileId: real[1]!.id, row: 7, col: 8, playedAs: real[1]!.letter },
         ],
       });
-      const accepted = await waitFor(b0, isType('moveAccepted'));
+      const accepted = await waitFor(bs[first]!, isType('moveAccepted'));
       expect(accepted.moveRecord.placements.length).toBe(2);
 
       b0.ws.close(); b1.ws.close(); b2.ws.close();

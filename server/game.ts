@@ -5,6 +5,7 @@ import { createEmptyBoard, applyPlacements, isEmpty, extractWordsFormed } from '
 import { validateMove, type MoveError } from './moves.js';
 import { scoreMove } from './scoring.js';
 import { checkWords } from './dictionary.js';
+import { compareLetterOrder } from './letters.js';
 
 export type GameOpts = { seed: number };
 
@@ -69,10 +70,42 @@ export class Game {
     if (!this.state.players.every((p) => p.connected)) {
       throw new Error('Cannot start until all three slots are connected');
     }
+
+    let candidates: Slot[] = [0, 1, 2];
+    let firstDraws: { slot: Slot; letter: import('@shared/types').Letter | null }[] = [];
+    let firstSlot: Slot;
+    while (true) {
+      const drawn = candidates.map((s) => {
+        const tile = drawTiles(this.bag, 1)[0]!;
+        return { slot: s, tile, letter: tile.isBlank ? null : tile.letter };
+      });
+      if (firstDraws.length === 0) {
+        // The first snapshot is captured before any tie-redraw, so the event reflects the initial three-way draw.
+        firstDraws = drawn.map((d) => ({ slot: d.slot, letter: d.letter }));
+      }
+      drawn.sort((a, b) => compareLetterOrder(a.letter, b.letter));
+      const best = drawn[0]!;
+      const tied = drawn.filter((d) => compareLetterOrder(d.letter, best.letter) === 0);
+      returnTiles(this.bag, drawn.map((d) => d.tile));
+      if (tied.length === 1) {
+        firstSlot = best.slot;
+        break;
+      }
+      candidates = tied.map((d) => d.slot);
+    }
+
     for (const p of this.state.players) {
       const drawn = drawTiles(this.bag, 7);
       addTilesToRack(p.rack, drawn);
     }
+
+    this.state.events.push({
+      kind: 'drawForOrder',
+      draws: firstDraws,
+      firstSlot,
+      timestamp: Date.now(),
+    });
+    this.state.turnIndex = firstSlot;
     this.state.phase = 'playing';
     this.state.bag = this.bag.tiles;
     this.state.startedAt = Date.now();

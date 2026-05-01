@@ -92,6 +92,13 @@ export type RevertRecord = {
   timestamp: number;
 };
 
+export type DrawForOrderRecord = {
+  kind: 'drawForOrder';
+  draws: { slot: Slot; letter: Letter | null }[]; // null = blank; one entry per player in slot order
+  firstSlot: Slot;
+  timestamp: number;
+};
+
 export type GameEvent =
   | MoveRecord
   | AssistRecord
@@ -99,7 +106,8 @@ export type GameEvent =
   | RedrawRecord
   | ClaimBlankRecord
   | EndGameRecord
-  | RevertRecord;
+  | RevertRecord
+  | DrawForOrderRecord;
 
 export type GameEventKind = GameEvent['kind'];
 
@@ -157,7 +165,8 @@ export type ClientMessage =
   | { type: 'redraw' }
   | { type: 'toggleRackVisible'; visible: boolean }
   | { type: 'endGame' }
-  | { type: 'revertLastTurn' };
+  | { type: 'revertLastTurn' }
+  | { type: 'newGame' };
 
 export type ServerMessage =
   | { type: 'lobby'; slots: [LobbySlot, LobbySlot, LobbySlot] }

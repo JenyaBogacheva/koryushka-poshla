@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Game } from '../server/game';
-import type { Placement } from '@shared/types';
+import type { Placement, DrawForOrderRecord } from '@shared/types';
 import { isAllVowels, isAllConsonants } from '../server/rack';
 
 describe('Game — init', () => {
@@ -66,36 +66,40 @@ function makeReadyGame(seed: number) {
 describe('Game — submitMove', () => {
   it('rejects move from non-current player', () => {
     const g = makeReadyGame(1);
-    const result = g.submitMove(1, []); // not their turn
+    const first = g.snapshot().turnIndex;
+    const other = ((first + 1) % 3) as import('@shared/types').Slot;
+    const result = g.submitMove(other, []); // not their turn
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe('not-your-turn');
   });
 
   it('rejects an empty move (must use validateMove path)', () => {
     const g = makeReadyGame(1);
-    const result = g.submitMove(0, []);
+    const first = g.snapshot().turnIndex;
+    const result = g.submitMove(first, []);
     expect(result.ok).toBe(false);
   });
 
   it('accepts a valid first move (covers center) and updates score / turn / rack / bag', () => {
     const g = makeReadyGame(1);
     const before = g.snapshot();
-    const rack = before.players[0]!.rack;
+    const first = before.turnIndex;
+    const rack = before.players[first]!.rack;
     // Build a 1-tile move at the center using whatever tile we have first.
     const t = rack[0]!;
     const placement: Placement = {
       tileId: t.id, row: 7, col: 7,
       playedAs: t.isBlank ? 'А' : t.letter,
     };
-    const result = g.submitMove(0, [placement]);
+    const result = g.submitMove(first, [placement]);
     expect(result.ok).toBe(true);
     const after = g.snapshot();
     if (result.ok) {
-      expect(after.players[0]!.score).toBe(result.moveRecord.totalScore);
-      expect(after.events.length).toBe(1);
+      expect(after.players[first]!.score).toBe(result.moveRecord.totalScore);
+      expect(after.events.length).toBe(2); // drawForOrder + move
     }
-    expect(after.turnIndex).toBe(1);
-    expect(after.players[0]!.rack.length).toBe(7); // refilled
+    expect(after.turnIndex).toBe(((first + 1) % 3) as import('@shared/types').Slot);
+    expect(after.players[first]!.rack.length).toBe(7); // refilled
     expect(after.bag.length).toBe(104 - 21 - 1); // one tile drawn from bag for refill
     expect(after.centerBonusUsed).toBe(true);
   });
@@ -113,23 +117,27 @@ describe('Game — submitMove', () => {
 describe('Game — passTurn', () => {
   it('advances the turn', () => {
     const g = makeReadyGame(1);
-    g.passTurn(0);
-    expect(g.snapshot().turnIndex).toBe(1);
+    const first = g.snapshot().turnIndex;
+    g.passTurn(first);
+    expect(g.snapshot().turnIndex).toBe(((first + 1) % 3) as import('@shared/types').Slot);
   });
   it('rejects pass by non-current', () => {
     const g = makeReadyGame(1);
-    expect(() => g.passTurn(1)).toThrow();
+    const first = g.snapshot().turnIndex;
+    const other = ((first + 1) % 3) as import('@shared/types').Slot;
+    expect(() => g.passTurn(other)).toThrow();
   });
   it('passTurn appends a PassRecord to events', () => {
     const g = makeReadyGame(1);
+    const first = g.snapshot().turnIndex;
     const events0 = g.snapshot().events.length;
-    g.passTurn(0);
+    g.passTurn(first);
     const events = g.snapshot().events;
     expect(events.length).toBe(events0 + 1);
     const last = events[events.length - 1]!;
     expect(last.kind).toBe('pass');
     if (last.kind === 'pass') {
-      expect(last.slot).toBe(0);
+      expect(last.slot).toBe(first);
       expect(typeof last.timestamp).toBe('number');
     }
   });
@@ -147,19 +155,21 @@ describe('Game — redrawRack', () => {
 
   it('does not end turn when allowed', () => {
     // Force a synthetic eligible rack via a different seed; if we can't, skip the assertion logic but verify the API.
-    // Try a few seeds until one yields an eligible starting rack.
+    // Try a few seeds until one yields an eligible starting rack for the first player.
     let g: Game | null = null;
     for (let seed = 1; seed < 200; seed++) {
       const candidate = makeReadyGame(seed);
-      const r = candidate.snapshot().players[0]!.rack;
+      const first = candidate.snapshot().turnIndex;
+      const r = candidate.snapshot().players[first]!.rack;
       if (isAllVowels(r) || isAllConsonants(r)) { g = candidate; break; }
     }
     if (!g) return; // skip if no seed found
     const before = g.snapshot();
-    g.redrawRack(0);
+    const first = before.turnIndex;
+    g.redrawRack(first);
     const after = g.snapshot();
     expect(after.turnIndex).toBe(before.turnIndex); // turn NOT advanced
-    expect(after.players[0]!.rack.length).toBe(7);
+    expect(after.players[first]!.rack.length).toBe(7);
   });
 
   it('redrawRack appends a RedrawRecord with reason and tileCount', () => {
@@ -297,10 +307,11 @@ describe('Game.fromState', () => {
     original.joinPlayer(1, 'B');
     original.joinPlayer(2, 'C');
     original.startGame();
-    const restored = Game.fromState(original.snapshot());
+    const snap = original.snapshot();
+    const restored = Game.fromState(snap);
     const racks = restored.snapshot().players.map((p) => p.rack);
     expect(racks[0]!.length).toBe(7);
-    expect(restored.snapshot().turnIndex).toBe(0);
+    expect(restored.snapshot().turnIndex).toBe(snap.turnIndex);
     expect(restored.snapshot().phase).toBe('playing');
   });
 });
@@ -342,39 +353,42 @@ describe('Game.revertLastTurn after submitMove', () => {
   it('restores board, rack, score, turnIndex after revert', () => {
     const g = setup();
     const before = g.snapshot();
-    const p0 = g.snapshot().players[0]!;
-    const t0 = p0.rack[0]!;
-    const t1 = p0.rack[1]!;
-    const result = g.submitMove(0, [
-      { tileId: t0.id, row: 7, col: 7, playedAs: t0.letter },
-      { tileId: t1.id, row: 7, col: 8, playedAs: t1.letter },
+    const first = before.turnIndex;
+    const pFirst = g.snapshot().players[first]!;
+    const t0 = pFirst.rack[0]!;
+    const t1 = pFirst.rack[1]!;
+    const result = g.submitMove(first, [
+      { tileId: t0.id, row: 7, col: 7, playedAs: t0.isBlank ? 'А' : t0.letter },
+      { tileId: t1.id, row: 7, col: 8, playedAs: t1.isBlank ? 'А' : t1.letter },
     ]);
     if (result.ok) {
       const after = g.snapshot();
-      expect(after.players[0]!.canRevert).toBe(true);
-      expect(after.turnIndex).toBe(1);
-      g.revertLastTurn(0);
+      expect(after.players[first]!.canRevert).toBe(true);
+      expect(after.turnIndex).toBe(((first + 1) % 3) as import('@shared/types').Slot);
+      g.revertLastTurn(first);
       const reverted = g.snapshot();
-      expect(reverted.turnIndex).toBe(0);
-      expect(reverted.players[0]!.score).toBe(before.players[0]!.score);
-      expect(reverted.players[0]!.rack.map((t) => t.id).sort()).toEqual(
-        before.players[0]!.rack.map((t) => t.id).sort(),
+      expect(reverted.turnIndex).toBe(first);
+      expect(reverted.players[first]!.score).toBe(before.players[first]!.score);
+      expect(reverted.players[first]!.rack.map((t) => t.id).sort()).toEqual(
+        before.players[first]!.rack.map((t) => t.id).sort(),
       );
       expect(reverted.board[7]![7]).toBeNull();
-      expect(reverted.players[0]!.canRevert).toBe(false);
+      expect(reverted.players[first]!.canRevert).toBe(false);
     }
   });
 
   it('rejects revert from a non-author', () => {
     const g = setup();
-    const p0 = g.snapshot().players[0]!;
-    const t0 = p0.rack[0]!; const t1 = p0.rack[1]!;
-    const r = g.submitMove(0, [
-      { tileId: t0.id, row: 7, col: 7, playedAs: t0.letter },
-      { tileId: t1.id, row: 7, col: 8, playedAs: t1.letter },
+    const first = g.snapshot().turnIndex;
+    const pFirst = g.snapshot().players[first]!;
+    const t0 = pFirst.rack[0]!; const t1 = pFirst.rack[1]!;
+    const r = g.submitMove(first, [
+      { tileId: t0.id, row: 7, col: 7, playedAs: t0.isBlank ? 'А' : t0.letter },
+      { tileId: t1.id, row: 7, col: 8, playedAs: t1.isBlank ? 'А' : t1.letter },
     ]);
     if (!r.ok) return;
-    expect(() => g.revertLastTurn(1)).toThrow();
+    const other = ((first + 1) % 3) as import('@shared/types').Slot;
+    expect(() => g.revertLastTurn(other)).toThrow();
   });
 });
 
@@ -388,42 +402,48 @@ describe('revert across action types', () => {
 
   it('arms revert after pass and restores turnIndex', () => {
     const g = setup();
-    g.passTurn(0);
-    expect(g.snapshot().turnIndex).toBe(1);
-    expect(g.snapshot().players[0]!.canRevert).toBe(true);
-    g.revertLastTurn(0);
-    expect(g.snapshot().turnIndex).toBe(0);
-    expect(g.snapshot().players[0]!.canRevert).toBe(false);
+    const first = g.snapshot().turnIndex;
+    const next = ((first + 1) % 3) as import('@shared/types').Slot;
+    g.passTurn(first);
+    expect(g.snapshot().turnIndex).toBe(next);
+    expect(g.snapshot().players[first]!.canRevert).toBe(true);
+    g.revertLastTurn(first);
+    expect(g.snapshot().turnIndex).toBe(first);
+    expect(g.snapshot().players[first]!.canRevert).toBe(false);
   });
 
   it('clears revert window when another player acts', () => {
     const g = setup();
-    g.passTurn(0);
-    expect(g.snapshot().players[0]!.canRevert).toBe(true);
-    g.passTurn(1);
-    expect(g.snapshot().players[0]!.canRevert).toBe(false);
-    expect(() => g.revertLastTurn(0)).toThrow();
+    const first = g.snapshot().turnIndex;
+    const next = ((first + 1) % 3) as import('@shared/types').Slot;
+    g.passTurn(first);
+    expect(g.snapshot().players[first]!.canRevert).toBe(true);
+    g.passTurn(next);
+    expect(g.snapshot().players[first]!.canRevert).toBe(false);
+    expect(() => g.revertLastTurn(first)).toThrow();
   });
 
   it('endGame does not arm revert', () => {
     const g = setup();
-    g.endGame(0);
-    expect(g.snapshot().players[0]!.canRevert).toBe(false);
-    expect(() => g.revertLastTurn(0)).toThrow();
+    const first = g.snapshot().turnIndex;
+    g.endGame(first);
+    expect(g.snapshot().players[first]!.canRevert).toBe(false);
+    expect(() => g.revertLastTurn(first)).toThrow();
   });
 
   it('arms revert after redrawRack and restores rack', () => {
     const g = setup();
     const s = g.snapshot();
-    s.players[0]!.rack = s.players[0]!.rack.map((t, i) =>
+    const first = s.turnIndex;
+    s.players[first]!.rack = s.players[first]!.rack.map((t, i) =>
       ({ ...t, letter: ['А','Е','И','О','У','Ы','Э'][i % 7]!, points: 1, isBlank: false }),
     );
     const g2 = Game.fromState(s);
-    const beforeRack = g2.snapshot().players[0]!.rack.map((t) => t.id).sort();
-    g2.redrawRack(0);
-    expect(g2.snapshot().players[0]!.canRevert).toBe(true);
-    g2.revertLastTurn(0);
-    expect(g2.snapshot().players[0]!.rack.map((t) => t.id).sort()).toEqual(beforeRack);
+    const beforeRack = g2.snapshot().players[first]!.rack.map((t) => t.id).sort();
+    g2.redrawRack(first);
+    expect(g2.snapshot().players[first]!.canRevert).toBe(true);
+    g2.revertLastTurn(first);
+    expect(g2.snapshot().players[first]!.rack.map((t) => t.id).sort()).toEqual(beforeRack);
   });
 });
 
@@ -436,25 +456,28 @@ describe('Game — submitMove with helperSlot (assist credit)', () => {
   }
 
   function makeFirstMovePlacements(g: Game): import('@shared/types').Placement[] {
-    const t = g.snapshot().players[0]!.rack[0]!;
+    const first = g.snapshot().turnIndex;
+    const t = g.snapshot().players[first]!.rack[0]!;
     return [{ tileId: t.id, row: 7, col: 7, playedAs: t.isBlank ? 'А' : t.letter }];
   }
 
   it('submitMove with helperSlot adds 5 to helper and appends AssistRecord', () => {
     const g = setup();
-    const r = g.submitMove(0, makeFirstMovePlacements(g), 1);
+    const first = g.snapshot().turnIndex;
+    const helper = ((first + 1) % 3) as import('@shared/types').Slot;
+    const r = g.submitMove(first, makeFirstMovePlacements(g), helper);
     expect(r.ok).toBe(true);
     const snap = g.snapshot();
-    expect(snap.players[1]!.score).toBe(5);
+    expect(snap.players[helper]!.score).toBe(5);
     const events = snap.events;
     const moveRec = events.at(-2)!;
     const assistRec = events.at(-1)!;
     expect(moveRec.kind).toBe('move');
-    if (moveRec.kind === 'move') expect(moveRec.helperSlot).toBe(1);
+    if (moveRec.kind === 'move') expect(moveRec.helperSlot).toBe(helper);
     expect(assistRec.kind).toBe('assist');
     if (assistRec.kind === 'assist') {
-      expect(assistRec.fromSlot).toBe(0);
-      expect(assistRec.toSlot).toBe(1);
+      expect(assistRec.fromSlot).toBe(first);
+      expect(assistRec.toSlot).toBe(helper);
       expect(assistRec.points).toBe(5);
       expect(assistRec.forMoveIndex).toBe(events.length - 2);
     }
@@ -462,43 +485,83 @@ describe('Game — submitMove with helperSlot (assist credit)', () => {
 
   it('submitMove rejects helperSlot equal to submitter', () => {
     const g = setup();
-    const r = g.submitMove(0, makeFirstMovePlacements(g), 0);
+    const first = g.snapshot().turnIndex;
+    const r = g.submitMove(first, makeFirstMovePlacements(g), first);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe('invalid-helper');
   });
 
   it('submitMove rejects out-of-range helperSlot', () => {
     const g = setup();
-    const r = g.submitMove(0, makeFirstMovePlacements(g), 5 as import('@shared/types').Slot);
+    const first = g.snapshot().turnIndex;
+    const r = g.submitMove(first, makeFirstMovePlacements(g), 5 as import('@shared/types').Slot);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe('invalid-helper');
   });
 
   it('rejected move does not award assist or append events', () => {
     const g = setup();
+    const first = g.snapshot().turnIndex;
+    const helper = ((first + 1) % 3) as import('@shared/types').Slot;
     const eventsBefore = g.snapshot().events.length;
-    const score1Before = g.snapshot().players[1]!.score;
+    const scoreHelperBefore = g.snapshot().players[helper]!.score;
     // Off-center single tile fails first-move-must-cover-center validation
-    const t = g.snapshot().players[0]!.rack[0]!;
-    const r = g.submitMove(0, [{ tileId: t.id, row: 0, col: 0, playedAs: t.isBlank ? 'А' : t.letter }], 1);
+    const t = g.snapshot().players[first]!.rack[0]!;
+    const r = g.submitMove(first, [{ tileId: t.id, row: 0, col: 0, playedAs: t.isBlank ? 'А' : t.letter }], helper);
     expect(r.ok).toBe(false);
     expect(g.snapshot().events.length).toBe(eventsBefore);
-    expect(g.snapshot().players[1]!.score).toBe(score1Before);
+    expect(g.snapshot().players[helper]!.score).toBe(scoreHelperBefore);
   });
 
   it('revert of an assisted move reverses helper +5 and appends two revert records', () => {
     const g = setup();
-    g.submitMove(0, makeFirstMovePlacements(g), 1);
-    expect(g.snapshot().players[1]!.score).toBe(5);
-    g.revertLastTurn(0);
+    const first = g.snapshot().turnIndex;
+    const helper = ((first + 1) % 3) as import('@shared/types').Slot;
+    g.submitMove(first, makeFirstMovePlacements(g), helper);
+    expect(g.snapshot().players[helper]!.score).toBe(5);
+    g.revertLastTurn(first);
     const snap = g.snapshot();
-    expect(snap.players[1]!.score).toBe(0);
-    expect(snap.players[0]!.score).toBe(0);
+    expect(snap.players[helper]!.score).toBe(0);
+    expect(snap.players[first]!.score).toBe(0);
     // Log tail after revert: move, assist, revert(assist), revert(move).
     const tail = snap.events.slice(-4);
     expect(tail.map((e) => e.kind)).toEqual(['move', 'assist', 'revert', 'revert']);
     if (tail[2]!.kind === 'revert') expect(tail[2]!.revertedKind).toBe('assist');
     if (tail[3]!.kind === 'revert') expect(tail[3]!.revertedKind).toBe('move');
+  });
+});
+
+describe('startGame draw-for-order', () => {
+  it('emits a DrawForOrderRecord as the first event', () => {
+    const g = new Game({ seed: 12345 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    const events = g.snapshot().events;
+    expect(events[0]?.kind).toEqual('drawForOrder');
+  });
+  it('sets turnIndex to firstSlot', () => {
+    const g = new Game({ seed: 12345 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    const snap = g.snapshot();
+    const first = (snap.events[0] as DrawForOrderRecord).firstSlot;
+    expect(snap.turnIndex).toEqual(first);
+  });
+  it('returns drawn tiles to bag — full racks dealt', () => {
+    const g = new Game({ seed: 12345 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    const snap = g.snapshot();
+    const totalRacks = snap.players.reduce((s, p) => s + p.rack.length, 0);
+    expect(totalRacks).toEqual(21);
+    expect(snap.bag.length).toEqual(104 - 21);
+  });
+  it('records draws in slot order', () => {
+    const g = new Game({ seed: 12345 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    const ev = g.snapshot().events[0] as DrawForOrderRecord;
+    expect(ev.draws.map((d) => d.slot)).toEqual([0, 1, 2]);
   });
 });
 
@@ -514,33 +577,35 @@ describe('Game.revertLastTurn — append-only RevertRecord log', () => {
     // seed 7 is also used by the existing submitMove revert test; 2-tile placement guarantees non-zero score.
     const g = makeReadyGame2(7);
     const before = g.snapshot();
-    const p0 = before.players[0]!;
-    const t0 = p0.rack[0]!;
-    const t1 = p0.rack[1]!;
-    const result = g.submitMove(0, [
+    const first = before.turnIndex;
+    const pFirst = before.players[first]!;
+    const t0 = pFirst.rack[0]!;
+    const t1 = pFirst.rack[1]!;
+    const result = g.submitMove(first, [
       { tileId: t0.id, row: 7, col: 7, playedAs: t0.isBlank ? 'А' : t0.letter },
       { tileId: t1.id, row: 7, col: 8, playedAs: t1.isBlank ? 'А' : t1.letter },
     ]);
     if (!result.ok) return; // skip if placement invalid for this seed
-    const scoreAfter = g.snapshot().players[0]!.score;
+    const scoreAfter = g.snapshot().players[first]!.score;
     expect(scoreAfter).toBeGreaterThan(0);
 
-    g.revertLastTurn(0);
+    g.revertLastTurn(first);
     const snap = g.snapshot();
-    expect(snap.players[0]!.score).toBe(0);
+    expect(snap.players[first]!.score).toBe(0);
     const tail = snap.events.slice(-2);
     expect(tail[0]!.kind).toBe('move');
     expect(tail[1]!.kind).toBe('revert');
     if (tail[1]!.kind === 'revert') {
       expect(tail[1]!.revertedKind).toBe('move');
-      expect(tail[1]!.slot).toBe(0);
+      expect(tail[1]!.slot).toBe(first);
     }
   });
 
   it('revertLastTurn after passTurn appends RevertRecord(kind="pass")', () => {
     const g = makeReadyGame2(1);
-    g.passTurn(0);
-    g.revertLastTurn(0);
+    const first = g.snapshot().turnIndex;
+    g.passTurn(first);
+    g.revertLastTurn(first);
     const tail = g.snapshot().events.slice(-2);
     expect(tail[0]!.kind).toBe('pass');
     expect(tail[1]!.kind).toBe('revert');
@@ -550,12 +615,13 @@ describe('Game.revertLastTurn — append-only RevertRecord log', () => {
   it('revertLastTurn after redrawRack appends RevertRecord(kind="redraw")', () => {
     const g = makeReadyGame2(11);
     const s = g.snapshot();
-    s.players[0]!.rack = s.players[0]!.rack.map((t, i) =>
+    const first = s.turnIndex;
+    s.players[first]!.rack = s.players[first]!.rack.map((t, i) =>
       ({ ...t, letter: ['А','Е','И','О','У','Ы','Э'][i % 7]!, points: 1, isBlank: false }),
     );
     const g2 = Game.fromState(s);
-    g2.redrawRack(0);
-    g2.revertLastTurn(0);
+    g2.redrawRack(first);
+    g2.revertLastTurn(first);
     const tail = g2.snapshot().events.slice(-2);
     expect(tail[0]!.kind).toBe('redraw');
     expect(tail[1]!.kind).toBe('revert');
