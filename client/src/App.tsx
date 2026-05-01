@@ -20,6 +20,7 @@ export function App() {
   const connected = useGameStore((s) => s.connected);
   const setIdentity = useGameStore((s) => s.setIdentity);
   const addPending = useGameStore((s) => s.addPending);
+  const removePending = useGameStore((s) => s.removePending);
   const pendingPlacements = useGameStore((s) => s.pendingPlacements);
 
   const [pendingBlank, setPendingBlank] = useState<PendingDrop | null>(null);
@@ -41,8 +42,14 @@ export function App() {
   }
 
   function onDragEnd(ev: DragEndEvent) {
-    if (ev.over === null) return;
     const tileId = String(ev.active.id);
+    const isPending = pendingPlacements.some((p) => p.tileId === tileId);
+
+    // Dropped outside any square: recall to rack if it was a pending placement.
+    if (ev.over === null) {
+      if (isPending) removePending(tileId);
+      return;
+    }
     const m = /^sq-(\d+)-(\d+)$/.exec(String(ev.over.id));
     if (m === null) return;
     const row = Number(m[1]);
