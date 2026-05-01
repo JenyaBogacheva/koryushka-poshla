@@ -261,3 +261,99 @@ describe('snapshot per-player flags', () => {
   });
 });
 
+
+describe('Game.revertLastTurn after submitMove', () => {
+  function setup() {
+    const g = new Game({ seed: 7 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    return g;
+  }
+
+  it('restores board, rack, score, turnIndex after revert', () => {
+    const g = setup();
+    const before = g.snapshot();
+    const p0 = g.snapshot().players[0]!;
+    const t0 = p0.rack[0]!;
+    const t1 = p0.rack[1]!;
+    const result = g.submitMove(0, [
+      { tileId: t0.id, row: 7, col: 7, playedAs: t0.letter },
+      { tileId: t1.id, row: 7, col: 8, playedAs: t1.letter },
+    ]);
+    if (result.ok) {
+      const after = g.snapshot();
+      expect(after.players[0]!.canRevert).toBe(true);
+      expect(after.turnIndex).toBe(1);
+      g.revertLastTurn(0);
+      const reverted = g.snapshot();
+      expect(reverted.turnIndex).toBe(0);
+      expect(reverted.players[0]!.score).toBe(before.players[0]!.score);
+      expect(reverted.players[0]!.rack.map((t) => t.id).sort()).toEqual(
+        before.players[0]!.rack.map((t) => t.id).sort(),
+      );
+      expect(reverted.board[7]![7]).toBeNull();
+      expect(reverted.players[0]!.canRevert).toBe(false);
+    }
+  });
+
+  it('rejects revert from a non-author', () => {
+    const g = setup();
+    const p0 = g.snapshot().players[0]!;
+    const t0 = p0.rack[0]!; const t1 = p0.rack[1]!;
+    const r = g.submitMove(0, [
+      { tileId: t0.id, row: 7, col: 7, playedAs: t0.letter },
+      { tileId: t1.id, row: 7, col: 8, playedAs: t1.letter },
+    ]);
+    if (!r.ok) return;
+    expect(() => g.revertLastTurn(1)).toThrow();
+  });
+});
+
+describe('revert across action types', () => {
+  function setup() {
+    const g = new Game({ seed: 11 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    return g;
+  }
+
+  it('arms revert after pass and restores turnIndex', () => {
+    const g = setup();
+    g.passTurn(0);
+    expect(g.snapshot().turnIndex).toBe(1);
+    expect(g.snapshot().players[0]!.canRevert).toBe(true);
+    g.revertLastTurn(0);
+    expect(g.snapshot().turnIndex).toBe(0);
+    expect(g.snapshot().players[0]!.canRevert).toBe(false);
+  });
+
+  it('clears revert window when another player acts', () => {
+    const g = setup();
+    g.passTurn(0);
+    expect(g.snapshot().players[0]!.canRevert).toBe(true);
+    g.passTurn(1);
+    expect(g.snapshot().players[0]!.canRevert).toBe(false);
+    expect(() => g.revertLastTurn(0)).toThrow();
+  });
+
+  it('endGame does not arm revert', () => {
+    const g = setup();
+    g.endGame(0);
+    expect(g.snapshot().players[0]!.canRevert).toBe(false);
+    expect(() => g.revertLastTurn(0)).toThrow();
+  });
+
+  it('arms revert after redrawRack and restores rack', () => {
+    const g = setup();
+    const s = g.snapshot();
+    s.players[0]!.rack = s.players[0]!.rack.map((t, i) =>
+      ({ ...t, letter: ['А','Е','И','О','У','Ы','Э'][i % 7]!, points: 1, isBlank: false }),
+    );
+    const g2 = Game.fromState(s);
+    const beforeRack = g2.snapshot().players[0]!.rack.map((t) => t.id).sort();
+    g2.redrawRack(0);
+    expect(g2.snapshot().players[0]!.canRevert).toBe(true);
+    g2.revertLastTurn(0);
+    expect(g2.snapshot().players[0]!.rack.map((t) => t.id).sort()).toEqual(beforeRack);
+  });
+});
