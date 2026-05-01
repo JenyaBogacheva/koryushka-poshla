@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GameState, Letter, LobbySlot, Slot } from '@shared/types';
+import type { DrawState, GameState, Letter, LobbySlot, Slot } from '@shared/types';
 
 type Pending = { tileId: string; row: number; col: number; playedAs: Letter };
 type Identity = { slot: Slot; name: string; password: string };
@@ -32,6 +32,7 @@ type Store = {
   warning: string | null;
   lastPlacedCells: { row: number; col: number }[];
   lastPlacedAt: number;
+  drawState: DrawState | null;
   setState: (state: GameState) => void;
   setConnected: (connected: boolean) => void;
   setLobby: (slots: LobbySlot[]) => void;
@@ -58,7 +59,8 @@ export const useGameStore = create<Store>((set) => ({
   warning: null,
   lastPlacedCells: [],
   lastPlacedAt: 0,
-  setState: (state) => set({ state }),
+  drawState: null,
+  setState: (state) => set({ state, drawState: state.drawState }),
   setConnected: (connected) => set({ connected }),
   setLobby: (slots) => set({ lobby: slots }),
   setIdentity: (slot, name, password) => {
