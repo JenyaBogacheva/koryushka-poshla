@@ -145,3 +145,11 @@ export function send(msg: ClientMessage): void {
 export function sendJoin(slot: Slot, name: string, password: string): void {
   send({ type: 'join', slot, name, password });
 }
+
+export function sendPass(): void { send({ type: 'pass' }); }
+export function sendRedraw(): void { send({ type: 'redraw' }); }
+export function sendClaimBlank(row: number, col: number, tileId: string): void {
+  send({ type: 'claimBlank', row, col, myTileId: tileId });
+}
+export function sendEndGame(): void { send({ type: 'endGame' }); }
+export function sendRevertLastTurn(): void { send({ type: 'revertLastTurn' }); }
