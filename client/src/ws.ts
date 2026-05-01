@@ -105,10 +105,17 @@ export function connect(): void {
     if (socket !== ws) return;
     console.warn('ws error:', e);
   });
-  ws.addEventListener('close', () => {
+  ws.addEventListener('close', (ev) => {
     if (socket !== ws) return;   // a previous (replaced) socket closing — ignore.
     socket = null;
-    useGameStore.getState().setConnected(false);
+    const store = useGameStore.getState();
+    store.setConnected(false);
+    if (ev.reason === 'replaced by same-name client') {
+      // Another tab took over this slot. Don't reconnect — that would just bounce them right back.
+      store.clearIdentity();
+      store.setError('Слот занят в другой вкладке');
+      return;
+    }
     scheduleReconnect();
   });
 }
