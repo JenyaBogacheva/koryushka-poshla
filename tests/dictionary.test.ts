@@ -15,4 +15,12 @@ describe('checkWords', () => {
   it('case-insensitive on input', () => {
     expect(checkWords(['кот'])).toEqual([]);
   });
+  it('accepts both Ъ and Ь substituted forms', () => {
+    expect(checkWords(['АБЪЮРАЦИЯ'])).toEqual([]);
+    expect(checkWords(['АБЬЮРАЦИЯ'])).toEqual([]);
+  });
+  it('excludes proper-noun-only entries', () => {
+    // ИВАН is only a personal name, never a common noun — must be flagged.
+    expect(checkWords(['ИВАН'])).toEqual(['ИВАН']);
+  });
 });
