@@ -4,6 +4,9 @@ import { Tile } from './Tile.js';
 import { useGameStore } from '../store.js';
 import { SUBSTITUTIONS, canSubstitute } from '../letters.js';
 
+// Must match @keyframes tile-flash duration in styles/index.css.
+const TILE_FLASH_MS = 1200;
+
 const PREMIUM_BG: Record<Exclude<Premium, null>, string> = {
   TW: 'bg-terracotta/70',
   DW: 'bg-peach',
@@ -46,7 +49,7 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
 
   const { setNodeRef, isOver } = useDroppable({ id: `sq-${row}-${col}`, disabled: !canDrop });
 
-  const isLastPlaced = cell !== null && Date.now() - lastPlacedAt < 1200 &&
+  const isLastPlaced = cell !== null && Date.now() - lastPlacedAt < TILE_FLASH_MS &&
     lastPlacedCells.some((c) => c.row === row && c.col === col);
 
   const base = 'relative flex items-center justify-center border border-ink/10';
@@ -79,7 +82,7 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
       style={{ width: size, height: size }}
     >
       {cell ? (
-        <div className={isLastPlaced ? 'tile-flash' : undefined}>
+        <div key={isLastPlaced ? lastPlacedAt : 'static'} className={isLastPlaced ? 'tile-flash' : undefined}>
           <Tile cell={cell} size={size - 4} />
         </div>
       ) : pendingTile !== null && pendingHere !== null ? (
