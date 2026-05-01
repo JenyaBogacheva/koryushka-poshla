@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, readdirSync, renameSync } from 'node:fs';
 import path from 'node:path';
 import type { GameState, GameSummary, Slot } from '@shared/types';
 
@@ -7,7 +7,10 @@ const HISTORY_DIR = 'history';
 
 export function saveActiveGame(dataDir: string, state: GameState): void {
   mkdirSync(dataDir, { recursive: true });
-  writeFileSync(path.join(dataDir, ACTIVE_FILE), JSON.stringify(state), 'utf-8');
+  const final = path.join(dataDir, ACTIVE_FILE);
+  const tmp = `${final}.tmp`;
+  writeFileSync(tmp, JSON.stringify(state), 'utf-8');
+  renameSync(tmp, final);
 }
 
 export function loadActiveGame(dataDir: string): GameState | null {

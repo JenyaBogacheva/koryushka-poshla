@@ -1,6 +1,6 @@
 // tests/persistence.test.ts
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, existsSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { saveActiveGame, loadActiveGame, archiveFinishedGame, listGameSummaries } from '../server/persistence';
@@ -54,6 +54,21 @@ describe('persistence', () => {
     expect(summary.winnerSlot).toBe(0);
     expect(loadActiveGame(dataDir)).toBeNull();
     expect(existsSync(path.join(dataDir, 'history'))).toBe(true);
+  });
+
+  it('saveActiveGame leaves no .tmp on success', () => {
+    saveActiveGame(dataDir, sampleState());
+    expect(existsSync(path.join(dataDir, 'game.json'))).toBe(true);
+    expect(existsSync(path.join(dataDir, 'game.json.tmp'))).toBe(false);
+  });
+
+  it('saveActiveGame overwrites an existing file (rename semantics)', () => {
+    saveActiveGame(dataDir, sampleState());
+    const b = sampleState();
+    b.turnIndex = 2;
+    saveActiveGame(dataDir, b);
+    const reloaded = JSON.parse(readFileSync(path.join(dataDir, 'game.json'), 'utf-8'));
+    expect(reloaded.turnIndex).toBe(2);
   });
 
   it('listGameSummaries returns archived games sorted newest-first', async () => {

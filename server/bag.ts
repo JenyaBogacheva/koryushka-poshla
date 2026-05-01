@@ -42,6 +42,10 @@ export function bagCount(bag: Bag): number {
   return bag.tiles.length;
 }
 
+export function bagFromTiles(tiles: Tile[], rng: Rng): Bag {
+  return { tiles: [...tiles], rng };
+}
+
 export function drawTiles(bag: Bag, n: number): Tile[] {
   const drawn: Tile[] = [];
   for (let i = 0; i < n && bag.tiles.length > 0; i++) {

@@ -235,3 +235,29 @@ describe('Game — toggleRackVisibility', () => {
     expect(g.snapshot().players[1]!.rackVisible).toBe(true);
   });
 });
+
+describe('Game.fromState', () => {
+  it('round-trips a fresh post-startGame snapshot', () => {
+    const original = new Game({ seed: 1 });
+    original.joinPlayer(0, 'A');
+    original.joinPlayer(1, 'B');
+    original.joinPlayer(2, 'C');
+    original.startGame();
+    const snap = original.snapshot();
+    const restored = Game.fromState(snap);
+    expect(restored.snapshot()).toEqual(snap);
+  });
+
+  it('lets a restored game keep playing', () => {
+    const original = new Game({ seed: 1 });
+    original.joinPlayer(0, 'A');
+    original.joinPlayer(1, 'B');
+    original.joinPlayer(2, 'C');
+    original.startGame();
+    const restored = Game.fromState(original.snapshot());
+    const racks = restored.snapshot().players.map((p) => p.rack);
+    expect(racks[0]!.length).toBe(7);
+    expect(restored.snapshot().turnIndex).toBe(0);
+    expect(restored.snapshot().phase).toBe('playing');
+  });
+});

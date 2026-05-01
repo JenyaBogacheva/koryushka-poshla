@@ -1,31 +1,34 @@
 import express from 'express';
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import type { GameState } from '@shared/types';
-import { buildScriptedGame, runScriptedGame } from './scripted-game.js';
+import type { ClientMessage, ServerMessage, GameState, Slot } from '@shared/types';
+import { Game } from './game.js';
+import { createEmptyBoard } from './board.js';
+import { createSeats, seat, unseat, allSeated, namesInSlotOrder, type Seats } from './connections.js';
+import { saveActiveGame, loadActiveGame } from './persistence.js';
 
 export type ServerOptions = {
   port?: number;
-  delayMs?: number;
   serveStatic?: boolean;
+  dataDir?: string;
 };
 
 export type RunningServer = {
   httpServer: HttpServer;
   wss: WebSocketServer;
   port: number;
-  /** Starts the scripted runner. Returns a Promise that resolves when the game ends. */
-  start: () => Promise<void>;
   close: () => Promise<void>;
 };
 
+const VALID_SLOTS = new Set(['0', '1', '2']);
+
 export async function startServer(opts: ServerOptions = {}): Promise<RunningServer> {
   const port = opts.port ?? Number(process.env.PORT ?? 3000);
-  const delayMs = opts.delayMs ?? 2000;
   const serveStatic = opts.serveStatic ?? process.env.NODE_ENV === 'production';
+  const dataDir = opts.dataDir ?? path.resolve(process.cwd(), 'data');
 
   const app = express();
   if (serveStatic) {
@@ -38,33 +41,151 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
-  // Build the game and capture its initial snapshot before we start listening,
-  // so any client connecting immediately gets a non-null state.
-  const game = buildScriptedGame();
-  let latest: GameState = game.snapshot();
+  const seats: Seats = createSeats();
+  let game: Game | null = null;
 
-  function broadcast(message: object): void {
-    const payload = JSON.stringify(message);
+  const loaded = loadActiveGame(dataDir);
+  if (loaded !== null) {
+    game = Game.fromState(loaded);
+  }
+
+  function sendMsg(ws: WebSocket, msg: ServerMessage): void {
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  }
+
+  function lobbySnapshot(): GameState {
+    return {
+      phase: 'waiting',
+      players: ([0, 1, 2] as Slot[]).map((i) => ({
+        slot: i,
+        name: seats[i]!.name ?? '',
+        connected: seats[i]!.ws !== null,
+        rack: [],
+        rackVisible: true,
+        score: 0,
+      })) as unknown as GameState['players'],
+      turnIndex: 0,
+      board: createEmptyBoard(),
+      bag: [],
+      centerBonusUsed: false,
+      history: [],
+      startedAt: null,
+    };
+  }
+
+  function currentState(): GameState {
+    const state = game !== null ? game.snapshot() : lobbySnapshot();
+    for (let i = 0; i < 3; i++) {
+      state.players[i]!.connected = seats[i]!.ws !== null;
+    }
+    return state;
+  }
+
+  function broadcastState(): void {
+    const payload: ServerMessage = { type: 'state', state: currentState() };
+    const data = JSON.stringify(payload);
     for (const client of wss.clients) {
-      if (client.readyState === WebSocket.OPEN) client.send(payload);
+      if (client.readyState === WebSocket.OPEN) client.send(data);
     }
   }
 
-  wss.on('connection', (socket) => {
-    socket.send(JSON.stringify({ type: 'state', state: latest }));
+  function handleSubmitMove(slot: Slot, msg: Extract<ClientMessage, { type: 'submitMove' }>, ws: WebSocket): void {
+    if (game === null) {
+      sendMsg(ws, { type: 'error', message: 'Game not started' });
+      return;
+    }
+    const result = game.submitMove(slot, msg.placements);
+    if (!result.ok) {
+      sendMsg(ws, { type: 'moveRejected', reason: humanReadableReason(result.error) });
+      return;
+    }
+    try {
+      saveActiveGame(dataDir, game.snapshot());
+    } catch (err) {
+      console.error('[scrabble] saveActiveGame failed:', err);
+    }
+    broadcastState();
+    sendMsg(ws, { type: 'moveAccepted', moveRecord: result.moveRecord, dictionaryWarnings: result.dictionaryWarnings });
+  }
+
+  wss.on('connection', (ws, req) => {
+    const url = new URL(req.url ?? '/ws', 'ws://localhost');
+    const slotStr = url.searchParams.get('slot');
+    const name = url.searchParams.get('name')?.trim();
+    if (slotStr === null || !VALID_SLOTS.has(slotStr) || !name) {
+      ws.close(1008, 'Bad join params');
+      return;
+    }
+    const slot = Number(slotStr) as Slot;
+
+    if (game !== null) {
+      const persistedName = game.snapshot().players[slot]!.name;
+      if (persistedName !== '' && persistedName !== name) {
+        sendMsg(ws, { type: 'error', message: 'Slot taken' });
+        ws.close(1008, 'Slot taken');
+        return;
+      }
+    }
+
+    const result = seat(seats, slot, name, ws);
+    if (!result.ok) {
+      sendMsg(ws, { type: 'error', message: result.reason });
+      ws.close(1008, result.reason);
+      return;
+    }
+
+    if (game !== null) {
+      game.joinPlayer(slot, name);
+    } else if (allSeated(seats)) {
+      game = new Game({ seed: Date.now() });
+      const names = namesInSlotOrder(seats);
+      game.joinPlayer(0, names[0]);
+      game.joinPlayer(1, names[1]);
+      game.joinPlayer(2, names[2]);
+      game.startGame();
+      try {
+        saveActiveGame(dataDir, game.snapshot());
+      } catch (err) {
+        console.error('[scrabble] saveActiveGame failed:', err);
+      }
+    }
+
+    broadcastState();
+
+    ws.on('message', (raw: RawData) => {
+      let msg: ClientMessage;
+      try {
+        msg = JSON.parse(raw.toString()) as ClientMessage;
+      } catch {
+        sendMsg(ws, { type: 'error', message: 'Invalid JSON' });
+        return;
+      }
+      switch (msg.type) {
+        case 'submitMove':
+          handleSubmitMove(slot, msg, ws);
+          return;
+        case 'swapTiles':
+        case 'claimBlank':
+        case 'pass':
+        case 'redraw':
+        case 'toggleRackVisible':
+        case 'endGame':
+          sendMsg(ws, { type: 'error', message: 'not yet implemented' });
+          return;
+        default:
+          sendMsg(ws, { type: 'error', message: 'Unknown message type' });
+      }
+    });
+
+    ws.on('close', () => {
+      const which = unseat(seats, ws);
+      if (which === null) return;
+      broadcastState();
+    });
   });
 
   await new Promise<void>((resolve) => httpServer.listen(port, resolve));
   const actualPort = (httpServer.address() as AddressInfo).port;
-
-  const start = (): Promise<void> =>
-    runScriptedGame(game, {
-      delayMs,
-      onSnapshot: (state) => {
-        latest = state;
-        broadcast({ type: 'state', state });
-      },
-    });
 
   const close = async (): Promise<void> => {
     for (const client of wss.clients) client.terminate();
@@ -72,15 +193,33 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
   };
 
-  return { httpServer, wss, port: actualPort, start, close };
+  return { httpServer, wss, port: actualPort, close };
+}
+
+function humanReadableReason(error: { kind: string }): string {
+  switch (error.kind) {
+    case 'not-your-turn': return 'Сейчас не ваш ход';
+    case 'not-playing': return 'Игра не в процессе';
+    case 'no-placements': return 'Нет плиток для хода';
+    case 'out-of-range': return 'Плитка вне поля';
+    case 'duplicate-target': return 'Две плитки в одну клетку';
+    case 'duplicate-tile': return 'Дублирующаяся плитка';
+    case 'cell-occupied': return 'Клетка уже занята';
+    case 'tile-not-in-rack': return 'Плитки нет на стойке';
+    case 'illegal-substitution': return 'Недопустимая замена буквы';
+    case 'illegal-blank-letter': return 'Недопустимая буква для бланка';
+    case 'first-move-must-cover-center': return 'Первый ход должен закрывать центральную клетку';
+    case 'first-move-must-be-one-group': return 'Первый ход должен быть одной группой';
+    case 'group-not-connected': return 'Слова должны соединяться с уже сыгранными';
+    default: return `Ошибка: ${error.kind}`;
+  }
 }
 
 const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   startServer()
-    .then(async (server) => {
+    .then((server) => {
       console.log(`[scrabble] listening on http://localhost:${server.port} (ws: /ws)`);
-      await server.start();
     })
     .catch((err) => {
       console.error(err);

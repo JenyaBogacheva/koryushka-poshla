@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createBag, drawTiles, returnTiles, bagCount, makeRng } from '../server/bag';
+import { createBag, drawTiles, returnTiles, bagCount, bagFromTiles, makeRng } from '../server/bag';
 
 describe('bag', () => {
   it('starts with 104 tiles', () => {
@@ -47,5 +47,21 @@ describe('bag', () => {
     const lettersA = drawTiles(a, 20).map((t) => t.letter).join('');
     const lettersB = drawTiles(b, 20).map((t) => t.letter).join('');
     expect(lettersA).not.toBe(lettersB);
+  });
+});
+
+describe('bagFromTiles', () => {
+  it('preserves the given tile order without reshuffling', () => {
+    const original = createBag(makeRng(1));
+    const snapshot = original.tiles.map((t) => ({ ...t }));
+    const restored = bagFromTiles(snapshot, makeRng(2));
+    expect(restored.tiles).toEqual(snapshot);
+  });
+
+  it('shares no aliasing with the input array', () => {
+    const original = createBag(makeRng(1));
+    const restored = bagFromTiles(original.tiles, makeRng(2));
+    drawTiles(restored, 1);
+    expect(original.tiles.length).toBe(104);
   });
 });
