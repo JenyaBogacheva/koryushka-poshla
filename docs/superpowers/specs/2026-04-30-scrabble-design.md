@@ -264,7 +264,7 @@ Three layers, in priority order:
 4. **M4 — All the rules.** Slot picker UI + name input + reconnect-by-name (§10), multi-spot placement, substitution picker, blank picker, blank-swap, swap-tiles, pass, all-vowel/all-consonant redraw, end-game button, rack visibility toggle, dictionary advisory display. (M3 stubs the join flow with `?slot=N&name=X` URL params and replies `not yet implemented` to non-`submitMove` actions; M4 fills both in.)
 5. **M5 — Polish.** Split into two slices:
    - **M5a** (see `docs/superpowers/specs/2026-05-01-m5a-snapshots-assist-log-design.md`): live move log, finished-game snapshots + Past Games viewer, "мама помогла" assist credit.
-   - **M5b**: disconnect/pause overlay, dictionary advisory warnings, animations, deploy to Render.
+   - **M5b**: disconnect/pause overlay, dictionary advisory warnings, animations, "Новая игра" / play-again flow on the finished-game screen, deploy to Render.
 6. **M6 — Gamification.** Cross-game leaderboard (aggregated from archived snapshots) and badges/achievements (e.g., long-word, game wins, most-helped, most-helping, highest single-move, bingo). Brainstorm + spec deferred; depends on M5 archive format.
 
 Each milestone is end-to-end playable or testable before moving on.
