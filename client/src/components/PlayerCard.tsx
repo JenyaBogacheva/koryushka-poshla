@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Player } from '@shared/types';
 import { Rack } from './Rack.js';
 import { SubmitConfirmModal } from './SubmitConfirmModal.js';
@@ -22,6 +22,15 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   const showButtons = isMine && isCurrentTurn && pending.length > 0;
   const bg = isCurrentTurn ? 'bg-peach' : 'bg-tile';
 
+  const prevScoreRef = useRef(player.score);
+  const [pop, setPop] = useState<{ key: number; delta: number } | null>(null);
+  useEffect(() => {
+    if (player.score > prevScoreRef.current) {
+      setPop({ key: Date.now(), delta: player.score - prevScoreRef.current });
+    }
+    prevScoreRef.current = player.score;
+  }, [player.score]);
+
   const others = allPlayers
     .filter((p) => identity !== null && p.slot !== identity.slot)
     .map((p) => ({ slot: p.slot, name: p.name || `Слот ${p.slot}` }));
@@ -38,7 +47,10 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   }
 
   return (
-    <div className={`rounded-md ${bg} p-3 shadow-sm`}>
+    <div className={`relative rounded-md ${bg} p-3 shadow-sm`}>
+      {pop !== null && (
+        <span key={pop.key} className="score-pop right-2 top-2">+{pop.delta}</span>
+      )}
       <div className="mb-2 flex items-baseline justify-between">
         <span className="text-base font-semibold">
           {player.name || `Слот ${player.slot}`}
