@@ -2,7 +2,7 @@ import type { Board as BoardT } from '@shared/types';
 import { PREMIUMS } from '@shared/premiums';
 import { Square } from './Square.js';
 
-const SQUARE_SIZE = 36;
+const SQUARE_SIZE = 52;
 const GRID = 15;
 
 type Props = { board: BoardT };
