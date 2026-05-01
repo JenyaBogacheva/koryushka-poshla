@@ -1,18 +1,11 @@
 import type { Letter } from '@shared/types';
+import { SUBSTITUTIONS } from '@shared/letters.js';
 
 const VOWELS = new Set(['А', 'Е', 'Ё', 'И', 'О', 'У', 'Ы', 'Э', 'Ю', 'Я']);
 const CONSONANTS = new Set([
   'Б','В','Г','Д','Ж','З','Й','К','Л','М','Н','П','Р','С','Т','Ф','Х','Ц','Ч','Ш','Щ',
 ]);
 const SIGNS = new Set(['Ъ', 'Ь']);
-
-// One-way substitutions: tile letter -> allowed playedAs.
-const SUBSTITUTIONS: Record<string, ReadonlyArray<string>> = {
-  'Ё': ['Е'],
-  'Ъ': ['Ь'],
-  'Ш': ['Щ'],
-  'Й': ['И'],
-};
 
 export function isVowel(letter: Letter): boolean {
   return VOWELS.has(letter);
@@ -32,5 +25,5 @@ export function isCyrillicLetter(value: string): boolean {
  */
 export function isSubstitutionAllowed(tileLetter: Letter, playedAs: Letter): boolean {
   if (tileLetter === playedAs) return true;
-  return SUBSTITUTIONS[tileLetter]?.includes(playedAs) ?? false;
+  return SUBSTITUTIONS[tileLetter] === playedAs;
 }

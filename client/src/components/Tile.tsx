@@ -44,6 +44,7 @@ function Badge({ subBadge }: { subBadge: NonNullable<InnerProps['subBadge']> }) 
   return (
     <button
       className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-terracotta text-[9px] font-bold text-white shadow"
+      onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
         subBadge.onClick();

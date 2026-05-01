@@ -196,8 +196,8 @@ export class Game {
     if (this.lastSnapshot === null) throw new Error('Nothing to revert');
     if (this.lastSnapshot.bySlot !== slot) throw new Error('Only the action author can revert');
     this.state = this.lastSnapshot.state;
-    // Re-sync the bag wrapper with the restored tile array (next draw uses restored bag).
-    this.bag = bagFromTiles(this.state.bag, makeRng(Date.now()));
+    // Keep the existing seeded rng closure; rewind the bag's tile array to the restored state.
+    this.bag.tiles = [...this.state.bag];
     this.state.bag = this.bag.tiles;
     this.lastSnapshot = null;
   }
