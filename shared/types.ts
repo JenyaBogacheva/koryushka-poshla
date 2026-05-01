@@ -35,13 +35,72 @@ export type WordFormed = {
 };
 
 export type MoveRecord = {
+  kind: 'move';
   slot: Slot;
   placements: Placement[];
   wordsFormed: WordFormed[];
   totalScore: number;
   bingoBonus: boolean;
+  helperSlot: Slot | null;
   timestamp: number;
 };
+
+export type AssistRecord = {
+  kind: 'assist';
+  fromSlot: Slot;
+  toSlot: Slot;
+  points: 5;
+  forMoveIndex: number;
+  timestamp: number;
+};
+
+export type PassRecord = {
+  kind: 'pass';
+  slot: Slot;
+  timestamp: number;
+};
+
+export type RedrawRecord = {
+  kind: 'redraw';
+  slot: Slot;
+  reason: 'allVowels' | 'allConsonants';
+  tileCount: number;
+  timestamp: number;
+};
+
+export type ClaimBlankRecord = {
+  kind: 'claimBlank';
+  slot: Slot;
+  row: number;
+  col: number;
+  letterAs: Letter;
+  timestamp: number;
+};
+
+export type EndGameRecord = {
+  kind: 'endGame';
+  slot: Slot;
+  cause: 'playerEnded' | 'bagEmptyAndRackEmpty' | 'sixPasses';
+  timestamp: number;
+};
+
+export type RevertRecord = {
+  kind: 'revert';
+  slot: Slot;
+  revertedKind: GameEventKind;
+  timestamp: number;
+};
+
+export type GameEvent =
+  | MoveRecord
+  | AssistRecord
+  | PassRecord
+  | RedrawRecord
+  | ClaimBlankRecord
+  | EndGameRecord
+  | RevertRecord;
+
+export type GameEventKind = GameEvent['kind'];
 
 export type Player = {
   slot: Slot;
@@ -63,7 +122,7 @@ export type GameState = {
   board: Board;
   bag: Tile[];
   centerBonusUsed: boolean;
-  history: MoveRecord[];
+  events: GameEvent[];
   startedAt: number | null;
 };
 
@@ -75,13 +134,23 @@ export type GameSummary = {
   winnerSlot: Slot | null;
 };
 
+export type GameArchive = {
+  id: string;
+  startedAt: number;
+  finishedAt: number;
+  players: { slot: Slot; name: string; finalScore: number }[];
+  winnerSlot: Slot | null;
+  finalBoard: Board;
+  events: GameEvent[];
+};
+
 export type LobbySlot = { slot: Slot; name: string; connected: boolean };
 
 // --- WebSocket protocol (M4a: join+lobby added; non-placement actions stubbed in server; M4b will implement them) ---
 
 export type ClientMessage =
   | { type: 'join'; slot: Slot; name: string; password: string }
-  | { type: 'submitMove'; placements: Placement[] }
+  | { type: 'submitMove'; placements: Placement[]; helperSlot?: Slot }
   | { type: 'claimBlank'; row: number; col: number; myTileId: string }
   | { type: 'pass' }
   | { type: 'redraw' }
