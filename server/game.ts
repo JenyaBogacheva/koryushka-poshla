@@ -136,6 +136,7 @@ export class Game {
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
+    this.state.events.push({ kind: 'pass', slot, timestamp: Date.now() });
     this.armRevert(slot, pre);
   }
 

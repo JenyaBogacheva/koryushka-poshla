@@ -120,6 +120,19 @@ describe('Game — passTurn', () => {
     const g = makeReadyGame(1);
     expect(() => g.passTurn(1)).toThrow();
   });
+  it('passTurn appends a PassRecord to events', () => {
+    const g = makeReadyGame(1);
+    const events0 = g.snapshot().events.length;
+    g.passTurn(0);
+    const events = g.snapshot().events;
+    expect(events.length).toBe(events0 + 1);
+    const last = events[events.length - 1]!;
+    expect(last.kind).toBe('pass');
+    if (last.kind === 'pass') {
+      expect(last.slot).toBe(0);
+      expect(typeof last.timestamp).toBe('number');
+    }
+  });
 });
 
 describe('Game — redrawRack', () => {
