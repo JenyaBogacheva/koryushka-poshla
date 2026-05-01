@@ -5,6 +5,9 @@ import type { GameState, GameSummary, Slot } from '@shared/types';
 const ACTIVE_FILE = 'game.json';
 const HISTORY_DIR = 'history';
 
+// NOTE: GameState's per-player `canRevert` is recomputed from the engine's transient
+// `lastSnapshot` field, which is intentionally NOT persisted. A server restart drops
+// the revert window — acceptable hard boundary; no game state is lost.
 export function saveActiveGame(dataDir: string, state: GameState): void {
   mkdirSync(dataDir, { recursive: true });
   const final = path.join(dataDir, ACTIVE_FILE);

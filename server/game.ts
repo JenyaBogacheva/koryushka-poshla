@@ -15,6 +15,9 @@ export type SubmitResult =
 export class Game {
   private state: GameState;
   private bag: Bag;
+  // Single-level undo. Captured pre-mutation by submitMove/passTurn/redrawRack/claimBlank.
+  // Cleared the moment a different slot acts. Not persisted to disk.
+  private lastSnapshot: { state: GameState; bySlot: Slot } | null = null;
 
   constructor(opts: GameOpts) {
     this.bag = createBag(makeRng(opts.seed));
@@ -25,6 +28,8 @@ export class Game {
       rack: [] as Tile[],
       rackVisible: true,
       score: 0,
+      redrawEligible: false,
+      canRevert: false,
     })) as [Player, Player, Player];
     this.state = {
       phase: 'waiting',
@@ -43,8 +48,10 @@ export class Game {
     const cloned = structuredClone(state);
     const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
     cloned.bag = bag.tiles;
-    (g as unknown as { bag: Bag; state: GameState }).bag = bag;
-    (g as unknown as { bag: Bag; state: GameState }).state = cloned;
+    type Mutable = { bag: Bag; state: GameState; lastSnapshot: null };
+    (g as unknown as Mutable).bag = bag;
+    (g as unknown as Mutable).state = cloned;
+    (g as unknown as Mutable).lastSnapshot = null;
     return g;
   }
 
@@ -76,6 +83,9 @@ export class Game {
     const validation = validateMove(this.state.board, player.rack, placements, isFirst);
     if (!validation.ok) return { ok: false, error: validation.error };
 
+    this.maybeClearRevertOnActionBy(slot);
+    const preStateForRevert = structuredClone(this.state);
+
     // Pull the tiles being placed off the rack (we need actual Tile objects to apply).
     const tileIds = placements.map((p) => p.tileId);
     const placedTiles = removeTilesFromRack(player.rack, tileIds);
@@ -106,30 +116,25 @@ export class Game {
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
 
     const dictionaryWarnings = checkWords(words.map((w) => w.word));
+    this.armRevert(slot, preStateForRevert);
     return { ok: true, moveRecord, dictionaryWarnings };
   }
 
   snapshot(): GameState {
-    return structuredClone(this.state);
+    const cloned = structuredClone(this.state);
+    for (const p of cloned.players) {
+      p.redrawEligible = redrawEligible(p.rack);
+      p.canRevert = this.lastSnapshot !== null && this.lastSnapshot.bySlot === p.slot;
+    }
+    return cloned;
   }
 
   passTurn(slot: Slot): void {
     this.assertTurn(slot);
+    this.maybeClearRevertOnActionBy(slot);
+    const pre = structuredClone(this.state);
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
-  }
-
-  swapTiles(slot: Slot, tileIds: string[]): void {
-    this.assertTurn(slot);
-    if (new Set(tileIds).size !== tileIds.length) {
-      throw new Error('Duplicate tile id in swap request');
-    }
-    const player = this.state.players[slot]!;
-    const removed = removeTilesFromRack(player.rack, tileIds);
-    returnTiles(this.bag, removed);
-    const drawn = drawTiles(this.bag, removed.length);
-    addTilesToRack(player.rack, drawn);
-    this.state.bag = this.bag.tiles;
-    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+    this.armRevert(slot, pre);
   }
 
   redrawRack(slot: Slot): void {
@@ -138,6 +143,8 @@ export class Game {
     if (!redrawEligible(player.rack)) {
       throw new Error('Rack is not eligible for free redraw (must be all vowels or all consonants)');
     }
+    this.maybeClearRevertOnActionBy(slot);
+    const pre = structuredClone(this.state);
     const allIds = player.rack.map((t) => t.id);
     const removed = removeTilesFromRack(player.rack, allIds);
     returnTiles(this.bag, removed);
@@ -145,6 +152,7 @@ export class Game {
     addTilesToRack(player.rack, drawn);
     this.state.bag = this.bag.tiles;
     // turn not advanced
+    this.armRevert(slot, pre);
   }
 
   /**
@@ -163,6 +171,8 @@ export class Game {
     if (real.letter !== cell.playedAs) {
       throw new Error(`Tile letter ${real.letter} does not match blank's playedAs ${cell.playedAs}`);
     }
+    this.maybeClearRevertOnActionBy(slot);
+    const pre = structuredClone(this.state);
     // Perform swap.
     const blank = cell.tile;
     player.rack.splice(idx, 1);
@@ -172,11 +182,34 @@ export class Game {
       playedAs: cell.playedAs,
       fromBlank: false,
     };
+    this.armRevert(slot, pre);
   }
 
-  endGame(_slot: Slot): void {
+  endGame(slot: Slot): void {
     if (this.state.phase !== 'playing') return; // idempotent if already finished
+    this.maybeClearRevertOnActionBy(slot);
+    this.lastSnapshot = null; // ending the game finalizes everything
     this.state.phase = 'finished';
+  }
+
+  revertLastTurn(slot: Slot): void {
+    if (this.lastSnapshot === null) throw new Error('Nothing to revert');
+    if (this.lastSnapshot.bySlot !== slot) throw new Error('Only the action author can revert');
+    this.state = this.lastSnapshot.state;
+    // Keep the existing seeded rng closure; rewind the bag's tile array to the restored state.
+    this.bag.tiles = [...this.state.bag];
+    this.state.bag = this.bag.tiles;
+    this.lastSnapshot = null;
+  }
+
+  private armRevert(slot: Slot, preState: GameState): void {
+    this.lastSnapshot = { state: preState, bySlot: slot };
+  }
+
+  private maybeClearRevertOnActionBy(slot: Slot): void {
+    if (this.lastSnapshot !== null && this.lastSnapshot.bySlot !== slot) {
+      this.lastSnapshot = null;
+    }
   }
 
   toggleRackVisibility(slot: Slot, visible: boolean): void {

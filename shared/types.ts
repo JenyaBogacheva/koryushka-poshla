@@ -50,6 +50,8 @@ export type Player = {
   rack: Tile[];
   rackVisible: boolean;
   score: number;
+  redrawEligible: boolean;  // computed from rack: all-vowel or all-consonant
+  canRevert: boolean;       // this player just acted and no one else has acted since
 };
 
 export type GamePhase = 'waiting' | 'playing' | 'finished';
@@ -73,18 +75,22 @@ export type GameSummary = {
   winnerSlot: Slot | null;
 };
 
-// --- WebSocket protocol (M3 subset; M4 fills in the deferred actions) ---
+export type LobbySlot = { slot: Slot; name: string; connected: boolean };
+
+// --- WebSocket protocol (M4a: join+lobby added; non-placement actions stubbed in server; M4b will implement them) ---
 
 export type ClientMessage =
+  | { type: 'join'; slot: Slot; name: string; password: string }
   | { type: 'submitMove'; placements: Placement[] }
-  | { type: 'swapTiles'; tileIds: string[] }
   | { type: 'claimBlank'; row: number; col: number; myTileId: string }
   | { type: 'pass' }
   | { type: 'redraw' }
   | { type: 'toggleRackVisible'; visible: boolean }
-  | { type: 'endGame' };
+  | { type: 'endGame' }
+  | { type: 'revertLastTurn' };
 
 export type ServerMessage =
+  | { type: 'lobby'; slots: [LobbySlot, LobbySlot, LobbySlot] }
   | { type: 'state'; state: GameState }
   | { type: 'moveAccepted'; moveRecord: MoveRecord; dictionaryWarnings: string[] }
   | { type: 'moveRejected'; reason: string }

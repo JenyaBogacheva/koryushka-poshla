@@ -2,6 +2,7 @@ import { useDroppable } from '@dnd-kit/core';
 import type { Cell, Premium, Tile as TileT } from '@shared/types';
 import { Tile } from './Tile.js';
 import { useGameStore } from '../store.js';
+import { SUBSTITUTIONS, canSubstitute } from '../letters.js';
 
 const PREMIUM_BG: Record<Exclude<Premium, null>, string> = {
   TW: 'bg-terracotta/70',
@@ -28,25 +29,42 @@ type Props = {
 };
 
 export function Square({ row, col, cell, premium, size }: Props) {
-  const mySlot = useGameStore((s) => s.mySlot);
+  const identity = useGameStore((s) => s.identity);
   const state = useGameStore((s) => s.state);
   const pending = useGameStore((s) => s.pendingPlacements);
   const removePending = useGameStore((s) => s.removePending);
+  const togglePendingSubstitution = useGameStore((s) => s.togglePendingSubstitution);
 
+  const mySlot = identity?.slot ?? null;
   const pendingHere = pending.find((p) => p.row === row && p.col === col) ?? null;
   const isMyTurn = state !== null && mySlot !== null && state.turnIndex === mySlot && state.phase === 'playing';
-  const canDrop = cell === null && pendingHere === null && isMyTurn;
+  const isClaimBlankTarget = cell !== null && cell.fromBlank && isMyTurn;
+  const canDrop = (cell === null && pendingHere === null && isMyTurn) || isClaimBlankTarget;
 
   const { setNodeRef, isOver } = useDroppable({ id: `sq-${row}-${col}`, disabled: !canDrop });
 
   const base = 'relative flex items-center justify-center border border-ink/10';
   const bg = cell ? 'bg-bg' : (premium ? PREMIUM_BG[premium] : 'bg-bg');
-  const overRing = isOver ? 'outline outline-2 outline-sage' : '';
+  const overRing = isOver
+    ? (isClaimBlankTarget ? 'outline outline-2 outline-emerald-500' : 'outline outline-2 outline-sage')
+    : '';
 
   let pendingTile: TileT | null = null;
   if (pendingHere !== null && state !== null && mySlot !== null) {
     pendingTile = state.players[mySlot]!.rack.find((t) => t.id === pendingHere.tileId) ?? null;
   }
+
+  const subBadge =
+    pendingTile !== null && pendingHere !== null && !pendingTile.isBlank && canSubstitute(pendingTile.letter)
+      ? {
+          display:
+            pendingHere.playedAs === pendingTile.letter
+              ? SUBSTITUTIONS[pendingTile.letter]!
+              : pendingTile.letter,
+          onClick: () =>
+            togglePendingSubstitution(pendingTile.id, pendingTile.letter, SUBSTITUTIONS[pendingTile.letter]!),
+        }
+      : undefined;
 
   return (
     <div
@@ -56,14 +74,20 @@ export function Square({ row, col, cell, premium, size }: Props) {
     >
       {cell ? (
         <Tile cell={cell} size={size - 4} />
-      ) : pendingTile !== null ? (
-        <button
-          onClick={() => pendingHere && removePending(pendingHere.tileId)}
-          className="contents"
-          aria-label="Recall tile"
+      ) : pendingTile !== null && pendingHere !== null ? (
+        <div
+          onDoubleClick={() => removePending(pendingHere.tileId)}
+          title="Перетащи или дважды кликни, чтобы убрать"
         >
-          <Tile tile={pendingTile} size={size - 4} ghost />
-        </button>
+          <Tile
+            tile={pendingTile}
+            size={size - 4}
+            ghost
+            draggableId={isMyTurn ? pendingTile.id : undefined}
+            displayOverride={pendingHere.playedAs}
+            subBadge={subBadge}
+          />
+        </div>
       ) : premium ? (
         <span className="text-[10px] font-medium text-ink/60">{PREMIUM_LABEL[premium]}</span>
       ) : null}

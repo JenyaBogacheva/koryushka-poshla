@@ -9,32 +9,31 @@ type Props = {
 };
 
 export function PlayerCard({ player, isCurrentTurn }: Props) {
-  const mySlot = useGameStore((s) => s.mySlot);
-  const state = useGameStore((s) => s.state);
+  const identity = useGameStore((s) => s.identity);
   const pending = useGameStore((s) => s.pendingPlacements);
   const clearPending = useGameStore((s) => s.clearPending);
 
-  const isMine = mySlot === player.slot;
+  const isMine = identity?.slot === player.slot;
   const showButtons = isMine && isCurrentTurn && pending.length > 0;
   const bg = isCurrentTurn ? 'bg-peach' : 'bg-tile';
 
   function onSubmit() {
-    if (state === null || mySlot === null) return;
-    const myRack = state.players[mySlot]!.rack;
-    const placements = pending
-      .map((p) => {
-        const tile = myRack.find((t) => t.id === p.tileId);
-        if (!tile) return null;
-        return { tileId: p.tileId, row: p.row, col: p.col, playedAs: tile.letter };
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null);
+    const placements = pending.map((p) => ({
+      tileId: p.tileId,
+      row: p.row,
+      col: p.col,
+      playedAs: p.playedAs,
+    }));
     send({ type: 'submitMove', placements });
   }
 
   return (
     <div className={`rounded-md ${bg} p-3 shadow-sm`}>
       <div className="mb-2 flex items-baseline justify-between">
-        <span className="text-base font-semibold">{player.name || `Slot ${player.slot}`}</span>
+        <span className="text-base font-semibold">
+          {player.name || `Slot ${player.slot}`}
+          {isMine && <span className="ml-2 rounded bg-sage px-1.5 py-0.5 text-xs font-medium text-ink">ты</span>}
+        </span>
         <span className="text-xl font-bold tabular-nums">{player.score}</span>
       </div>
       <Rack slot={player.slot} tiles={player.rack} />

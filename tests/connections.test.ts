@@ -16,7 +16,7 @@ describe('connections — seating', () => {
     const s = createSeats();
     const ws = fakeWs('a');
     const r = seat(s, 0, 'Alice', ws);
-    expect(r).toEqual({ ok: true });
+    expect(r).toEqual({ ok: true, replaced: null });
     expect(s[0]).toEqual({ ws, name: 'Alice' });
   });
 
@@ -27,11 +27,15 @@ describe('connections — seating', () => {
     expect(r).toEqual({ ok: false, reason: 'Slot taken' });
   });
 
-  it('rejects same name when current socket is still live', () => {
+  it('takes over a live socket of the same name (returns replaced and swaps the ws)', () => {
     const s = createSeats();
-    seat(s, 0, 'Alice', fakeWs('a'));
-    const r = seat(s, 0, 'Alice', fakeWs('a2'));
-    expect(r).toEqual({ ok: false, reason: 'Slot taken' });
+    const wsA = fakeWs('a');
+    const wsA2 = fakeWs('a2');
+    seat(s, 0, 'Alice', wsA);
+    const r = seat(s, 0, 'Alice', wsA2);
+    expect(r).toEqual({ ok: true, replaced: wsA });
+    expect(s[0]!.ws).toBe(wsA2);
+    expect(s[0]!.name).toBe('Alice');
   });
 
   it('allows reconnect by same name when previous socket is gone', () => {
@@ -41,7 +45,7 @@ describe('connections — seating', () => {
     unseat(s, wsA);
     expect(s[0]).toEqual({ ws: null, name: 'Alice' });
     const r = seat(s, 0, 'Alice', fakeWs('a2'));
-    expect(r).toEqual({ ok: true });
+    expect(r).toEqual({ ok: true, replaced: null });
     expect(s[0]!.name).toBe('Alice');
   });
 

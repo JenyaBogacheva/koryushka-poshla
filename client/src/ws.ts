@@ -1,13 +1,14 @@
-import type { ClientMessage, ServerMessage } from '@shared/types';
+import type { ClientMessage, ServerMessage, Slot } from '@shared/types';
 import { useGameStore } from './store.js';
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
+const WARNING_TIMEOUT_MS = 5000;
 
 let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let warningTimer: ReturnType<typeof setTimeout> | null = null;
 let socket: WebSocket | null = null;
-let intentionalClose = false;
 
 function scheduleReconnect(): void {
   if (reconnectTimer !== null) return;
@@ -19,27 +20,39 @@ function scheduleReconnect(): void {
   }, delay);
 }
 
+function setTimedWarning(msg: string): void {
+  const store = useGameStore.getState();
+  store.setWarning(msg);
+  if (warningTimer !== null) clearTimeout(warningTimer);
+  warningTimer = setTimeout(() => {
+    useGameStore.getState().setWarning(null);
+    warningTimer = null;
+  }, WARNING_TIMEOUT_MS);
+}
+
 export function connect(): void {
-  const { mySlot, myName } = useGameStore.getState();
-  if (mySlot === null || myName === null) {
-    console.warn('[ws] connect called before identity was set');
-    return;
-  }
   if (socket !== null && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     return;
   }
-  intentionalClose = false;
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = `${proto}//${location.host}/ws?slot=${mySlot}&name=${encodeURIComponent(myName)}`;
+  // In dev, Vite serves on :5173 and proxies /ws to Express on :3000. The proxy is flaky
+  // (ECONNRESET on HMR cycles), so connect directly when we recognize the dev port.
+  const isDev = location.port === '5173';
+  const host = isDev ? `${location.hostname}:3000` : location.host;
+  const url = `${proto}//${host}/ws`;
   const ws = new WebSocket(url);
   socket = ws;
 
   ws.addEventListener('open', () => {
+    if (socket !== ws) return;
     reconnectAttempts = 0;
     useGameStore.getState().setConnected(true);
+    const { identity } = useGameStore.getState();
+    if (identity !== null) sendJoin(identity.slot, identity.name, identity.password);
   });
 
   ws.addEventListener('message', (e) => {
+    if (socket !== ws) return;
     let msg: ServerMessage;
     try {
       msg = JSON.parse(e.data) as ServerMessage;
@@ -49,12 +62,14 @@ export function connect(): void {
     }
     const store = useGameStore.getState();
     switch (msg.type) {
+      case 'lobby':
+        store.setLobby(msg.slots);
+        return;
       case 'state': {
         store.setState(msg.state);
-        // Drop any pending placements that reference tiles no longer in my rack.
         const after = useGameStore.getState();
-        if (after.mySlot !== null && after.pendingPlacements.length > 0) {
-          const myRackIds = new Set(msg.state.players[after.mySlot]!.rack.map((t) => t.id));
+        if (after.identity !== null && after.pendingPlacements.length > 0) {
+          const myRackIds = new Set(msg.state.players[after.identity.slot]!.rack.map((t) => t.id));
           const next = after.pendingPlacements.filter((p) => myRackIds.has(p.tileId));
           if (next.length !== after.pendingPlacements.length) {
             useGameStore.setState({ pendingPlacements: next });
@@ -64,23 +79,41 @@ export function connect(): void {
       }
       case 'moveAccepted':
         store.clearPending();
+        if (msg.dictionaryWarnings.length > 0) {
+          setTimedWarning('Не в словаре: ' + msg.dictionaryWarnings.join(', '));
+        } else if (warningTimer !== null) {
+          clearTimeout(warningTimer);
+          warningTimer = null;
+          store.setWarning(null);
+        }
         return;
       case 'moveRejected':
         store.setError(msg.reason);
         return;
       case 'error':
+        // Any error while still in the join phase (no game state yet) means the join was refused.
+        // Bounce back to the picker by clearing identity.
+        if (store.state === null) {
+          store.clearIdentity();
+        }
         store.setError(msg.message);
         return;
     }
   });
 
   ws.addEventListener('error', (e) => {
+    if (socket !== ws) return;
     console.warn('ws error:', e);
   });
-  ws.addEventListener('close', () => {
-    useGameStore.getState().setConnected(false);
-    if (intentionalClose) {
-      intentionalClose = false;
+  ws.addEventListener('close', (ev) => {
+    if (socket !== ws) return;   // a previous (replaced) socket closing — ignore.
+    socket = null;
+    const store = useGameStore.getState();
+    store.setConnected(false);
+    if (ev.reason === 'replaced by same-name client') {
+      // Another tab took over this slot. Don't reconnect — that would just bounce them right back.
+      store.clearIdentity();
+      store.setError('Слот занят в другой вкладке');
       return;
     }
     scheduleReconnect();
@@ -92,10 +125,14 @@ export function disconnect(): void {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
+  if (warningTimer !== null) {
+    clearTimeout(warningTimer);
+    warningTimer = null;
+  }
   if (socket !== null) {
-    intentionalClose = true;
-    socket.close();
-    socket = null;
+    const old = socket;
+    socket = null;          // detach first; the close listener on `old` checks `socket !== ws` and bails.
+    old.close();
   }
 }
 
@@ -104,3 +141,15 @@ export function send(msg: ClientMessage): void {
     socket.send(JSON.stringify(msg));
   }
 }
+
+export function sendJoin(slot: Slot, name: string, password: string): void {
+  send({ type: 'join', slot, name, password });
+}
+
+export function sendPass(): void { send({ type: 'pass' }); }
+export function sendRedraw(): void { send({ type: 'redraw' }); }
+export function sendClaimBlank(row: number, col: number, tileId: string): void {
+  send({ type: 'claimBlank', row, col, myTileId: tileId });
+}
+export function sendEndGame(): void { send({ type: 'endGame' }); }
+export function sendRevertLastTurn(): void { send({ type: 'revertLastTurn' }); }

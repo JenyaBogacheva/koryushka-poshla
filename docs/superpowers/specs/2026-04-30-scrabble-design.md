@@ -30,7 +30,7 @@ A real-time, online, three-player Russian Scrabble game ("Эрудит") for a f
 | **Word scoring** | Standard — every word formed by your move (the main word plus any perpendicular side words containing a new tile) is scored. |
 | **Rack visibility** | Each player can show or hide their rack to opponents. **Default: visible.** Toggleable any time. |
 | **All-vowel / all-consonant rack** | Free redraw — return all 7 tiles, draw 7 fresh ones, **does not consume the turn**. |
-| **Tile swap** | Standard swap (exchange tiles with the bag, ends turn) available. |
+| **Revert last turn** | The player who just submitted an action (place / pass / redraw / claimBlank) may revert it, restoring the pre-action state. The window closes the moment any other player submits any action. One level of undo only; not persisted across server restarts. |
 | **Blank-swap ("claim blank")** | When a blank tile is on the board representing letter X, any player who has a real X tile in their rack may, on their own turn (before submitting a move), claim the blank: the real X takes the cell, the blank moves to the player's rack. **First-come-first-served** — first valid claim wins. |
 | **Challenges** | None — there is no challenge mechanic. The dictionary advisory replaces it. |
 | **Time limits** | None. |
@@ -130,6 +130,8 @@ type Player = {
   rack: Tile[];                      // up to 7
   rackVisible: boolean;              // default true
   score: number;
+  redrawEligible: boolean;           // server-stamped: rack is all-vowel or all-consonant
+  canRevert: boolean;                // server-stamped: this player just acted, no one else has acted since
 };
 
 type Tile = { id: string; letter: Letter; points: number; isBlank: boolean };
@@ -170,8 +172,8 @@ All messages are JSON with a `type` field.
 |---|---|---|
 | `join` | `{ slot, name }` | Claim a slot on page load. |
 | `submitMove` | `{ placements: Placement[] }` | Place tiles (one or more disconnected groups) and end turn. |
-| `swapTiles` | `{ tileIds: string[] }` | Exchange tiles with the bag (ends turn). |
 | `claimBlank` | `{ row, col, myTileId }` | Swap a real letter onto the board for an existing blank. |
+| `revertLastTurn` | `{}` | Single-step undo for the action's author; valid until any other player acts. |
 | `pass` | `{}` | Skip turn. |
 | `redraw` | `{}` | Free redraw when rack is all-vowel or all-consonant; does not end turn. |
 | `toggleRackVisible` | `{ visible: boolean }` | Show/hide own rack. |
@@ -260,7 +262,8 @@ Three layers, in priority order:
 2. **M2 — Read-only client.** React app connects via WS and renders board / player cards / racks / scores. No interaction; server runs a scripted game and the client reflects it.
 3. **M3 — Place-and-submit.** Drag tiles onto the board, submit, see score update. Single-spot placement, no substitutions, no blanks.
 4. **M4 — All the rules.** Slot picker UI + name input + reconnect-by-name (§10), multi-spot placement, substitution picker, blank picker, blank-swap, swap-tiles, pass, all-vowel/all-consonant redraw, end-game button, rack visibility toggle, dictionary advisory display. (M3 stubs the join flow with `?slot=N&name=X` URL params and replies `not yet implemented` to non-`submitMove` actions; M4 fills both in.)
-5. **M5 — Polish.** Disconnect/pause overlay, history panel, dictionary advisory warnings, animations, deploy to Render.
+5. **M5 — Polish.** Disconnect/pause overlay, history panel, dictionary advisory warnings, animations, deploy to Render. Also includes the M5 additions (see `docs/superpowers/specs/2026-05-01-snapshots-assist-log-design.md`): live move log, finished-game snapshots + Past Games viewer, "мама помогла" assist credit.
+6. **M6 — Gamification.** Cross-game leaderboard (aggregated from archived snapshots) and badges/achievements (e.g., long-word, game wins, most-helped, most-helping, highest single-move, bingo). Brainstorm + spec deferred; depends on M5 archive format.
 
 Each milestone is end-to-end playable or testable before moving on.
 
