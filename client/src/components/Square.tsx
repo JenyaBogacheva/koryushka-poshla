@@ -38,13 +38,16 @@ export function Square({ row, col, cell, premium, size }: Props) {
   const mySlot = identity?.slot ?? null;
   const pendingHere = pending.find((p) => p.row === row && p.col === col) ?? null;
   const isMyTurn = state !== null && mySlot !== null && state.turnIndex === mySlot && state.phase === 'playing';
-  const canDrop = cell === null && pendingHere === null && isMyTurn;
+  const isClaimBlankTarget = cell !== null && cell.fromBlank && isMyTurn;
+  const canDrop = (cell === null && pendingHere === null && isMyTurn) || isClaimBlankTarget;
 
   const { setNodeRef, isOver } = useDroppable({ id: `sq-${row}-${col}`, disabled: !canDrop });
 
   const base = 'relative flex items-center justify-center border border-ink/10';
   const bg = cell ? 'bg-bg' : (premium ? PREMIUM_BG[premium] : 'bg-bg');
-  const overRing = isOver ? 'outline outline-2 outline-sage' : '';
+  const overRing = isOver
+    ? (isClaimBlankTarget ? 'outline outline-2 outline-emerald-500' : 'outline outline-2 outline-sage')
+    : '';
 
   let pendingTile: TileT | null = null;
   if (pendingHere !== null && state !== null && mySlot !== null) {

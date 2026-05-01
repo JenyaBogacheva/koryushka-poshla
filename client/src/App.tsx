@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import type { Letter, Slot, Tile as TileT } from '@shared/types';
 import { useGameStore } from './store.js';
-import { connect, disconnect, sendJoin } from './ws.js';
+import { connect, disconnect, sendJoin, sendClaimBlank } from './ws.js';
 import { Board } from './components/Board.js';
 import { PlayerCard } from './components/PlayerCard.js';
 import { ErrorBanner } from './components/ErrorBanner.js';
@@ -57,6 +57,16 @@ export function App() {
     const col = Number(m[2]);
     const tile = findRackTile(tileId);
     if (tile === null) return;
+
+    // Claim-blank: dropped onto a square already occupied by a blank tile.
+    const cell = state?.board[row]?.[col] ?? null;
+    if (cell !== null) {
+      const myTurn = identity !== null && state?.turnIndex === identity.slot;
+      if (myTurn && cell.fromBlank && !tile.isBlank && tile.letter === cell.playedAs) {
+        sendClaimBlank(row, col, tile.id);
+      }
+      return;
+    }
 
     // Moving an already-placed pending tile — keep the chosen playedAs (no blank re-prompt).
     const existing = pendingPlacements.find((p) => p.tileId === tileId);
