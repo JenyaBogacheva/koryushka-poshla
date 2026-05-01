@@ -27,6 +27,9 @@ Family-style three-player Russian Scrabble (Эрудит) for browser play. Serv
   - `dictionary.ts` — advisory word check (stub in M1)
   - `game.ts` — `Game` class composing all of the above
   - `persistence.ts` — JSON save/load active game, archive finished
+- `client/` — Vite + React 19 + Tailwind 4 read-only renderer
+  - `src/components/` — Board, Square, Tile, Rack, PlayerCard
+  - `src/store.ts`, `src/ws.ts` — Zustand store + WebSocket client
 - `tests/` — Vitest unit tests, one file per server module
 - `scripts/demo-game.ts` — programmatic full-game smoke test
 - `data/` — Runtime persistence target (gitignored): `data/game.json` + `data/history/`
@@ -44,9 +47,12 @@ Family-style three-player Russian Scrabble (Эрудит) for browser play. Serv
 ```bash
 nvm use            # node 20 per .nvmrc
 npm install
-npm test           # vitest run (96 tests as of M1)
-npm run typecheck  # tsc --noEmit
-npm run demo       # tsx scripts/demo-game.ts — full game end-to-end
+npm run dev        # vite (:5173) + express+ws (:3000) — open http://localhost:5173
+npm run build      # produce client/dist/
+npm start          # production: single Express process on :3000 serves client + /ws
+npm test           # vitest run
+npm run typecheck  # root + client
+npm run demo       # tsx scripts/demo-game.ts — full game end-to-end (no UI)
 ```
 
 Before committing, always run: `npm run typecheck && npm test`.
