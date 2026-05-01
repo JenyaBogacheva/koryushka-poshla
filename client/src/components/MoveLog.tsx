@@ -39,6 +39,11 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
         <span>
           <strong>{nameOf(e.slot)}</strong> • {words || '—'} — <span className="tabular-nums">{e.totalScore}</span>
           {e.bingoBonus && <span className="ml-1 rounded bg-sage px-1 text-xs">+10 бинго</span>}
+          {e.dictionaryWarnings.length > 0 && (
+            <span className="ml-2 text-xs text-amber-700/80">
+              (не в словаре: {e.dictionaryWarnings.join(', ')})
+            </span>
+          )}
         </span>
       );
     }
