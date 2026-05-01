@@ -1,13 +1,12 @@
-import type { GameState } from '@shared/types';
+import type { ClientMessage, ServerMessage } from '@shared/types';
 import { useGameStore } from './store.js';
-
-type ServerMessage = { type: 'state'; state: GameState };
 
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30_000;
 
 let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let socket: WebSocket | null = null;
 
 function scheduleReconnect(): void {
   if (reconnectTimer !== null) return;
@@ -20,8 +19,15 @@ function scheduleReconnect(): void {
 }
 
 export function connect(): void {
-  const url = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`;
+  const { mySlot, myName } = useGameStore.getState();
+  if (mySlot === null || myName === null) {
+    console.warn('[ws] connect called before identity was set');
+    return;
+  }
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${proto}//${location.host}/ws?slot=${mySlot}&name=${encodeURIComponent(myName)}`;
   const ws = new WebSocket(url);
+  socket = ws;
 
   ws.addEventListener('open', () => {
     reconnectAttempts = 0;
@@ -36,15 +42,32 @@ export function connect(): void {
       console.warn('non-JSON ws message:', e.data);
       return;
     }
-    if (msg.type === 'state') {
-      useGameStore.getState().setState(msg.state);
-    } else {
-      console.warn('unknown ws message type:', (msg as { type: unknown }).type);
+    const store = useGameStore.getState();
+    switch (msg.type) {
+      case 'state': {
+        store.setState(msg.state);
+        // Drop any pending placements that reference tiles no longer in my rack.
+        const after = useGameStore.getState();
+        if (after.mySlot !== null) {
+          const myRackIds = new Set(after.state!.players[after.mySlot]!.rack.map((t) => t.id));
+          for (const p of after.pendingPlacements) {
+            if (!myRackIds.has(p.tileId)) after.removePending(p.tileId);
+          }
+        }
+        return;
+      }
+      case 'moveAccepted':
+        store.clearPending();
+        return;
+      case 'moveRejected':
+        store.setError(msg.reason);
+        return;
+      case 'error':
+        store.setError(msg.message);
+        return;
     }
   });
 
-  // 'close' always fires after a connection ends, including after 'error'. Listening to
-  // both would schedule two reconnects per socket. Log errors for visibility, reconnect on close.
   ws.addEventListener('error', (e) => {
     console.warn('ws error:', e);
   });
@@ -52,4 +75,10 @@ export function connect(): void {
     useGameStore.getState().setConnected(false);
     scheduleReconnect();
   });
+}
+
+export function send(msg: ClientMessage): void {
+  if (socket !== null && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(msg));
+  }
 }
