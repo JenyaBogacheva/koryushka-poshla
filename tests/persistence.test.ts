@@ -1,10 +1,11 @@
 // tests/persistence.test.ts
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { saveActiveGame, loadActiveGame, archiveFinishedGame, listGameSummaries } from '../server/persistence';
-import type { GameState } from '@shared/types';
+import { saveActiveGame, loadActiveGame, archiveFinishedGame, listGameSummaries, loadArchive } from '../server/persistence';
+import type { GameState, GameArchive } from '@shared/types';
+import { createEmptyBoard } from '../server/board.js';
 
 let dataDir: string;
 
@@ -51,11 +52,14 @@ describe('persistence', () => {
     s.players[1].score = 50;
     s.players[2].score = 75;
     saveActiveGame(dataDir, s);
-    const summary = archiveFinishedGame(dataDir);
-    expect(summary.players[0]!.finalScore).toBe(100);
-    expect(summary.winnerSlot).toBe(0);
+    const archive = archiveFinishedGame(dataDir);
+    expect(archive.players[0]!.finalScore).toBe(100);
+    expect(archive.winnerSlot).toBe(0);
     expect(loadActiveGame(dataDir)).toBeNull();
     expect(existsSync(path.join(dataDir, 'history'))).toBe(true);
+    // New flat shape: finalBoard and events must be present
+    expect(Array.isArray(archive.finalBoard)).toBe(true);
+    expect(Array.isArray(archive.events)).toBe(true);
   });
 
   it('saveActiveGame leaves no .tmp on success', () => {
@@ -83,6 +87,73 @@ describe('persistence', () => {
     const list = listGameSummaries(dataDir);
     expect(list.length).toBe(2);
     expect(list[0]!.finishedAt).toBeGreaterThanOrEqual(list[1]!.finishedAt);
+  });
+
+  it('loadActiveGame accepts legacy "history" field and migrates to events on next save', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'scrabble-legacy-'));
+    const legacy = {
+      phase: 'playing',
+      players: [0, 1, 2].map((slot) => ({
+        slot,
+        name: `Player${slot}`,
+        connected: true,
+        rack: [],
+        rackVisible: true,
+        score: 0,
+        redrawEligible: false,
+        canRevert: false,
+      })),
+      turnIndex: 0,
+      board: createEmptyBoard(),
+      bag: [],
+      centerBonusUsed: false,
+      history: [],         // legacy field
+      startedAt: 1,
+    };
+    writeFileSync(path.join(dir, 'game.json'), JSON.stringify(legacy), 'utf-8');
+    const loaded = loadActiveGame(dir);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.events).toEqual([]);
+    expect((loaded as unknown as { history?: unknown }).history).toBeUndefined();
+  });
+
+  it('archiveFinishedGame writes a flat GameArchive with finalBoard and events; loadArchive round-trips', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'scrabble-archive-'));
+    const s = { ...sampleState(), phase: 'finished' as const };
+    s.events = [{ kind: 'pass', slot: 0 as 0 | 1 | 2, timestamp: 1 }];
+    saveActiveGame(dir, s);
+    const archive = archiveFinishedGame(dir);
+    expect(archive.events.length).toBeGreaterThan(0);
+    expect(archive.finalBoard.length).toBe(15);
+    // Round-trip:
+    const loaded = loadArchive(dir, archive.id);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.id).toBe(archive.id);
+    expect(loaded!.events.length).toBe(archive.events.length);
+  });
+
+  it('listGameSummaries returns just the summary slice from a flat GameArchive on disk', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'scrabble-summaries-'));
+    const histDir = path.join(dir, 'history');
+    mkdirSync(histDir, { recursive: true });
+    const archive: GameArchive = {
+      id: 'g-1', startedAt: 1, finishedAt: 2,
+      players: [
+        { slot: 0, name: 'A', finalScore: 10 },
+        { slot: 1, name: 'B', finalScore: 7 },
+        { slot: 2, name: 'C', finalScore: 3 },
+      ],
+      winnerSlot: 0,
+      finalBoard: createEmptyBoard(),
+      events: [],
+    };
+    writeFileSync(path.join(histDir, 'g-1.json'), JSON.stringify(archive), 'utf-8');
+    const list = listGameSummaries(dir);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toEqual({
+      id: 'g-1', startedAt: 1, finishedAt: 2,
+      players: archive.players, winnerSlot: 0,
+    });
   });
 });
 
