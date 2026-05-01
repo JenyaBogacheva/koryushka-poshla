@@ -161,6 +161,26 @@ describe('Game — redrawRack', () => {
     expect(after.turnIndex).toBe(before.turnIndex); // turn NOT advanced
     expect(after.players[0]!.rack.length).toBe(7);
   });
+
+  it('redrawRack appends a RedrawRecord with reason and tileCount', () => {
+    const g = makeReadyGame(11);
+    const s = g.snapshot();
+    s.players[0]!.rack = s.players[0]!.rack.map((t, i) =>
+      ({ ...t, letter: ['А','Е','И','О','У','Ы','Э'][i % 7]!, points: 1, isBlank: false }),
+    );
+    const g2 = Game.fromState(s);
+    const before = g2.snapshot();
+    const tileCount = before.players[0]!.rack.length;
+    g2.redrawRack(0);
+    const events = g2.snapshot().events;
+    const last = events[events.length - 1]!;
+    expect(last.kind).toBe('redraw');
+    if (last.kind === 'redraw') {
+      expect(last.slot).toBe(0);
+      expect(last.reason).toBe('allVowels');
+      expect(last.tileCount).toBe(tileCount);
+    }
+  });
 });
 
 describe('Game — claimBlank', () => {

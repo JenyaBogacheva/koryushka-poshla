@@ -1,6 +1,6 @@
 import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed } from '@shared/types';
 import { createBag, drawTiles, returnTiles, makeRng, bagFromTiles, type Bag } from './bag.js';
-import { addTilesToRack, removeTilesFromRack, redrawEligible } from './rack.js';
+import { addTilesToRack, removeTilesFromRack, redrawEligible, isAllVowels } from './rack.js';
 import { createEmptyBoard, applyPlacements, isEmpty, extractWordsFormed } from './board.js';
 import { validateMove, type MoveError } from './moves.js';
 import { scoreMove } from './scoring.js';
@@ -146,6 +146,9 @@ export class Game {
     if (!redrawEligible(player.rack)) {
       throw new Error('Rack is not eligible for free redraw (must be all vowels or all consonants)');
     }
+    const reason: 'allVowels' | 'allConsonants' =
+      isAllVowels(player.rack) ? 'allVowels' : 'allConsonants';
+    const tileCount = player.rack.length;
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
     const allIds = player.rack.map((t) => t.id);
@@ -155,6 +158,7 @@ export class Game {
     addTilesToRack(player.rack, drawn);
     this.state.bag = this.bag.tiles;
     // turn not advanced
+    this.state.events.push({ kind: 'redraw', slot, reason, tileCount, timestamp: Date.now() });
     this.armRevert(slot, pre);
   }
 
