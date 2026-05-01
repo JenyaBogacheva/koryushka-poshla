@@ -47,7 +47,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   }
 
   return (
-    <div className={`relative rounded-md ${bg} p-3 shadow-sm`}>
+    <div className={`relative rounded-md ${bg} p-3 shadow-sm ${player.connected ? '' : 'opacity-70'}`}>
       {pop !== null && (
         <span key={pop.key} className="score-pop right-2 top-2">+{pop.delta}</span>
       )}
@@ -55,6 +55,11 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
         <span className="text-base font-semibold">
           {player.name || `Слот ${player.slot}`}
           {isMine && <span className="ml-2 rounded bg-sage px-1.5 py-0.5 text-xs font-medium text-ink">ты</span>}
+          {!player.connected && (
+            <span className="ml-2 inline-flex items-center gap-1 text-xs text-ink/50">
+              <span className="h-2 w-2 rounded-full bg-ink/40" />не в сети
+            </span>
+          )}
         </span>
         <span className="text-xl font-bold tabular-nums">{player.score}</span>
       </div>
