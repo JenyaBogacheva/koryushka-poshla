@@ -28,7 +28,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   }
 
   return (
-    <div className={`rounded-md ${bg} p-3 shadow-sm ${isMine ? 'ring-2 ring-sage' : ''}`}>
+    <div className={`rounded-md ${bg} p-3 shadow-sm`}>
       <div className="mb-2 flex items-baseline justify-between">
         <span className="text-base font-semibold">
           {player.name || `Slot ${player.slot}`}
