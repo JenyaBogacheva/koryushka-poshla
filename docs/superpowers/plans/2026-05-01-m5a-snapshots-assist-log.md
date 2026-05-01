@@ -8,7 +8,9 @@
 
 **Tech Stack:** TypeScript strict, Node 20, Vitest, Express + ws, React 19, Zustand, Tailwind 4, Vite. No new runtime deps.
 
-**Spec:** `docs/superpowers/specs/2026-05-01-snapshots-assist-log-design.md`.
+**Spec:** `docs/superpowers/specs/2026-05-01-m5a-snapshots-assist-log-design.md`.
+
+> **NOTE — plan refresh pending.** The spec was amended after this plan was first written: the event union now includes `PassRecord`, `RedrawRecord`, `ClaimBlankRecord`, `EndGameRecord`, and `RevertRecord` (not just `MoveRecord | AssistRecord`); the helper picker is pinned to the submit confirm modal; the `<MoveLog>` is pinned to the right rail under the player cards; revert reverses an attached assist's +5. Tasks below predate those changes and need to be re-derived. See `docs/superpowers/specs/2026-05-01-m5a-snapshots-assist-log-design.md` for the current source of truth.
 
 **Conventions reminder:**
 - `.js` extension on relative imports

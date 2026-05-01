@@ -19,7 +19,7 @@ Existing spec §13 line "Game replay (history shows summary list only)" is remov
 - No step-through replay (still out of scope).
 - No edit / fork / resume of past games.
 - No undo of moves or of assist credits.
-- No assist on swap/pass/redraw — only on `submitMove`.
+- No assist on pass / redraw / claimBlank / endGame / revert — only on `submitMove`.
 - No per-game cap on assists; family honor system.
 - No browser automation tests.
 
@@ -46,10 +46,56 @@ export type AssistRecord = {
   timestamp: number;
 };
 
-export type GameEvent = MoveRecord | AssistRecord;
+export type PassRecord = {
+  kind: 'pass';
+  slot: Slot;
+  timestamp: number;
+};
+
+export type RedrawRecord = {
+  kind: 'redraw';
+  slot: Slot;
+  reason: 'allVowels' | 'allConsonants';   // why the player was eligible
+  tileCount: number;                        // how many tiles were exchanged
+  timestamp: number;
+};
+
+export type ClaimBlankRecord = {
+  kind: 'claimBlank';
+  slot: Slot;
+  row: number;
+  col: number;
+  letterAs: string;
+  timestamp: number;
+};
+
+export type EndGameRecord = {
+  kind: 'endGame';
+  slot: Slot;            // who triggered, or the natural-end pseudo-slot
+  cause: 'playerEnded' | 'bagEmptyAndRackEmpty' | 'sixPasses';
+  timestamp: number;
+};
+
+export type RevertRecord = {
+  kind: 'revert';
+  slot: Slot;                      // the player who reverted their own action
+  revertedKind: GameEvent['kind']; // what was undone
+  timestamp: number;
+};
+
+export type GameEvent =
+  | MoveRecord
+  | AssistRecord
+  | PassRecord
+  | RedrawRecord
+  | ClaimBlankRecord
+  | EndGameRecord
+  | RevertRecord;
 
 // GameState.history: MoveRecord[]   →   GameState.events: GameEvent[]
 ```
+
+**Revert semantics in the log.** A revert appends a `RevertRecord` rather than removing the prior entry — the log is append-only. If the reverted move had an `AssistRecord` attached, the assist's points are reversed at the same time and a second `RevertRecord` (with `revertedKind: 'assist'`) is appended. Past Games archives therefore show the full sequence (move → assist → revert → revert), which matches what the players saw live.
 
 `submitMove` gains an optional `helperSlot`:
 
@@ -86,18 +132,32 @@ The lobby's `recentGames: GameSummary[]` stays a summary projection — the full
 **Properties:**
 - Assist points count toward winning.
 - Assist does not affect turn order, does not consume the helper's turn, does not on its own trigger end-of-game.
-- No undo. Misclicks are absorbed by the family.
+- Misclicks ride along with the move's revert window (M4b): if the submitter reverts the move, the helper's +5 is reversed too (see "Revert semantics in the log" in §3). Once the revert window closes, the assist is final — no separate undo.
 - End-of-game leftover-tile accounting is unaffected — assist points are just regular score.
 
 ## 5. Move log UI (live)
 
-New `<MoveLog>` component, rendered alongside the board (placement TBD by client layout).
+New `<MoveLog>` component, rendered in the right column **below the three player cards**, in the same rail. Fills available height; internal scroll; no overlap with the action bar / rack at the bottom.
 
-- Reads `state.events`. Newest at the bottom; auto-scroll.
-- Move entry: `Женя • КОТ, ОК — 9` (multi-word moves comma-separated; bingo gets a small `+10 бинго` chip).
-- Assist entry: indented under its move, muted: `↳ помогла мама — +5`.
+- Reads `state.events`. Newest at the bottom; auto-scroll on append.
+- Entry formats:
+  - Move: `Женя • КОТ, ОК — 9` (multi-word moves comma-separated; bingo gets a small `+10 бинго` chip).
+  - Assist: indented under its move, muted: `↳ помогла мама — +5`.
+  - Pass: `Женя • пас`.
+  - Redraw: `Женя • обмен (все гласные)` / `все согласные`, with a tile count where helpful.
+  - ClaimBlank: `Женя • ★→К на e7` (uses the existing star glyph + cell coord).
+  - EndGame: italicized terminal line — `Игра окончена (Женя завершил)` / `(закончились буквы)` / `(шесть пасов)`.
+  - Revert: indented under the reverted entry, muted, struck-through reference — `↳ отменено`.
 - No virtualization, no filtering, no per-entry interactions.
-- Swap/pass/redraw events do not appear in M5 (they're not yet in the event log type — when M4-style actions are added later, they extend `GameEvent`).
+
+## 5b. Helper picker UX
+
+The "мама помогла" selector lives **on the existing submit confirm modal**, not as a separate step.
+
+- The modal already opens on Submit and shows the words/score preview. Add a small block below it: label "Кто помог?" and three options — `никто` (default) plus the two other players' names. Single-select.
+- Selecting a helper is reflected in the same `sendSubmitMove(...)` call via the new optional `helperSlot` field. No second confirm.
+- If the move is rejected by the server, the picker selection is discarded along with the rest of the attempt.
+- Pass / redraw / claimBlank / endGame / revert do not show a helper picker — assist is move-only (§2 non-goal).
 
 ## 6. Past Games viewer
 
@@ -127,7 +187,7 @@ Files are read fresh from disk per request. No caching layer.
 ## 8. Tests
 
 **Unit (Vitest):**
-- `tests/game.test.ts` — assist adds 5 to helper; helper validation (`helperSlot === submitter`, invalid slot); assist not applied if move is rejected; `AssistRecord.forMoveIndex` correctness; natural-end path triggers archive write.
+- `tests/game.test.ts` — assist adds 5 to helper; helper validation (`helperSlot === submitter`, invalid slot); assist not applied if move is rejected; `AssistRecord.forMoveIndex` correctness; natural-end path triggers archive write; every action method (`submitMove`, `passTurn`, `redrawRack`, `claimBlank`, `endGame`, `revertLastTurn`) appends exactly one record of the right `kind` to `events`; revert of a move that had an assist also appends a `revert` record for the assist and reverses the +5.
 - `tests/persistence.test.ts` — round-trip `GameArchive`; summary loader returns just the summary slice; `history`/`events` rename shim works.
 - `tests/moves.test.ts` (or new `tests/assist.test.ts`) — helper validation rules in isolation.
 
@@ -140,10 +200,11 @@ Files are read fresh from disk per request. No caching layer.
 
 ## 9. Order of work (for the plan)
 
-1. Types: rename `history` → `events`, add `kind` discriminant, add `AssistRecord`, add `helperSlot`, add `GameArchive`, extend `submitMove`.
-2. Server engine: validation + scoring path for assist; tests.
-3. Persistence: archive format upgrade, summary loader, archive loader, rename shim; tests.
-4. HTTP: `/api/history` and `/api/history/:id`.
-5. Client store: handle renamed `events`; thread `helperSlot` through `submitMove`.
-6. Client UI: helper picker on Submit; `<MoveLog>` panel; Past Games list + detail.
-7. Demo script: add an assisted move; manual UI pass.
+1. Types: rename `history` → `events`, add `kind` discriminant on `MoveRecord`, add `AssistRecord` + `PassRecord` + `RedrawRecord` + `ClaimBlankRecord` + `EndGameRecord` + `RevertRecord`, add `helperSlot`, add `GameArchive`, extend `submitMove`.
+2. Server engine — event emission: every existing action method (`submitMove`, `passTurn`, `redrawRack`, `claimBlank`, `endGame`, `revertLastTurn`) appends its corresponding record to `events`. Revert is append-only (does not pop prior entries) and reverses any attached assist points. Tests.
+3. Server engine — assist: validation + scoring path on `submitMove`; tests.
+4. Persistence: archive format upgrade, summary loader, archive loader, `history`→`events` rename shim; tests.
+5. HTTP: `/api/history` and `/api/history/:id`.
+6. Client store: handle renamed `events`; thread `helperSlot` through `submitMove`.
+7. Client UI: helper picker on submit confirm modal; `<MoveLog>` panel in the right rail under player cards; Past Games list + detail route.
+8. Demo script: add an assisted move and a revert; manual UI pass.
