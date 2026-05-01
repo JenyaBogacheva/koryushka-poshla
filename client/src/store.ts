@@ -9,7 +9,7 @@ const IDENTITY_KEY = 'scrabble.identity';
 function loadIdentity(): Identity | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(IDENTITY_KEY);
+    const raw = window.sessionStorage.getItem(IDENTITY_KEY);
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as { slot: number; name: string; password?: string };
     if (parsed.slot !== 0 && parsed.slot !== 1 && parsed.slot !== 2) return null;
@@ -56,13 +56,13 @@ export const useGameStore = create<Store>((set) => ({
   setIdentity: (slot, name, password) => {
     const identity: Identity = { slot, name, password };
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+      window.sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
     }
     set({ identity });
   },
   clearIdentity: () => {
     if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(IDENTITY_KEY);
+      window.sessionStorage.removeItem(IDENTITY_KEY);
     }
     set({ identity: null });
   },
