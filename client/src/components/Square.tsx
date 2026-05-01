@@ -35,6 +35,8 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
   const pending = useGameStore((s) => s.pendingPlacements);
   const removePending = useGameStore((s) => s.removePending);
   const togglePendingSubstitution = useGameStore((s) => s.togglePendingSubstitution);
+  const lastPlacedCells = useGameStore((s) => s.lastPlacedCells);
+  const lastPlacedAt = useGameStore((s) => s.lastPlacedAt);
 
   const mySlot = identity?.slot ?? null;
   const pendingHere = readOnly ? null : (pending.find((p) => p.row === row && p.col === col) ?? null);
@@ -43,6 +45,9 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
   const canDrop = !readOnly && ((cell === null && pendingHere === null && isMyTurn) || isClaimBlankTarget);
 
   const { setNodeRef, isOver } = useDroppable({ id: `sq-${row}-${col}`, disabled: !canDrop });
+
+  const isLastPlaced = cell !== null && Date.now() - lastPlacedAt < 1200 &&
+    lastPlacedCells.some((c) => c.row === row && c.col === col);
 
   const base = 'relative flex items-center justify-center border border-ink/10';
   const bg = cell ? 'bg-bg' : (premium ? PREMIUM_BG[premium] : 'bg-bg');
@@ -74,7 +79,9 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
       style={{ width: size, height: size }}
     >
       {cell ? (
-        <Tile cell={cell} size={size - 4} />
+        <div className={isLastPlaced ? 'tile-flash' : undefined}>
+          <Tile cell={cell} size={size - 4} />
+        </div>
       ) : pendingTile !== null && pendingHere !== null ? (
         <div
           onDoubleClick={() => removePending(pendingHere.tileId)}
