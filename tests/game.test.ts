@@ -235,3 +235,29 @@ describe('Game.fromState', () => {
     expect(restored.snapshot().phase).toBe('playing');
   });
 });
+
+describe('snapshot per-player flags', () => {
+  it('exposes redrawEligible=false and canRevert=false on a fresh game', () => {
+    const g = new Game({ seed: 1 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    const snap = g.snapshot();
+    for (const p of snap.players) {
+      expect(typeof p.redrawEligible).toBe('boolean');
+      expect(p.canRevert).toBe(false);
+    }
+  });
+
+  it('redrawEligible is true when the rack is all-vowel', () => {
+    const g = new Game({ seed: 1 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    const state = g.snapshot();
+    state.players[0]!.rack = state.players[0]!.rack.map((t, i) =>
+      ({ ...t, letter: ['А','Е','И','О','У','Ы','Э'][i % 7]!, points: 1, isBlank: false }),
+    );
+    const g2 = Game.fromState(state);
+    expect(g2.snapshot().players[0]!.redrawEligible).toBe(true);
+  });
+});
+

@@ -15,6 +15,9 @@ export type SubmitResult =
 export class Game {
   private state: GameState;
   private bag: Bag;
+  // Single-level undo. Captured pre-mutation by submitMove/passTurn/redrawRack/claimBlank.
+  // Cleared the moment a different slot acts. Not persisted to disk.
+  private lastSnapshot: { state: GameState; bySlot: Slot } | null = null;
 
   constructor(opts: GameOpts) {
     this.bag = createBag(makeRng(opts.seed));
@@ -25,6 +28,8 @@ export class Game {
       rack: [] as Tile[],
       rackVisible: true,
       score: 0,
+      redrawEligible: false,
+      canRevert: false,
     })) as [Player, Player, Player];
     this.state = {
       phase: 'waiting',
@@ -43,8 +48,10 @@ export class Game {
     const cloned = structuredClone(state);
     const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
     cloned.bag = bag.tiles;
-    (g as unknown as { bag: Bag; state: GameState }).bag = bag;
-    (g as unknown as { bag: Bag; state: GameState }).state = cloned;
+    type Mutable = { bag: Bag; state: GameState; lastSnapshot: null };
+    (g as unknown as Mutable).bag = bag;
+    (g as unknown as Mutable).state = cloned;
+    (g as unknown as Mutable).lastSnapshot = null;
     return g;
   }
 
@@ -110,7 +117,12 @@ export class Game {
   }
 
   snapshot(): GameState {
-    return structuredClone(this.state);
+    const cloned = structuredClone(this.state);
+    for (const p of cloned.players) {
+      p.redrawEligible = redrawEligible(p.rack);
+      p.canRevert = this.lastSnapshot !== null && this.lastSnapshot.bySlot === p.slot;
+    }
+    return cloned;
   }
 
   passTurn(slot: Slot): void {

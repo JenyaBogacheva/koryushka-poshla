@@ -50,6 +50,8 @@ export type Player = {
   rack: Tile[];
   rackVisible: boolean;
   score: number;
+  redrawEligible: boolean;  // computed from rack: all-vowel or all-consonant
+  canRevert: boolean;       // this player just acted and no one else has acted since
 };
 
 export type GamePhase = 'waiting' | 'playing' | 'finished';

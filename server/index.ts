@@ -71,6 +71,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         rack: [],
         rackVisible: true,
         score: 0,
+        redrawEligible: false,
+        canRevert: false,
       })) as unknown as GameState['players'],
       turnIndex: 0,
       board: createEmptyBoard(),

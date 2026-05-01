@@ -21,6 +21,8 @@ const sampleState = (): GameState => ({
     rack: [],
     rackVisible: true,
     score: 0,
+    redrawEligible: false,
+    canRevert: false,
   })) as unknown as GameState['players'],
   turnIndex: 0,
   board: Array.from({ length: 15 }, () => Array(15).fill(null)),
