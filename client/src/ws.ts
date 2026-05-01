@@ -160,6 +160,7 @@ export function sendClaimBlank(row: number, col: number, tileId: string): void {
 }
 export function sendEndGame(): void { send({ type: 'endGame' }); }
 export function sendRevertLastTurn(): void { send({ type: 'revertLastTurn' }); }
+export function sendNewGame(): void { send({ type: 'newGame' }); }
 export function sendSubmitMove(placements: Placement[], helperSlot: Slot | null): void {
   const msg: Extract<ClientMessage, { type: 'submitMove' }> =
     helperSlot === null
