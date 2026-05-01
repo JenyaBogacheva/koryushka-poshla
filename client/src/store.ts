@@ -1,34 +1,68 @@
 import { create } from 'zustand';
-import type { GameState, Slot } from '@shared/types';
+import type { GameState, Letter, LobbySlot, Slot } from '@shared/types';
 
-type Pending = { tileId: string; row: number; col: number };
+type Pending = { tileId: string; row: number; col: number; playedAs: Letter };
+
+const IDENTITY_KEY = 'scrabble.identity';
+
+function loadIdentity(): { slot: Slot; name: string } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(IDENTITY_KEY);
+    if (raw === null) return null;
+    const parsed = JSON.parse(raw) as { slot: number; name: string };
+    if (parsed.slot !== 0 && parsed.slot !== 1 && parsed.slot !== 2) return null;
+    if (typeof parsed.name !== 'string' || parsed.name.trim() === '') return null;
+    return { slot: parsed.slot as Slot, name: parsed.name };
+  } catch {
+    return null;
+  }
+}
 
 type Store = {
   state: GameState | null;
   connected: boolean;
-  mySlot: Slot | null;
-  myName: string | null;
+  lobby: LobbySlot[] | null;
+  identity: { slot: Slot; name: string } | null;
   pendingPlacements: Pending[];
   lastError: string | null;
+  warning: string | null;
   setState: (state: GameState) => void;
   setConnected: (connected: boolean) => void;
+  setLobby: (slots: LobbySlot[]) => void;
   setIdentity: (slot: Slot, name: string) => void;
+  clearIdentity: () => void;
   addPending: (p: Pending) => void;
   removePending: (tileId: string) => void;
+  togglePendingSubstitution: (tileId: string, real: Letter, sub: Letter) => void;
   clearPending: () => void;
   setError: (message: string | null) => void;
+  setWarning: (message: string | null) => void;
 };
 
 export const useGameStore = create<Store>((set) => ({
   state: null,
   connected: false,
-  mySlot: null,
-  myName: null,
+  lobby: null,
+  identity: loadIdentity(),
   pendingPlacements: [],
   lastError: null,
+  warning: null,
   setState: (state) => set({ state }),
   setConnected: (connected) => set({ connected }),
-  setIdentity: (mySlot, myName) => set({ mySlot, myName }),
+  setLobby: (slots) => set({ lobby: slots }),
+  setIdentity: (slot, name) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(IDENTITY_KEY, JSON.stringify({ slot, name }));
+    }
+    set({ identity: { slot, name } });
+  },
+  clearIdentity: () => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(IDENTITY_KEY);
+    }
+    set({ identity: null });
+  },
   addPending: (p) =>
     set((s) =>
       s.pendingPlacements.some((x) => x.tileId === p.tileId)
@@ -40,6 +74,13 @@ export const useGameStore = create<Store>((set) => ({
       pendingPlacements: s.pendingPlacements.filter((x) => x.tileId !== tileId),
       lastError: null,
     })),
+  togglePendingSubstitution: (tileId, real, sub) =>
+    set((s) => ({
+      pendingPlacements: s.pendingPlacements.map((p) =>
+        p.tileId === tileId ? { ...p, playedAs: p.playedAs === real ? sub : real } : p,
+      ),
+    })),
   clearPending: () => set({ pendingPlacements: [], lastError: null }),
   setError: (lastError) => set({ lastError }),
+  setWarning: (warning) => set({ warning }),
 }));

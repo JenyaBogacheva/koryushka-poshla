@@ -1,5 +1,5 @@
 import { useDraggable } from '@dnd-kit/core';
-import type { Cell, Tile as TileT } from '@shared/types';
+import type { Cell, Letter, Tile as TileT } from '@shared/types';
 
 type Props = {
   /** Cell-mode (board): pass a cell to render the tile as it sits on the board. */
@@ -12,21 +12,50 @@ type Props = {
   draggableId?: string;
   /** Render with a "pending placement" outline. */
   ghost?: boolean;
+  /** Optional substitution badge for pending placements (Ё/Ъ/Ш/Й). */
+  subBadge?: { display: Letter; onClick: () => void };
+  /** Override the displayed letter (used for pending placements where playedAs differs). */
+  displayOverride?: Letter;
 };
 
-export function Tile({ cell, tile, size = 36, draggableId, ghost = false }: Props) {
+type InnerProps = {
+  display: string;
+  points: number;
+  size: number;
+  ghost: boolean;
+  subBadge?: { display: Letter; onClick: () => void };
+};
+
+export function Tile({ cell, tile, size = 36, draggableId, ghost = false, subBadge, displayOverride }: Props) {
   const t = cell?.tile ?? tile;
   if (!t) return null;
-  const display = cell ? cell.playedAs : (t.isBlank ? '★' : t.letter);
+  const display = cell
+    ? cell.playedAs
+    : (displayOverride ?? (t.isBlank ? '★' : t.letter));
   const points = cell ? (cell.fromBlank ? 0 : t.points) : t.points;
 
   if (draggableId !== undefined) {
-    return <DraggableTile id={draggableId} display={display} points={points} size={size} ghost={ghost} />;
+    return <DraggableTile id={draggableId} display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} />;
   }
-  return <StaticTile display={display} points={points} size={size} ghost={ghost} />;
+  return <StaticTile display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} />;
 }
 
-function StaticTile({ display, points, size, ghost }: { display: string; points: number; size: number; ghost: boolean }) {
+function Badge({ subBadge }: { subBadge: NonNullable<InnerProps['subBadge']> }) {
+  return (
+    <button
+      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-terracotta text-[9px] font-bold text-white shadow"
+      onClick={(e) => {
+        e.stopPropagation();
+        subBadge.onClick();
+      }}
+      title="Сменить букву"
+    >
+      {subBadge.display}
+    </button>
+  );
+}
+
+function StaticTile({ display, points, size, ghost, subBadge }: InnerProps) {
   return (
     <div
       className={[
@@ -42,11 +71,12 @@ function StaticTile({ display, points, size, ghost }: { display: string; points:
       >
         {points}
       </span>
+      {subBadge && <Badge subBadge={subBadge} />}
     </div>
   );
 }
 
-function DraggableTile({ id, display, points, size, ghost }: { id: string; display: string; points: number; size: number; ghost: boolean }) {
+function DraggableTile({ id, display, points, size, ghost, subBadge }: InnerProps & { id: string }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
   const style: React.CSSProperties = {
     width: size,
@@ -75,6 +105,7 @@ function DraggableTile({ id, display, points, size, ghost }: { id: string; displ
       >
         {points}
       </span>
+      {subBadge && <Badge subBadge={subBadge} />}
     </div>
   );
 }

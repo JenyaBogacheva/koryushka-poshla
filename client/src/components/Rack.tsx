@@ -8,12 +8,12 @@ const TILE_SIZE = 32;
 type Props = { slot: Slot; tiles: TileT[] };
 
 export function Rack({ slot, tiles }: Props) {
-  const mySlot = useGameStore((s) => s.mySlot);
+  const identity = useGameStore((s) => s.identity);
   const turnIndex = useGameStore((s) => s.state?.turnIndex);
   const pending = useGameStore((s) => s.pendingPlacements);
 
   const pendingIds = new Set(pending.map((p) => p.tileId));
-  const isMine = mySlot === slot;
+  const isMine = identity?.slot === slot;
   const myTurn = turnIndex === slot;
   const canDrag = isMine && myTurn;
 
@@ -33,7 +33,7 @@ export function Rack({ slot, tiles }: Props) {
             <Tile
               tile={t}
               size={TILE_SIZE - 4}
-              draggableId={canDrag && !t.isBlank ? t.id : undefined}
+              draggableId={canDrag ? t.id : undefined}
             />
           ) : null}
         </div>

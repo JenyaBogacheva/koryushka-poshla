@@ -1,52 +1,75 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { DndContext, type DragEndEvent } from '@dnd-kit/core';
-import type { Slot } from '@shared/types';
+import type { Letter, Slot, Tile as TileT } from '@shared/types';
 import { useGameStore } from './store.js';
-import { connect, disconnect } from './ws.js';
+import { connect, disconnect, sendJoin } from './ws.js';
 import { Board } from './components/Board.js';
 import { PlayerCard } from './components/PlayerCard.js';
 import { ErrorBanner } from './components/ErrorBanner.js';
-import { MissingParams } from './MissingParams.js';
+import { SlotPicker } from './components/SlotPicker.js';
+import { LetterPicker } from './components/LetterPicker.js';
+import { CYRILLIC_LETTERS } from './letters.js';
 
-const VALID_SLOTS = new Set(['0', '1', '2']);
+type PendingDrop = { tile: TileT; row: number; col: number };
 
 export function App() {
+  const state = useGameStore((s) => s.state);
+  const lobby = useGameStore((s) => s.lobby);
+  const identity = useGameStore((s) => s.identity);
+  const connected = useGameStore((s) => s.connected);
   const setIdentity = useGameStore((s) => s.setIdentity);
   const addPending = useGameStore((s) => s.addPending);
-  const state = useGameStore((s) => s.state);
-  const connected = useGameStore((s) => s.connected);
-  const [bad, setBad] = useState(false);
-  const [ready, setReady] = useState(false);
+
+  const [pendingBlank, setPendingBlank] = useState<PendingDrop | null>(null);
+
+  useEffect(() => {
+    connect();
+    return () => disconnect();
+  }, []);
+
+  function handleJoin(slot: Slot, name: string) {
+    setIdentity(slot, name);
+    sendJoin(slot, name);
+  }
+
+  function findRackTile(tileId: string): TileT | null {
+    if (state === null || identity === null) return null;
+    const rack = state.players[identity.slot]?.rack ?? [];
+    return rack.find((t) => t.id === tileId) ?? null;
+  }
 
   function onDragEnd(ev: DragEndEvent) {
     if (ev.over === null) return;
     const tileId = String(ev.active.id);
     const m = /^sq-(\d+)-(\d+)$/.exec(String(ev.over.id));
     if (m === null) return;
-    addPending({ tileId, row: Number(m[1]), col: Number(m[2]) });
-  }
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const slotStr = params.get('slot');
-    const name = params.get('name')?.trim();
-    if (slotStr === null || !VALID_SLOTS.has(slotStr) || !name) {
-      setBad(true);
+    const row = Number(m[1]);
+    const col = Number(m[2]);
+    const tile = findRackTile(tileId);
+    if (tile === null) return;
+    if (tile.isBlank) {
+      setPendingBlank({ tile, row, col });
       return;
     }
-    const slot = Number(slotStr) as Slot;
-    setIdentity(slot, name);
-    connect();
-    setReady(true);
-    return () => {
-      disconnect();
-    };
-  }, [setIdentity]);
+    addPending({ tileId, row, col, playedAs: tile.letter });
+  }
 
-  if (bad) return <MissingParams />;
-  if (!ready) return null;
+  function commitBlank(letter: Letter) {
+    if (pendingBlank === null) return;
+    addPending({
+      tileId: pendingBlank.tile.id,
+      row: pendingBlank.row,
+      col: pendingBlank.col,
+      playedAs: letter,
+    });
+    setPendingBlank(null);
+  }
+
   if (!connected) return <Center>connecting…</Center>;
-  if (!state) return <Center>waiting for state…</Center>;
+  if (identity === null) {
+    return <SlotPicker lobby={lobby} onJoin={handleJoin} />;
+  }
+  if (state === null) return <Center>joining…</Center>;
 
   return (
     <DndContext onDragEnd={onDragEnd}>
@@ -64,6 +87,14 @@ export function App() {
           ))}
         </aside>
       </main>
+      {pendingBlank !== null && (
+        <LetterPicker
+          title="Выбери букву для бланка"
+          letters={CYRILLIC_LETTERS}
+          onPick={commitBlank}
+          onCancel={() => setPendingBlank(null)}
+        />
+      )}
     </DndContext>
   );
 }

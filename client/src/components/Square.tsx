@@ -2,6 +2,7 @@ import { useDroppable } from '@dnd-kit/core';
 import type { Cell, Premium, Tile as TileT } from '@shared/types';
 import { Tile } from './Tile.js';
 import { useGameStore } from '../store.js';
+import { SUBSTITUTIONS, canSubstitute } from '../letters.js';
 
 const PREMIUM_BG: Record<Exclude<Premium, null>, string> = {
   TW: 'bg-terracotta/70',
@@ -28,11 +29,13 @@ type Props = {
 };
 
 export function Square({ row, col, cell, premium, size }: Props) {
-  const mySlot = useGameStore((s) => s.mySlot);
+  const identity = useGameStore((s) => s.identity);
   const state = useGameStore((s) => s.state);
   const pending = useGameStore((s) => s.pendingPlacements);
   const removePending = useGameStore((s) => s.removePending);
+  const togglePendingSubstitution = useGameStore((s) => s.togglePendingSubstitution);
 
+  const mySlot = identity?.slot ?? null;
   const pendingHere = pending.find((p) => p.row === row && p.col === col) ?? null;
   const isMyTurn = state !== null && mySlot !== null && state.turnIndex === mySlot && state.phase === 'playing';
   const canDrop = cell === null && pendingHere === null && isMyTurn;
@@ -48,6 +51,18 @@ export function Square({ row, col, cell, premium, size }: Props) {
     pendingTile = state.players[mySlot]!.rack.find((t) => t.id === pendingHere.tileId) ?? null;
   }
 
+  const subBadge =
+    pendingTile !== null && pendingHere !== null && !pendingTile.isBlank && canSubstitute(pendingTile.letter)
+      ? {
+          display:
+            pendingHere.playedAs === pendingTile.letter
+              ? SUBSTITUTIONS[pendingTile.letter]!
+              : pendingTile.letter,
+          onClick: () =>
+            togglePendingSubstitution(pendingTile.id, pendingTile.letter, SUBSTITUTIONS[pendingTile.letter]!),
+        }
+      : undefined;
+
   return (
     <div
       ref={setNodeRef}
@@ -56,13 +71,19 @@ export function Square({ row, col, cell, premium, size }: Props) {
     >
       {cell ? (
         <Tile cell={cell} size={size - 4} />
-      ) : pendingTile !== null ? (
+      ) : pendingTile !== null && pendingHere !== null ? (
         <button
-          onClick={() => pendingHere && removePending(pendingHere.tileId)}
+          onClick={() => removePending(pendingHere.tileId)}
           className="contents"
           aria-label="Recall tile"
         >
-          <Tile tile={pendingTile} size={size - 4} ghost />
+          <Tile
+            tile={pendingTile}
+            size={size - 4}
+            ghost
+            displayOverride={pendingHere.playedAs}
+            subBadge={subBadge}
+          />
         </button>
       ) : premium ? (
         <span className="text-[10px] font-medium text-ink/60">{PREMIUM_LABEL[premium]}</span>
