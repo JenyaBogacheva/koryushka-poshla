@@ -28,7 +28,7 @@ const sampleState = (): GameState => ({
   board: Array.from({ length: 15 }, () => Array(15).fill(null)),
   bag: [],
   centerBonusUsed: false,
-  history: [],
+  events: [],
   startedAt: 1_700_000_000_000,
 });
 

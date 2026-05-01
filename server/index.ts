@@ -78,7 +78,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       board: createEmptyBoard(),
       bag: [],
       centerBonusUsed: false,
-      history: [],
+      events: [],
       startedAt: null,
     };
   }

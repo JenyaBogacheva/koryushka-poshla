@@ -4,11 +4,11 @@ import { buildScriptedGame, runScriptedGame } from '../server/scripted-game.js';
 let lastTurn = -1;
 
 function printSnapshot(state: GameState): void {
-  const turn = state.history.length;
+  const turn = state.events.length;
   if (turn !== lastTurn) {
     lastTurn = turn;
-    const last = state.history[turn - 1];
-    if (last) {
+    const last = state.events[turn - 1];
+    if (last && last.kind === 'move') {
       const player = state.players[last.slot]!;
       const placement = last.placements[0]!;
       console.log(

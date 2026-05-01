@@ -38,7 +38,7 @@ export class Game {
       board: createEmptyBoard(),
       bag: this.bag.tiles,
       centerBonusUsed: false,
-      history: [],
+      events: [],
       startedAt: null,
     };
   }
@@ -103,6 +103,7 @@ export class Game {
     this.state.bag = this.bag.tiles;
 
     const moveRecord: MoveRecord = {
+      kind: 'move',
       slot,
       placements,
       wordsFormed: score.perWord.map<WordFormed>((w) => ({
@@ -110,9 +111,10 @@ export class Game {
       })),
       totalScore: score.totalScore,
       bingoBonus: score.bingoBonus,
+      helperSlot: null,            // assist wired in Task 8
       timestamp: Date.now(),
     };
-    this.state.history.push(moveRecord);
+    this.state.events.push(moveRecord);
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
 
     const dictionaryWarnings = checkWords(words.map((w) => w.word));

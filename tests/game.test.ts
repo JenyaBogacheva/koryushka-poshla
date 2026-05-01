@@ -18,7 +18,7 @@ describe('Game — init', () => {
     expect(s.bag.length).toBe(104);
     expect(s.turnIndex).toBe(0);
     expect(s.centerBonusUsed).toBe(false);
-    expect(s.history).toEqual([]);
+    expect(s.events).toEqual([]);
   });
 
   it('joinPlayer assigns name and marks connected', () => {
@@ -92,7 +92,7 @@ describe('Game — submitMove', () => {
     const after = g.snapshot();
     if (result.ok) {
       expect(after.players[0]!.score).toBe(result.moveRecord.totalScore);
-      expect(after.history.length).toBe(1);
+      expect(after.events.length).toBe(1);
     }
     expect(after.turnIndex).toBe(1);
     expect(after.players[0]!.rack.length).toBe(7); // refilled
