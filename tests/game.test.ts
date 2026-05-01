@@ -214,6 +214,30 @@ describe('Game — claimBlank', () => {
     const g = makeReadyGame(1);
     expect(() => g.claimBlank(0, 7, 7, 'irrelevant')).toThrow();
   });
+
+  it('claimBlank appends a ClaimBlankRecord', () => {
+    // Build a state where slot 0's rack has a real 'А' and the board cell [7][7] holds a blank played as 'А'.
+    const g = makeReadyGame(1);
+    const s = g.snapshot();
+    const blankTile: import('@shared/types').Tile = { id: 't-blank-test', letter: '', points: 0, isBlank: true };
+    const realA: import('@shared/types').Tile = { id: 't-realA-test', letter: 'А', points: 1, isBlank: false };
+    // Replace slot 0 rack with just the real А (plus filler to keep length reasonable).
+    s.players[0]!.rack = [realA];
+    // Place blank on board.
+    s.board[7]![7] = { tile: blankTile, playedAs: 'А', fromBlank: true };
+    s.turnIndex = 0;
+    const g2 = Game.fromState(s);
+    g2.claimBlank(0, 7, 7, realA.id);
+    const events = g2.snapshot().events;
+    const last = events[events.length - 1]!;
+    expect(last.kind).toBe('claimBlank');
+    if (last.kind === 'claimBlank') {
+      expect(last.slot).toBe(0);
+      expect(last.row).toBe(7);
+      expect(last.col).toBe(7);
+      expect(last.letterAs).toBe('А');
+    }
+  });
 });
 
 describe('Game — endGame', () => {

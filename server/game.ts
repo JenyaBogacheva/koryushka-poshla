@@ -189,6 +189,14 @@ export class Game {
       playedAs: cell.playedAs,
       fromBlank: false,
     };
+    this.state.events.push({
+      kind: 'claimBlank',
+      slot,
+      row,
+      col,
+      letterAs: cell.playedAs,
+      timestamp: Date.now(),
+    });
     this.armRevert(slot, pre);
   }
 
