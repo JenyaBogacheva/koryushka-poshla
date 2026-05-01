@@ -10,6 +10,7 @@ import { SlotPicker } from './components/SlotPicker.js';
 import { LetterPicker } from './components/LetterPicker.js';
 import { WaitingRoom } from './components/WaitingRoom.js';
 import { ActionBar } from './components/ActionBar.js';
+import { MoveLog } from './components/MoveLog.js';
 import { CYRILLIC_LETTERS } from './letters.js';
 
 type PendingDrop = { tile: TileT; row: number; col: number };
@@ -109,7 +110,7 @@ export function App() {
           <Board board={state.board} />
           <ErrorBanner />
         </div>
-        <aside className="flex w-72 flex-col gap-3">
+        <aside className="flex h-full w-72 flex-col gap-3">
           <header className="text-sm uppercase tracking-wide text-ink/60">
             {state.phase === 'finished' ? 'Game over' : `${state.players[state.turnIndex]?.name ?? '—'}'s turn`}
           </header>
@@ -117,6 +118,7 @@ export function App() {
             <PlayerCard key={p.slot} player={p} isCurrentTurn={p.slot === state.turnIndex && state.phase === 'playing'} />
           ))}
           <ActionBar />
+          <MoveLog state={state} />
         </aside>
       </main>
       {pendingBlank !== null && (
