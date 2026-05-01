@@ -16,6 +16,7 @@ import { CYRILLIC_LETTERS } from './letters.js';
 import { PastGamesList } from './components/PastGamesList.js';
 import { PastGamesDetail } from './components/PastGamesDetail.js';
 import { FinishedScreen } from './components/FinishedScreen.js';
+import { DrawForOrderScreen } from './components/DrawForOrderScreen.js';
 
 type PendingDrop = { tile: TileT; row: number; col: number };
 
@@ -160,6 +161,7 @@ export function App() {
           <MoveLog state={state} />
         </aside>
         {state.phase === 'finished' && <FinishedScreen state={state} />}
+        {state.phase === 'drawing' && <DrawForOrderScreen state={state} mySlot={identity.slot} />}
       </main>
       {pendingBlank !== null && (
         <LetterPicker
