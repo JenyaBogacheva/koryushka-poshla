@@ -35,7 +35,11 @@ export function connect(): void {
     return;
   }
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = `${proto}//${location.host}/ws`;
+  // In dev, Vite serves on :5173 and proxies /ws to Express on :3000. The proxy is flaky
+  // (ECONNRESET on HMR cycles), so connect directly when we recognize the dev port.
+  const isDev = location.port === '5173';
+  const host = isDev ? `${location.hostname}:3000` : location.host;
+  const url = `${proto}//${host}/ws`;
   const ws = new WebSocket(url);
   socket = ws;
 
@@ -87,7 +91,9 @@ export function connect(): void {
         store.setError(msg.reason);
         return;
       case 'error':
-        if (msg.message === 'Slot taken' || msg.message === 'Wrong password' || msg.message === 'Wrong name for this slot') {
+        // Any error while still in the join phase (no game state yet) means the join was refused.
+        // Bounce back to the picker by clearing identity.
+        if (store.state === null) {
           store.clearIdentity();
         }
         store.setError(msg.message);
