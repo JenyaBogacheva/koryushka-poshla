@@ -80,7 +80,6 @@ export type LobbySlot = { slot: Slot; name: string; connected: boolean };
 export type ClientMessage =
   | { type: 'join'; slot: Slot; name: string; password: string }
   | { type: 'submitMove'; placements: Placement[] }
-  | { type: 'swapTiles'; tileIds: string[] }
   | { type: 'claimBlank'; row: number; col: number; myTileId: string }
   | { type: 'pass' }
   | { type: 'redraw' }

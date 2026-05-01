@@ -150,7 +150,6 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'submitMove':
           handleSubmitMove(slot, msg, ws);
           return;
-        case 'swapTiles':
         case 'claimBlank':
         case 'pass':
         case 'redraw':

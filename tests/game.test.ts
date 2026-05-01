@@ -122,32 +122,6 @@ describe('Game — passTurn', () => {
   });
 });
 
-describe('Game — swapTiles', () => {
-  it('exchanges tiles and ends turn', () => {
-    const g = makeReadyGame(1);
-    const before = g.snapshot();
-    const ids = before.players[0]!.rack.slice(0, 3).map((t) => t.id);
-    g.swapTiles(0, ids);
-    const after = g.snapshot();
-    expect(after.players[0]!.rack.length).toBe(7);
-    expect(after.turnIndex).toBe(1);
-    // The exchanged tile ids should no longer be in the rack
-    const remaining = new Set(after.players[0]!.rack.map((t) => t.id));
-    for (const id of ids) expect(remaining.has(id)).toBe(false);
-  });
-
-  it('rejects duplicate tile ids without mutating the rack', () => {
-    const g = makeReadyGame(1);
-    const before = g.snapshot();
-    const dupId = before.players[0]!.rack[0]!.id;
-    expect(() => g.swapTiles(0, [dupId, dupId])).toThrow();
-    const after = g.snapshot();
-    expect(after.players[0]!.rack.length).toBe(7);
-    expect(after.players[0]!.rack.map((t) => t.id)).toContain(dupId);
-    expect(after.turnIndex).toBe(before.turnIndex);
-  });
-});
-
 describe('Game — redrawRack', () => {
   it('only succeeds when rack is all-vowels or all-consonants', () => {
     const g = makeReadyGame(1);

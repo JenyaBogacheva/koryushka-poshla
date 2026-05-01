@@ -118,20 +118,6 @@ export class Game {
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
   }
 
-  swapTiles(slot: Slot, tileIds: string[]): void {
-    this.assertTurn(slot);
-    if (new Set(tileIds).size !== tileIds.length) {
-      throw new Error('Duplicate tile id in swap request');
-    }
-    const player = this.state.players[slot]!;
-    const removed = removeTilesFromRack(player.rack, tileIds);
-    returnTiles(this.bag, removed);
-    const drawn = drawTiles(this.bag, removed.length);
-    addTilesToRack(player.rack, drawn);
-    this.state.bag = this.bag.tiles;
-    this.state.turnIndex = ((slot + 1) % 3) as Slot;
-  }
-
   redrawRack(slot: Slot): void {
     this.assertTurn(slot);
     const player = this.state.players[slot]!;
