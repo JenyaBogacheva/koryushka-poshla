@@ -11,6 +11,7 @@ import { LetterPicker } from './components/LetterPicker.js';
 import { WaitingRoom } from './components/WaitingRoom.js';
 import { ActionBar } from './components/ActionBar.js';
 import { MoveLog } from './components/MoveLog.js';
+import { BagIndicator } from './components/BagIndicator.js';
 import { CYRILLIC_LETTERS } from './letters.js';
 
 type PendingDrop = { tile: TileT; row: number; col: number };
@@ -114,6 +115,7 @@ export function App() {
           <header className="text-sm uppercase tracking-wide text-ink/60">
             {state.phase === 'finished' ? 'Game over' : `${state.players[state.turnIndex]?.name ?? '—'}'s turn`}
           </header>
+          <BagIndicator count={state.bag.length} />
           {state.players.map((p) => (
             <PlayerCard key={p.slot} player={p} isCurrentTurn={p.slot === state.turnIndex && state.phase === 'playing'} />
           ))}
