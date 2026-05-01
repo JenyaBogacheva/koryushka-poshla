@@ -124,7 +124,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       sendMsg(ws, { type: 'error', message: 'Game not started' });
       return;
     }
-    const result = game.submitMove(slot, msg.placements);
+    const result = game.submitMove(slot, msg.placements, msg.helperSlot);
     if (!result.ok) {
       sendMsg(ws, { type: 'moveRejected', reason: humanReadableReason(result.error) });
       return;
@@ -311,6 +311,7 @@ function humanReadableReason(error: { kind: string }): string {
   switch (error.kind) {
     case 'not-your-turn': return 'Сейчас не ваш ход';
     case 'not-playing': return 'Игра не в процессе';
+    case 'invalid-helper': return 'Неверный помощник';
     case 'no-placements': return 'Нет плиток для хода';
     case 'out-of-range': return 'Плитка вне поля';
     case 'duplicate-target': return 'Две плитки в одну клетку';

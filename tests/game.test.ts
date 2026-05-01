@@ -427,6 +427,81 @@ describe('revert across action types', () => {
   });
 });
 
+describe('Game — submitMove with helperSlot (assist credit)', () => {
+  function setup() {
+    const g = new Game({ seed: 1 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    return g;
+  }
+
+  function makeFirstMovePlacements(g: Game): import('@shared/types').Placement[] {
+    const t = g.snapshot().players[0]!.rack[0]!;
+    return [{ tileId: t.id, row: 7, col: 7, playedAs: t.isBlank ? 'А' : t.letter }];
+  }
+
+  it('submitMove with helperSlot adds 5 to helper and appends AssistRecord', () => {
+    const g = setup();
+    const r = g.submitMove(0, makeFirstMovePlacements(g), 1);
+    expect(r.ok).toBe(true);
+    const snap = g.snapshot();
+    expect(snap.players[1]!.score).toBe(5);
+    const events = snap.events;
+    const moveRec = events.at(-2)!;
+    const assistRec = events.at(-1)!;
+    expect(moveRec.kind).toBe('move');
+    if (moveRec.kind === 'move') expect(moveRec.helperSlot).toBe(1);
+    expect(assistRec.kind).toBe('assist');
+    if (assistRec.kind === 'assist') {
+      expect(assistRec.fromSlot).toBe(0);
+      expect(assistRec.toSlot).toBe(1);
+      expect(assistRec.points).toBe(5);
+      expect(assistRec.forMoveIndex).toBe(events.length - 2);
+    }
+  });
+
+  it('submitMove rejects helperSlot equal to submitter', () => {
+    const g = setup();
+    const r = g.submitMove(0, makeFirstMovePlacements(g), 0);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe('invalid-helper');
+  });
+
+  it('submitMove rejects out-of-range helperSlot', () => {
+    const g = setup();
+    const r = g.submitMove(0, makeFirstMovePlacements(g), 5 as import('@shared/types').Slot);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.kind).toBe('invalid-helper');
+  });
+
+  it('rejected move does not award assist or append events', () => {
+    const g = setup();
+    const eventsBefore = g.snapshot().events.length;
+    const score1Before = g.snapshot().players[1]!.score;
+    // Off-center single tile fails first-move-must-cover-center validation
+    const t = g.snapshot().players[0]!.rack[0]!;
+    const r = g.submitMove(0, [{ tileId: t.id, row: 0, col: 0, playedAs: t.isBlank ? 'А' : t.letter }], 1);
+    expect(r.ok).toBe(false);
+    expect(g.snapshot().events.length).toBe(eventsBefore);
+    expect(g.snapshot().players[1]!.score).toBe(score1Before);
+  });
+
+  it('revert of an assisted move reverses helper +5 and appends two revert records', () => {
+    const g = setup();
+    g.submitMove(0, makeFirstMovePlacements(g), 1);
+    expect(g.snapshot().players[1]!.score).toBe(5);
+    g.revertLastTurn(0);
+    const snap = g.snapshot();
+    expect(snap.players[1]!.score).toBe(0);
+    expect(snap.players[0]!.score).toBe(0);
+    // Log tail after revert: move, assist, revert(assist), revert(move).
+    const tail = snap.events.slice(-4);
+    expect(tail.map((e) => e.kind)).toEqual(['move', 'assist', 'revert', 'revert']);
+    if (tail[2]!.kind === 'revert') expect(tail[2]!.revertedKind).toBe('assist');
+    if (tail[3]!.kind === 'revert') expect(tail[3]!.revertedKind).toBe('move');
+  });
+});
+
 describe('Game.revertLastTurn — append-only RevertRecord log', () => {
   function makeReadyGame2(seed: number) {
     const g = new Game({ seed });

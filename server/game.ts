@@ -10,7 +10,7 @@ export type GameOpts = { seed: number };
 
 export type SubmitResult =
   | { ok: true; moveRecord: MoveRecord; dictionaryWarnings: string[] }
-  | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } };
+  | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } | { kind: 'invalid-helper' } };
 
 export class Game {
   private state: GameState;
@@ -78,9 +78,19 @@ export class Game {
     this.state.startedAt = Date.now();
   }
 
-  submitMove(slot: Slot, placements: Placement[]): SubmitResult {
+  submitMove(slot: Slot, placements: Placement[], helperSlot?: Slot): SubmitResult {
     if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
     if (slot !== this.state.turnIndex) return { ok: false, error: { kind: 'not-your-turn' } };
+
+    if (helperSlot !== undefined) {
+      if (helperSlot !== 0 && helperSlot !== 1 && helperSlot !== 2) {
+        return { ok: false, error: { kind: 'invalid-helper' } };
+      }
+      if (helperSlot === slot) {
+        return { ok: false, error: { kind: 'invalid-helper' } };
+      }
+    }
+
     const player = this.state.players[slot]!;
 
     const isFirst = isEmpty(this.state.board);
@@ -115,11 +125,25 @@ export class Game {
       })),
       totalScore: score.totalScore,
       bingoBonus: score.bingoBonus,
-      helperSlot: null,            // assist wired in Task 8
+      helperSlot: helperSlot ?? null,
       timestamp: Date.now(),
     };
     const startLen = this.state.events.length;
+    const moveIndex = this.state.events.length;
     this.state.events.push(moveRecord);
+
+    if (helperSlot !== undefined) {
+      this.state.players[helperSlot]!.score += 5;
+      this.state.events.push({
+        kind: 'assist',
+        fromSlot: slot,
+        toSlot: helperSlot,
+        points: 5,
+        forMoveIndex: moveIndex,
+        timestamp: Date.now(),
+      });
+    }
+
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
 
     const dictionaryWarnings = checkWords(words.map((w) => w.word));
