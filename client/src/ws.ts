@@ -75,6 +75,13 @@ export function connect(): void {
             useGameStore.setState({ pendingPlacements: next });
           }
         }
+        const FRESH_MS = 5000;
+        const events = msg.state.events;
+        const last = events[events.length - 1];
+        if (last !== undefined && last.kind === 'move' && Date.now() - last.timestamp < FRESH_MS) {
+          const cells = last.placements.map((p) => ({ row: p.row, col: p.col }));
+          useGameStore.getState().setLastPlaced(cells, Date.now());
+        }
         return;
       }
       case 'moveAccepted':

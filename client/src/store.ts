@@ -30,6 +30,8 @@ type Store = {
   pendingHelperSlot: Slot | null;
   lastError: string | null;
   warning: string | null;
+  lastPlacedCells: { row: number; col: number }[];
+  lastPlacedAt: number;
   setState: (state: GameState) => void;
   setConnected: (connected: boolean) => void;
   setLobby: (slots: LobbySlot[]) => void;
@@ -42,6 +44,7 @@ type Store = {
   setPendingHelperSlot: (slot: Slot | null) => void;
   setError: (message: string | null) => void;
   setWarning: (message: string | null) => void;
+  setLastPlaced: (cells: { row: number; col: number }[], at: number) => void;
 };
 
 export const useGameStore = create<Store>((set) => ({
@@ -53,6 +56,8 @@ export const useGameStore = create<Store>((set) => ({
   pendingHelperSlot: null,
   lastError: null,
   warning: null,
+  lastPlacedCells: [],
+  lastPlacedAt: 0,
   setState: (state) => set({ state }),
   setConnected: (connected) => set({ connected }),
   setLobby: (slots) => set({ lobby: slots }),
@@ -95,4 +100,5 @@ export const useGameStore = create<Store>((set) => ({
   setPendingHelperSlot: (pendingHelperSlot) => set({ pendingHelperSlot }),
   setError: (lastError) => set({ lastError }),
   setWarning: (warning) => set({ warning }),
+  setLastPlaced: (cells, at) => set({ lastPlacedCells: cells, lastPlacedAt: at }),
 }));
