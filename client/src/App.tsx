@@ -1,12 +1,36 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import type { Slot } from '@shared/types';
 import { useGameStore } from './store.js';
+import { connect } from './ws.js';
 import { Board } from './components/Board.js';
 import { PlayerCard } from './components/PlayerCard.js';
+import { MissingParams } from './MissingParams.js';
+
+const VALID_SLOTS = new Set(['0', '1', '2']);
 
 export function App() {
+  const setIdentity = useGameStore((s) => s.setIdentity);
   const state = useGameStore((s) => s.state);
   const connected = useGameStore((s) => s.connected);
+  const [bad, setBad] = useState(false);
+  const [ready, setReady] = useState(false);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const slotStr = params.get('slot');
+    const name = params.get('name')?.trim();
+    if (slotStr === null || !VALID_SLOTS.has(slotStr) || !name) {
+      setBad(true);
+      return;
+    }
+    const slot = Number(slotStr) as Slot;
+    setIdentity(slot, name);
+    connect();
+    setReady(true);
+  }, [setIdentity]);
+
+  if (bad) return <MissingParams />;
+  if (!ready) return null;
   if (!connected) return <Center>connecting…</Center>;
   if (!state) return <Center>waiting for state…</Center>;
 
