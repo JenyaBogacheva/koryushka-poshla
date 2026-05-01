@@ -8,6 +8,7 @@ import { PlayerCard } from './components/PlayerCard.js';
 import { ErrorBanner } from './components/ErrorBanner.js';
 import { SlotPicker } from './components/SlotPicker.js';
 import { LetterPicker } from './components/LetterPicker.js';
+import { WaitingRoom } from './components/WaitingRoom.js';
 import { CYRILLIC_LETTERS } from './letters.js';
 
 type PendingDrop = { tile: TileT; row: number; col: number };
@@ -70,6 +71,9 @@ export function App() {
     return <SlotPicker lobby={lobby} onJoin={handleJoin} />;
   }
   if (state === null) return <Center>joining…</Center>;
+  if (state.phase === 'waiting') {
+    return <WaitingRoom players={state.players} mySlot={identity.slot} />;
+  }
 
   return (
     <DndContext onDragEnd={onDragEnd}>

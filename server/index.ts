@@ -66,7 +66,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       phase: 'waiting',
       players: ([0, 1, 2] as Slot[]).map((i) => ({
         slot: i,
-        name: seats[i]!.name ?? '',
+        name: seats[i]!.name ?? familyConfig.players[i].name,
         connected: seats[i]!.ws !== null,
         rack: [],
         rackVisible: true,
