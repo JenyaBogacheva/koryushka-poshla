@@ -159,6 +159,10 @@ The "мама помогла" selector lives **on the existing submit confirm mo
 - If the move is rejected by the server, the picker selection is discarded along with the rest of the attempt.
 - Pass / redraw / claimBlank / endGame / revert do not show a helper picker — assist is move-only (§2 non-goal).
 
+## 5c. Bag-remaining indicator
+
+Show how many tiles are left in the bag during play. Render as a small chip at the top of the right rail (above the player cards) — `Мешок: 47`. Reads `state.bag.length` directly; no new server fields. Hidden in the Past Games detail view (a finished game's bag is uninteresting). Updates automatically with each state snapshot.
+
 ## 6. Past Games viewer
 
 **HTTP endpoints** (added to existing Express server):

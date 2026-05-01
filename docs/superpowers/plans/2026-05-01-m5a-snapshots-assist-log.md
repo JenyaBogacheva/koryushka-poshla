@@ -1,37 +1,38 @@
-# M5 Additions — Snapshots, Assist Credit, Move Log — Implementation Plan
+# M5a — Snapshots, Assist Credit, Move Log — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add three M5 features: (1) "мама помогла" assist credit (+5 to a helper, attached to a `submitMove`); (2) live move log panel + same log embedded in archived games; (3) finished-game snapshots (full board + complete event log) plus an in-app Past Games viewer.
+**Goal:** Add three M5a features: (1) "мама помогла" assist credit (+5 to a helper, attached to a `submitMove`); (2) live move log panel covering every action; (3) finished-game snapshots (full board + complete event log) plus an in-app Past Games viewer.
 
-**Architecture:** Extend `GameState.history` (a `MoveRecord[]`) into `GameState.events` (a `GameEvent[]` discriminated union of `MoveRecord | AssistRecord`). Server applies assist atomically inside `submitMove`. Persistence already stores `{summary, state}` per archived game, so snapshots come almost free — we just rename the wrapper to `GameArchive`, add an `events` projection helper, and expose two HTTP endpoints (`/api/history`, `/api/history/:id`). Client gains a `<MoveLog>` panel, a helper picker on the submit row, and a `/past` route with list + detail views.
+**Architecture:** Replace `GameState.history: MoveRecord[]` with `GameState.events: GameEvent[]` — a discriminated union over move/assist/pass/redraw/claimBlank/endGame/revert. Each engine action method appends exactly one record (revert appends rather than pops, and reverses assist points if any). Persistence upgrades to a `GameArchive` (final board + complete events). Two new HTTP endpoints expose archives. Client adds a submit confirm modal (the helper picker lives there), a `<MoveLog>` panel in the right rail under player cards, and a `/past` route with list + detail views.
 
 **Tech Stack:** TypeScript strict, Node 20, Vitest, Express + ws, React 19, Zustand, Tailwind 4, Vite. No new runtime deps.
 
 **Spec:** `docs/superpowers/specs/2026-05-01-m5a-snapshots-assist-log-design.md`.
 
-> **NOTE — plan refresh pending.** The spec was amended after this plan was first written: the event union now includes `PassRecord`, `RedrawRecord`, `ClaimBlankRecord`, `EndGameRecord`, and `RevertRecord` (not just `MoveRecord | AssistRecord`); the helper picker is pinned to the submit confirm modal; the `<MoveLog>` is pinned to the right rail under the player cards; revert reverses an attached assist's +5. Tasks below predate those changes and need to be re-derived. See `docs/superpowers/specs/2026-05-01-m5a-snapshots-assist-log-design.md` for the current source of truth.
-
-**Conventions reminder:**
-- `.js` extension on relative imports
+**Conventions reminder (from CLAUDE.md):**
+- `.js` extension on relative imports (NodeNext / ESNext)
 - Path aliases `@shared/*`, `@server/*`
-- Single quotes, `type` over `interface`, discriminated unions for results
-- Vitest: `tests/<module>.test.ts`, `expect(actual).toEqual(expected)`
-- Run `npm run typecheck && npm test` before each commit
-- No `Co-Authored-By` trailer in commits
+- TS strict + `noUncheckedIndexedAccess` — non-null assert (`!`) only when the index is provably valid
+- Prefer `type` over `interface`; discriminated unions for results
+- Validation returns `{ ok: false, error: ... }`; throw only for programmer errors
+- Before committing: `npm run typecheck && npm test`
 
 ---
 
-## Task 1: Type changes — `GameEvent`, `helperSlot`, `GameArchive`
+## Task 1: Extend `GameEvent` union and `GameArchive` types
 
 **Files:**
 - Modify: `shared/types.ts`
 
-- [ ] **Step 1: Update `shared/types.ts`** — add `kind` discriminant + `helperSlot` to `MoveRecord`, introduce `AssistRecord`, `GameEvent`, rename `GameState.history` → `GameState.events` typed as `GameEvent[]`, extend `submitMove` with optional `helperSlot`, replace `GameSummary`-only archive with `GameArchive`.
+This is a pure type-shape change. We rename `history` → `events`, add a `kind` discriminant to `MoveRecord`, add the six new record types, and define `GameArchive` (the new on-disk archive format). No tests in this task — types are exercised by the next tasks; `npm run typecheck` is the gate.
 
-Replace these definitions:
+- [ ] **Step 1: Update `shared/types.ts`**
+
+Replace the existing `MoveRecord` definition and add the new record types + `GameEvent` union + `GameArchive` + the `helperSlot` option on `submitMove`.
 
 ```ts
+// Replace existing MoveRecord:
 export type MoveRecord = {
   kind: 'move';
   slot: Slot;
@@ -48,14 +49,62 @@ export type AssistRecord = {
   fromSlot: Slot;
   toSlot: Slot;
   points: 5;
-  forMoveIndex: number;
+  forMoveIndex: number; // index into events[] of the move it was attached to
   timestamp: number;
 };
 
-export type GameEvent = MoveRecord | AssistRecord;
+export type PassRecord = {
+  kind: 'pass';
+  slot: Slot;
+  timestamp: number;
+};
 
-export type GamePhase = 'waiting' | 'playing' | 'finished';
+export type RedrawRecord = {
+  kind: 'redraw';
+  slot: Slot;
+  reason: 'allVowels' | 'allConsonants';
+  tileCount: number;
+  timestamp: number;
+};
 
+export type ClaimBlankRecord = {
+  kind: 'claimBlank';
+  slot: Slot;
+  row: number;
+  col: number;
+  letterAs: Letter;
+  timestamp: number;
+};
+
+export type EndGameRecord = {
+  kind: 'endGame';
+  slot: Slot;
+  cause: 'playerEnded' | 'bagEmptyAndRackEmpty' | 'sixPasses';
+  timestamp: number;
+};
+
+export type RevertRecord = {
+  kind: 'revert';
+  slot: Slot;
+  revertedKind: GameEventKind;
+  timestamp: number;
+};
+
+export type GameEvent =
+  | MoveRecord
+  | AssistRecord
+  | PassRecord
+  | RedrawRecord
+  | ClaimBlankRecord
+  | EndGameRecord
+  | RevertRecord;
+
+export type GameEventKind = GameEvent['kind'];
+```
+
+In `GameState`, replace `history: MoveRecord[]` with `events: GameEvent[]`:
+
+```ts
 export type GameState = {
   phase: GamePhase;
   players: [Player, Player, Player];
@@ -66,124 +115,609 @@ export type GameState = {
   events: GameEvent[];
   startedAt: number | null;
 };
-
-export type GameSummary = {
-  id: string;
-  startedAt: number;
-  finishedAt: number;
-  players: { slot: Slot; name: string; finalScore: number }[];
-  winnerSlot: Slot | null;
-};
-
-export type GameArchive = GameSummary & {
-  finalBoard: Board;
-  events: GameEvent[];
-};
 ```
 
-Replace the `submitMove` variant in `ClientMessage`:
+Extend `ClientMessage`'s `submitMove` variant:
 
 ```ts
 | { type: 'submitMove'; placements: Placement[]; helperSlot?: Slot }
 ```
 
-- [ ] **Step 2: Run typecheck — failures expected**
+Add `GameArchive` (new):
+
+```ts
+export type GameArchive = {
+  id: string;
+  startedAt: number;
+  finishedAt: number;
+  players: { slot: Slot; name: string; finalScore: number }[];
+  winnerSlot: Slot | null;
+  finalBoard: Board;
+  events: GameEvent[];
+};
+```
+
+Keep `GameSummary` as-is (it remains the projection used for the list view).
+
+- [ ] **Step 2: Run typecheck — expect failures**
 
 Run: `npm run typecheck`
-Expected: errors in `server/game.ts` (missing `kind`, references to `state.history`), in `server/persistence.ts` (returns `GameSummary`, references `state.history` indirectly), in `server/index.ts` (broadcasts `state`), in `client/src/store.ts` and components if they touch `state.history`.
+Expected: many errors — `state.history` references in `server/game.ts`, `server/persistence.ts`, `server/index.ts`, plus `MoveRecord` consumers in `client/`. These are addressed in Tasks 2–13.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add shared/types.ts
-git commit -m "feat(types): GameEvent union, helperSlot, GameArchive"
+git commit -m "feat(types): extend GameEvent union; add GameArchive; helperSlot on submitMove"
 ```
 
 ---
 
-## Task 2: Engine — assist scoring + events rename in `Game`
+## Task 2: Engine — rename `history` → `events`, append `MoveRecord` with `kind` + `helperSlot`
 
 **Files:**
 - Modify: `server/game.ts`
-- Modify: `tests/game.test.ts` (existing tests will need `state.history` → `state.events`)
-- Test: `tests/assist.test.ts` (new)
+- Modify: `tests/game.test.ts`
 
-- [ ] **Step 1: Write failing tests for assist** in new file `tests/assist.test.ts`:
+This task makes `submitMove` compile and pass tests again — but **without** assist scoring yet. We just rename the field and add `kind: 'move'` + `helperSlot: null` to every `MoveRecord` we push. Existing tests that reference `state.history` get renamed to `state.events`.
+
+- [ ] **Step 1: Update `tests/game.test.ts`**
+
+Search-and-replace `state.history` → `state.events` and `g.snapshot().history` → `g.snapshot().events` throughout. Where a test asserts the shape of a `MoveRecord`, add `kind: 'move'` and `helperSlot: null` to the expected object.
+
+Run: `npm test -- tests/game.test.ts`
+Expected: many failures — implementation hasn't changed yet.
+
+- [ ] **Step 2: Update `server/game.ts`**
+
+In the `Game` constructor's initial state literal, replace `history: []` with `events: []`. In `submitMove`, change the `MoveRecord` literal and the `push` site:
 
 ```ts
-import { describe, it, expect } from 'vitest';
-import { Game } from '@server/game.js';
+const moveRecord: MoveRecord = {
+  kind: 'move',
+  slot,
+  placements,
+  wordsFormed: score.perWord.map<WordFormed>((w) => ({
+    word: w.word, cells: w.cells, score: w.score,
+  })),
+  totalScore: score.totalScore,
+  bingoBonus: score.bingoBonus,
+  helperSlot: null,            // assist wired in Task 8
+  timestamp: Date.now(),
+};
+this.state.events.push(moveRecord);
+```
 
-function setup() {
-  const g = new Game({ seed: 42 });
-  g.joinPlayer(0, 'A');
-  g.joinPlayer(1, 'B');
-  g.joinPlayer(2, 'C');
-  g.startGame();
-  return g;
-}
+- [ ] **Step 3: Run game tests — expect pass**
 
-describe('assist credit', () => {
-  it('rejects helperSlot equal to submitter', () => {
-    const g = setup();
-    const slot = g.snapshot().turnIndex;
-    const res = g.submitMove(slot, [], { helperSlot: slot });
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error.kind).toBe('invalid-helper');
-  });
+Run: `npm test -- tests/game.test.ts`
+Expected: existing tests pass.
 
-  it('rejects helperSlot out of range', () => {
-    const g = setup();
-    const slot = g.snapshot().turnIndex;
-    const res = g.submitMove(slot, [], { helperSlot: 5 as 0 });
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error.kind).toBe('invalid-helper');
-  });
+- [ ] **Step 4: Commit**
 
-  it('does not credit helper when the move itself is rejected', () => {
-    const g = setup();
-    const slot = g.snapshot().turnIndex;
-    const helper: 0 | 1 | 2 = (((slot + 1) % 3) as 0 | 1 | 2);
-    const before = g.snapshot().players[helper].score;
-    const res = g.submitMove(slot, [], { helperSlot: helper }); // empty = invalid move
-    expect(res.ok).toBe(false);
-    expect(g.snapshot().players[helper].score).toBe(before);
-    expect(g.snapshot().events.length).toBe(0);
-  });
+```bash
+git add server/game.ts tests/game.test.ts
+git commit -m "refactor(engine): rename history→events; tag MoveRecord with kind+helperSlot"
+```
+
+---
+
+## Task 3: Engine — emit `PassRecord` on `passTurn`
+
+**Files:**
+- Modify: `server/game.ts`
+- Modify: `tests/game.test.ts`
+
+- [ ] **Step 1: Add failing test in `tests/game.test.ts`**
+
+Inside the existing `describe('Game', ...)` (or the `describe` for pass), add:
+
+```ts
+it('passTurn appends a PassRecord to events', () => {
+  const g = newStartedGame();
+  const events0 = g.snapshot().events.length;
+  g.passTurn(0);
+  const events = g.snapshot().events;
+  expect(events.length).toBe(events0 + 1);
+  const last = events[events.length - 1]!;
+  expect(last.kind).toBe('pass');
+  if (last.kind === 'pass') {
+    expect(last.slot).toBe(0);
+    expect(typeof last.timestamp).toBe('number');
+  }
 });
 ```
 
-- [ ] **Step 2: Run the new tests — verify they fail**
+(`newStartedGame` is the existing helper in this test file. If the file uses different boilerplate, follow the same pattern as adjacent tests.)
 
-Run: `npx vitest run tests/assist.test.ts`
-Expected: FAIL — `submitMove` does not accept a third arg, `state.events` does not exist.
+Run: `npm test -- tests/game.test.ts -t "passTurn appends"`
+Expected: FAIL (no `kind: 'pass'` record appended).
 
-- [ ] **Step 3: Update `server/game.ts`**
+- [ ] **Step 2: Implement in `server/game.ts`**
 
-Rename `history` → `events`. Extend `submitMove` to take an optional opts arg `{ helperSlot?: Slot }`. Validate helper. After committing the move, push `MoveRecord` (with `kind: 'move'` and `helperSlot`), then if helper is set, bump score and push `AssistRecord`.
-
-Concretely:
+In `passTurn`, after advancing `turnIndex`, push the record:
 
 ```ts
-import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed, AssistRecord } from '@shared/types';
-// ... existing imports
-import type { MoveError } from './moves.js';
+passTurn(slot: Slot): void {
+  this.assertTurn(slot);
+  this.maybeClearRevertOnActionBy(slot);
+  const pre = structuredClone(this.state);
+  this.state.turnIndex = ((slot + 1) % 3) as Slot;
+  this.state.events.push({ kind: 'pass', slot, timestamp: Date.now() });
+  this.armRevert(slot, pre);
+}
+```
 
-export type SubmitOpts = { helperSlot?: Slot };
+- [ ] **Step 3: Run test**
 
+Run: `npm test -- tests/game.test.ts -t "passTurn appends"`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add server/game.ts tests/game.test.ts
+git commit -m "feat(engine): append PassRecord on passTurn"
+```
+
+---
+
+## Task 4: Engine — emit `RedrawRecord` on `redrawRack`
+
+**Files:**
+- Modify: `server/game.ts`
+- Modify: `tests/game.test.ts`
+
+- [ ] **Step 1: Add failing test**
+
+```ts
+it('redrawRack appends a RedrawRecord with reason and tileCount', () => {
+  const g = newStartedGame();
+  // Rig the rack to all-vowels so redraw is eligible. Reuse whatever helper
+  // an existing redraw test in this file uses, or set the rack directly via
+  // the same mechanism.
+  forceRackAllVowels(g, 0); // existing helper or inline equivalent
+  const before = g.snapshot();
+  const tileCount = before.players[0]!.rack.length;
+  g.redrawRack(0);
+  const events = g.snapshot().events;
+  const last = events[events.length - 1]!;
+  expect(last.kind).toBe('redraw');
+  if (last.kind === 'redraw') {
+    expect(last.slot).toBe(0);
+    expect(last.reason).toBe('allVowels');
+    expect(last.tileCount).toBe(tileCount);
+  }
+});
+```
+
+If `forceRackAllVowels` doesn't exist, mirror whatever the existing `redrawRack` happy-path test in this file does to set up an eligible rack. **Read the file first** before writing the test to find the right helper.
+
+Run: `npm test -- tests/game.test.ts -t "redrawRack appends"`
+Expected: FAIL.
+
+- [ ] **Step 2: Implement in `server/game.ts`**
+
+We need to know `reason` (allVowels vs allConsonants) and the count *before* swapping. Import the helpers from `./rack.js` if not already imported; the existing `redrawEligible` helper returns boolean — we need a finer reason. Add a small helper next to the existing import or inline it:
+
+```ts
+import { addTilesToRack, removeTilesFromRack, redrawEligible, isAllVowels } from './rack.js';
+```
+
+If `isAllVowels` doesn't exist in `rack.ts`, add it (and a sibling `isAllConsonants`) — or read from the existing classification module (`server/letters.ts`) directly. Inspect `server/rack.ts` and `server/letters.ts` first; pick the cleanest fit.
+
+In `redrawRack`:
+
+```ts
+redrawRack(slot: Slot): void {
+  this.assertTurn(slot);
+  const player = this.state.players[slot]!;
+  if (!redrawEligible(player.rack)) {
+    throw new Error('Rack is not eligible for free redraw (must be all vowels or all consonants)');
+  }
+  const reason: 'allVowels' | 'allConsonants' =
+    isAllVowels(player.rack) ? 'allVowels' : 'allConsonants';
+  const tileCount = player.rack.length;
+  this.maybeClearRevertOnActionBy(slot);
+  const pre = structuredClone(this.state);
+  const allIds = player.rack.map((t) => t.id);
+  const removed = removeTilesFromRack(player.rack, allIds);
+  returnTiles(this.bag, removed);
+  const drawn = drawTiles(this.bag, 7);
+  addTilesToRack(player.rack, drawn);
+  this.state.bag = this.bag.tiles;
+  this.state.events.push({ kind: 'redraw', slot, reason, tileCount, timestamp: Date.now() });
+  this.armRevert(slot, pre);
+}
+```
+
+- [ ] **Step 3: Run test**
+
+Run: `npm test -- tests/game.test.ts -t "redrawRack appends"`
+Expected: PASS.
+
+- [ ] **Step 4: Run full game tests**
+
+Run: `npm test -- tests/game.test.ts`
+Expected: all green.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add server/game.ts server/rack.ts tests/game.test.ts
+git commit -m "feat(engine): append RedrawRecord on redrawRack"
+```
+
+---
+
+## Task 5: Engine — emit `ClaimBlankRecord` on `claimBlank`
+
+**Files:**
+- Modify: `server/game.ts`
+- Modify: `tests/game.test.ts`
+
+- [ ] **Step 1: Add failing test**
+
+Mirror the existing happy-path `claimBlank` test in `tests/game.test.ts` (find it first — it sets up a board with a blank tile playedAs some letter, then calls `g.claimBlank(slot, row, col, tileId)`). After the existing assertions, add:
+
+```ts
+const last = g.snapshot().events.at(-1)!;
+expect(last.kind).toBe('claimBlank');
+if (last.kind === 'claimBlank') {
+  expect(last.slot).toBe(slot);
+  expect(last.row).toBe(row);
+  expect(last.col).toBe(col);
+  expect(last.letterAs).toBe(letterAs); // matches the blank's playedAs
+}
+```
+
+Run: `npm test -- tests/game.test.ts -t "claimBlank"`
+Expected: FAIL (no event appended yet).
+
+- [ ] **Step 2: Implement in `server/game.ts`**
+
+In `claimBlank`, after the swap mutates the board and before `this.armRevert(...)`:
+
+```ts
+this.state.events.push({
+  kind: 'claimBlank',
+  slot,
+  row,
+  col,
+  letterAs: cell.playedAs,
+  timestamp: Date.now(),
+});
+this.armRevert(slot, pre);
+```
+
+- [ ] **Step 3: Run test**
+
+Run: `npm test -- tests/game.test.ts -t "claimBlank"`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add server/game.ts tests/game.test.ts
+git commit -m "feat(engine): append ClaimBlankRecord on claimBlank"
+```
+
+---
+
+## Task 6: Engine — emit `EndGameRecord` on `endGame`
+
+**Files:**
+- Modify: `server/game.ts`
+- Modify: `tests/game.test.ts`
+
+Only the `'playerEnded'` cause is wired up in M5a — the engine has no auto-detect for `bagEmptyAndRackEmpty` or `sixPasses` today; those cause variants stay in the type union for future work and are not emitted yet.
+
+- [ ] **Step 1: Add failing test**
+
+```ts
+it('endGame appends an EndGameRecord with cause "playerEnded"', () => {
+  const g = newStartedGame();
+  g.endGame(0);
+  const last = g.snapshot().events.at(-1)!;
+  expect(last.kind).toBe('endGame');
+  if (last.kind === 'endGame') {
+    expect(last.slot).toBe(0);
+    expect(last.cause).toBe('playerEnded');
+  }
+  expect(g.snapshot().phase).toBe('finished');
+});
+```
+
+Run: `npm test -- tests/game.test.ts -t "endGame appends"`
+Expected: FAIL.
+
+- [ ] **Step 2: Implement**
+
+```ts
+endGame(slot: Slot): void {
+  if (this.state.phase !== 'playing') return; // idempotent if already finished
+  this.maybeClearRevertOnActionBy(slot);
+  this.lastSnapshot = null;
+  this.state.phase = 'finished';
+  this.state.events.push({
+    kind: 'endGame',
+    slot,
+    cause: 'playerEnded',
+    timestamp: Date.now(),
+  });
+}
+```
+
+- [ ] **Step 3: Run test**
+
+Run: `npm test -- tests/game.test.ts -t "endGame appends"`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add server/game.ts tests/game.test.ts
+git commit -m "feat(engine): append EndGameRecord on endGame"
+```
+
+---
+
+## Task 7: Engine — emit `RevertRecord` on `revertLastTurn` (append-only, reverse attached assist)
+
+**Files:**
+- Modify: `server/game.ts`
+- Modify: `tests/game.test.ts`
+
+The revert is **append-only**: it does not pop the prior entry. It records what was undone (`revertedKind`). If the most recent event is a move that has an attached assist, we also reverse the assist's +5 *and* append a second `RevertRecord` with `revertedKind: 'assist'`.
+
+The order in `events` after a move-with-assist looks like: `[..., MoveRecord, AssistRecord]`. After revert: `[..., MoveRecord, AssistRecord, RevertRecord(assist), RevertRecord(move)]`. We reverse the assist points first (it was pushed last), then mark both as reverted.
+
+**Important:** the existing `lastSnapshot` is a deep clone of `state` taken *before* the action. After we restore `this.state = lastSnapshot.state`, the snapshot's `events` array does NOT contain the action we're undoing (it was the pre-action state). So we can't both (a) restore from snapshot and (b) keep the move record in the log. We need to thread the records back in.
+
+The clean approach: after `this.state = this.lastSnapshot.state`, manually re-append the original action records (move + optional assist) and then the matching revert records, so the *log* is preserved while the *game state* (board / scores / racks / bag) is rolled back. Track those records during the action by capturing `events.length` before each action and reading the appended slice on revert.
+
+- [ ] **Step 1: Add a private field for the appended-events slice**
+
+In `Game`:
+
+```ts
+// Snapshot of records appended by the most recent action, kept so revert can
+// preserve them in the log even after restoring `state` from `lastSnapshot`.
+private lastActionRecords: GameEvent[] | null = null;
+```
+
+Replace `armRevert` with a version that captures the records too:
+
+```ts
+private armRevert(slot: Slot, preState: GameState, appended: GameEvent[]): void {
+  this.lastSnapshot = { state: preState, bySlot: slot };
+  this.lastActionRecords = appended;
+}
+
+private maybeClearRevertOnActionBy(slot: Slot): void {
+  if (this.lastSnapshot !== null && this.lastSnapshot.bySlot !== slot) {
+    this.lastSnapshot = null;
+    this.lastActionRecords = null;
+  }
+}
+```
+
+Update each call site (`submitMove`, `passTurn`, `redrawRack`, `claimBlank`) to compute the appended slice and pass it in. The simplest pattern: capture `const startLen = this.state.events.length;` before pushing, then `const appended = this.state.events.slice(startLen);` before calling `armRevert`. Apply this in all four methods.
+
+For `submitMove`, the appended slice may include both the `MoveRecord` and (after Task 8) the `AssistRecord` — the slice captures whatever was pushed.
+
+- [ ] **Step 2: Add failing test for plain move revert**
+
+```ts
+it('revertLastTurn after submitMove appends RevertRecord(kind="move") and rolls back state', () => {
+  const g = newStartedGame();
+  // ... existing first-move setup helpers ...
+  const move = makeFirstMove(g);
+  g.submitMove(0, move);
+  const scoreBefore = g.snapshot().players[0]!.score;
+  expect(scoreBefore).toBeGreaterThan(0);
+
+  g.revertLastTurn(0);
+  const snap = g.snapshot();
+  expect(snap.players[0]!.score).toBe(0);
+  // Log: move + revert(move). No assist.
+  const tail = snap.events.slice(-2);
+  expect(tail[0]!.kind).toBe('move');
+  expect(tail[1]!.kind).toBe('revert');
+  if (tail[1]!.kind === 'revert') {
+    expect(tail[1]!.revertedKind).toBe('move');
+    expect(tail[1]!.slot).toBe(0);
+  }
+});
+```
+
+Run: `npm test -- tests/game.test.ts -t "revertLastTurn after submitMove"`
+Expected: FAIL — `revertLastTurn` currently restores `state` wholesale (losing the move record) and does not append a `RevertRecord`.
+
+- [ ] **Step 3: Implement `revertLastTurn`**
+
+```ts
+revertLastTurn(slot: Slot): void {
+  if (this.lastSnapshot === null) throw new Error('Nothing to revert');
+  if (this.lastSnapshot.bySlot !== slot) throw new Error('Only the action author can revert');
+  const restored = this.lastSnapshot.state;
+  const appended = this.lastActionRecords ?? [];
+
+  // Roll game state back.
+  this.state = restored;
+  this.bag.tiles = [...this.state.bag];
+  this.state.bag = this.bag.tiles;
+
+  // Re-attach the original action records so the log shows what happened…
+  for (const rec of appended) this.state.events.push(rec);
+  // …and append matching revert records in reverse order
+  // (so an AssistRecord pushed after a MoveRecord is reverted first).
+  const ts = Date.now();
+  for (let i = appended.length - 1; i >= 0; i--) {
+    this.state.events.push({
+      kind: 'revert',
+      slot,
+      revertedKind: appended[i]!.kind,
+      timestamp: ts,
+    });
+  }
+
+  this.lastSnapshot = null;
+  this.lastActionRecords = null;
+}
+```
+
+Run: `npm test -- tests/game.test.ts -t "revertLastTurn after submitMove"`
+Expected: PASS.
+
+- [ ] **Step 4: Add tests for pass / redraw / claimBlank revert log shape**
+
+```ts
+it('revertLastTurn after passTurn appends RevertRecord(kind="pass")', () => {
+  const g = newStartedGame();
+  g.passTurn(0);
+  g.revertLastTurn(0);
+  const tail = g.snapshot().events.slice(-2);
+  expect(tail[0]!.kind).toBe('pass');
+  expect(tail[1]!.kind).toBe('revert');
+  if (tail[1]!.kind === 'revert') expect(tail[1]!.revertedKind).toBe('pass');
+});
+
+it('revertLastTurn after redrawRack appends RevertRecord(kind="redraw")', () => {
+  const g = newStartedGame();
+  forceRackAllVowels(g, 0);
+  g.redrawRack(0);
+  g.revertLastTurn(0);
+  const tail = g.snapshot().events.slice(-2);
+  expect(tail[0]!.kind).toBe('redraw');
+  expect(tail[1]!.kind).toBe('revert');
+  if (tail[1]!.kind === 'revert') expect(tail[1]!.revertedKind).toBe('redraw');
+});
+
+it('revertLastTurn after claimBlank appends RevertRecord(kind="claimBlank")', () => {
+  // Reuse the existing claimBlank setup from the file.
+  const g = setupGameWithBlankOnBoard(); // existing helper or inline equivalent
+  g.claimBlank(/* args from existing test */);
+  g.revertLastTurn(/* same slot */);
+  const tail = g.snapshot().events.slice(-2);
+  expect(tail[0]!.kind).toBe('claimBlank');
+  expect(tail[1]!.kind).toBe('revert');
+  if (tail[1]!.kind === 'revert') expect(tail[1]!.revertedKind).toBe('claimBlank');
+});
+```
+
+Run: `npm test -- tests/game.test.ts`
+Expected: all green.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add server/game.ts tests/game.test.ts
+git commit -m "feat(engine): append-only RevertRecord on revertLastTurn"
+```
+
+---
+
+## Task 8: Engine — assist credit on `submitMove`
+
+**Files:**
+- Modify: `server/game.ts`
+- Modify: `shared/types.ts` (`SubmitResult` may not need a change — `helperSlot` flows in via the param signature)
+- Modify: `tests/game.test.ts`
+
+Validation: `helperSlot` (when provided) must be `0|1|2`, must differ from the submitter, and must refer to an existing player slot (always true in a 3-player game, but we still check `slot in {0,1,2}`).
+
+Application: after the move is committed and `MoveRecord` pushed (with `helperSlot`), if `helperSlot != null`, add `+5` to that player's score and push an `AssistRecord` referencing the move's index in `events`.
+
+- [ ] **Step 1: Update `submitMove` signature**
+
+```ts
+submitMove(slot: Slot, placements: Placement[], helperSlot?: Slot): SubmitResult { ... }
+```
+
+Add a new error variant in the union (extend the inline anonymous error type with `{ kind: 'invalid-helper' }`):
+
+```ts
 export type SubmitResult =
-  | { ok: true; moveRecord: MoveRecord; assistRecord: AssistRecord | null; dictionaryWarnings: string[] }
+  | { ok: true; moveRecord: MoveRecord; dictionaryWarnings: string[] }
   | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } | { kind: 'invalid-helper' } };
 ```
 
-Constructor: change `history: []` to `events: []`.
+Add the human-readable mapping in `server/index.ts`'s `humanReadableReason` switch (do this in the same commit so the typecheck stays green): `case 'invalid-helper': return 'Неверный помощник';`.
 
-`fromState`: no logic change — `cloned` already has the renamed field by virtue of being a fresh `GameState`.
-
-`submitMove(slot, placements, opts: SubmitOpts = {})`:
+- [ ] **Step 2: Add failing tests**
 
 ```ts
-const helperSlot = opts.helperSlot;
+it('submitMove with helperSlot adds 5 to helper and appends AssistRecord', () => {
+  const g = newStartedGame();
+  const move = makeFirstMove(g); // existing helper
+  const r = g.submitMove(0, move, 1);
+  expect(r.ok).toBe(true);
+  const snap = g.snapshot();
+  expect(snap.players[1]!.score).toBe(5);
+  const events = snap.events;
+  const moveRec = events.at(-2)!;
+  const assistRec = events.at(-1)!;
+  expect(moveRec.kind).toBe('move');
+  if (moveRec.kind === 'move') expect(moveRec.helperSlot).toBe(1);
+  expect(assistRec.kind).toBe('assist');
+  if (assistRec.kind === 'assist') {
+    expect(assistRec.fromSlot).toBe(0);
+    expect(assistRec.toSlot).toBe(1);
+    expect(assistRec.points).toBe(5);
+    expect(assistRec.forMoveIndex).toBe(events.length - 2);
+  }
+});
+
+it('submitMove rejects helperSlot equal to submitter', () => {
+  const g = newStartedGame();
+  const r = g.submitMove(0, makeFirstMove(g), 0);
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.kind).toBe('invalid-helper');
+});
+
+it('submitMove rejects out-of-range helperSlot', () => {
+  const g = newStartedGame();
+  const r = g.submitMove(0, makeFirstMove(g), 5 as Slot);
+  expect(r.ok).toBe(false);
+  if (!r.ok) expect(r.error.kind).toBe('invalid-helper');
+});
+
+it('rejected move does not award assist or append events', () => {
+  const g = newStartedGame();
+  const eventsBefore = g.snapshot().events.length;
+  const score1Before = g.snapshot().players[1]!.score;
+  // Force a move that fails validation (e.g., not crossing center on first move).
+  const r = g.submitMove(0, makeInvalidMove(), 1);
+  expect(r.ok).toBe(false);
+  expect(g.snapshot().events.length).toBe(eventsBefore);
+  expect(g.snapshot().players[1]!.score).toBe(score1Before);
+});
+
+it('revert of an assisted move reverses helper +5 and appends two revert records', () => {
+  const g = newStartedGame();
+  g.submitMove(0, makeFirstMove(g), 1);
+  expect(g.snapshot().players[1]!.score).toBe(5);
+  g.revertLastTurn(0);
+  const snap = g.snapshot();
+  expect(snap.players[1]!.score).toBe(0);
+  expect(snap.players[0]!.score).toBe(0);
+  // Log tail after revert: move, assist, revert(assist), revert(move).
+  const tail = snap.events.slice(-4);
+  expect(tail.map((e) => e.kind)).toEqual(['move', 'assist', 'revert', 'revert']);
+  if (tail[2]!.kind === 'revert') expect(tail[2]!.revertedKind).toBe('assist');
+  if (tail[3]!.kind === 'revert') expect(tail[3]!.revertedKind).toBe('move');
+});
+```
+
+Run: `npm test -- tests/game.test.ts -t "assist|helper|reject|revert of an assisted"`
+Expected: FAIL.
+
+- [ ] **Step 3: Implement validation + scoring**
+
+In `submitMove`:
+
+```ts
 if (helperSlot !== undefined) {
   if (helperSlot !== 0 && helperSlot !== 1 && helperSlot !== 2) {
     return { ok: false, error: { kind: 'invalid-helper' } };
@@ -192,226 +726,136 @@ if (helperSlot !== undefined) {
     return { ok: false, error: { kind: 'invalid-helper' } };
   }
 }
-// ... existing phase / turn / validation checks UNCHANGED
-// ... existing placement / scoring / refill logic UNCHANGED
-const moveRecord: MoveRecord = {
-  kind: 'move',
-  slot,
-  placements,
-  wordsFormed: score.perWord.map<WordFormed>((w) => ({ word: w.word, cells: w.cells, score: w.score })),
-  totalScore: score.totalScore,
-  bingoBonus: score.bingoBonus,
-  helperSlot: helperSlot ?? null,
-  timestamp: Date.now(),
-};
-this.state.events.push(moveRecord);
-const moveIndex = this.state.events.length - 1;
+```
 
-let assistRecord: AssistRecord | null = null;
+Place this check *before* `validateMove` (or right after) so an invalid helper rejects without committing — match the test's expectation that no events were appended.
+
+When building `MoveRecord`, set `helperSlot: helperSlot ?? null`.
+
+After pushing `MoveRecord` to events (and computing its index), apply the assist:
+
+```ts
+const moveIndex = this.state.events.length;
+this.state.events.push(moveRecord);
+
 if (helperSlot !== undefined) {
   this.state.players[helperSlot]!.score += 5;
-  assistRecord = {
+  this.state.events.push({
     kind: 'assist',
     fromSlot: slot,
     toSlot: helperSlot,
     points: 5,
     forMoveIndex: moveIndex,
     timestamp: Date.now(),
-  };
-  this.state.events.push(assistRecord);
+  });
 }
-
-this.state.turnIndex = ((slot + 1) % 3) as Slot;
-const dictionaryWarnings = checkWords(words.map((w) => w.word));
-return { ok: true, moveRecord, assistRecord, dictionaryWarnings };
 ```
 
-Note: helper validation runs **before** phase/turn checks per the test ordering — but actually, the spec says assist is only applied when the move itself is valid. Reorder: check phase, check turn, validate move, THEN validate helper, THEN apply. Adjust the code above so the helper check happens after `validateMove` succeeds. The "rejected move → no credit" test will catch this.
+The Task-7 `armRevert` slice mechanism captures both the move and the assist automatically — no extra code needed for revert.
 
-Final correct order in `submitMove`:
-1. phase check
-2. turn check
-3. validate move geometry
-4. validate helper (return `invalid-helper` if bad)
-5. apply placements, score, refill
-6. push MoveRecord
-7. apply assist if any
+- [ ] **Step 4: Run tests**
 
-- [ ] **Step 4: Add tests for the happy path** to `tests/assist.test.ts`:
+Run: `npm test -- tests/game.test.ts`
+Expected: all green.
+
+- [ ] **Step 5: Wire `helperSlot` through the WS handler**
+
+In `server/index.ts`, `handleSubmitMove`:
 
 ```ts
-it('credits helper +5 and pushes AssistRecord referencing the move', () => {
-  // Build a game with a known opening word using a deterministic seed/scripted game.
-  // Cheapest approach: reuse the demo or scripted-game scaffolding to play one move,
-  // by directly placing tiles. Use scripted-game helpers if available; otherwise call
-  // submitMove with placements derived from the player's actual rack.
-  const g = new Game({ seed: 1 });
-  g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-  g.startGame();
-  const state = g.snapshot();
-  const submitter = state.turnIndex;
-  const helper: Slot = (((submitter + 1) % 3) as Slot);
-  const helperBefore = state.players[helper].score;
-
-  // Take the first two tiles from submitter's rack and place a horizontal pair on the center.
-  const rack = state.players[submitter].rack;
-  const placements = [
-    { tileId: rack[0]!.id, row: 7, col: 7, playedAs: rack[0]!.letter || 'А' },
-    { tileId: rack[1]!.id, row: 7, col: 8, playedAs: rack[1]!.letter || 'А' },
-  ];
-  const res = g.submitMove(submitter, placements, { helperSlot: helper });
-  // The placement may not form a valid word — accept either accepted or rejected,
-  // but if accepted, helper score must be +5; if rejected, helper score unchanged.
-  const after = g.snapshot();
-  if (res.ok) {
-    expect(after.players[helper].score).toBe(helperBefore + 5);
-    expect(after.events.at(-1)!.kind).toBe('assist');
-    const assist = after.events.at(-1) as AssistRecord;
-    expect(assist.toSlot).toBe(helper);
-    expect(assist.fromSlot).toBe(submitter);
-    expect(after.events[assist.forMoveIndex]!.kind).toBe('move');
-  } else {
-    expect(after.players[helper].score).toBe(helperBefore);
-  }
-});
+const result = game.submitMove(slot, msg.placements, msg.helperSlot);
 ```
 
-If this test is too brittle (random rack), drop it and rely on a more scripted test in Task 3 once the demo script is updated. Either keep it or delete it before commit.
+Run: `npm run typecheck && npm test`
+Expected: green.
 
-- [ ] **Step 5: Sweep `tests/game.test.ts` for `state.history` → `state.events`**
-
-Run: `grep -n "history" tests/game.test.ts`
-For each hit, replace with `events` and add `kind: 'move'` expectations where the test inspects record shape.
-
-- [ ] **Step 6: Run all tests**
-
-Run: `npm test`
-Expected: PASS.
-
-- [ ] **Step 7: Typecheck**
-
-Run: `npm run typecheck`
-Expected: errors only in `server/persistence.ts`, `server/index.ts`, and possibly client (handled in later tasks).
-
-- [ ] **Step 8: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add server/game.ts tests/assist.test.ts tests/game.test.ts
-git commit -m "feat(server): assist credit on submitMove, rename history→events"
+git add server/game.ts server/index.ts shared/types.ts tests/game.test.ts
+git commit -m "feat(engine): assist credit (helperSlot=+5 to helper, AssistRecord in events)"
 ```
 
 ---
 
-## Task 3: Persistence — `GameArchive`, summary loader, archive loader
+## Task 9: Persistence — `GameArchive` (final board + events), summary loader, archive loader, history→events shim
 
 **Files:**
 - Modify: `server/persistence.ts`
-- Modify: `tests/persistence.test.ts` (or create if missing — first check `ls tests/`)
+- Modify: `tests/persistence.test.ts`
 
-- [ ] **Step 1: Write failing tests** in `tests/persistence.test.ts`:
+The current archive on disk is `{ summary, state }`. The new archive is `GameArchive` (flat). `loadActiveGame` accepts either `history` or `events` (one-shot rename shim). Two new functions: `loadArchive(id)` and the renamed/widened `listGameSummaries` (already returns the slim summary — we keep it but make the disk-format read tolerant of both old and new archive shapes).
+
+- [ ] **Step 1: Update `tests/persistence.test.ts`**
+
+Read the existing test file first to see helpers and patterns. Add these tests (and update any existing tests that referenced `state.history` to use `state.events`):
 
 ```ts
-import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import {
-  saveActiveGame,
-  loadActiveGame,
-  archiveFinishedGame,
-  listGameSummaries,
-  loadArchive,
-} from '@server/persistence.js';
-import type { GameState, GameArchive } from '@shared/types';
-
-function makeState(overrides: Partial<GameState> = {}): GameState {
-  return {
-    phase: 'finished',
-    players: [
-      { slot: 0, name: 'A', connected: true, rack: [], rackVisible: true, score: 10 },
-      { slot: 1, name: 'B', connected: true, rack: [], rackVisible: true, score: 20 },
-      { slot: 2, name: 'C', connected: true, rack: [], rackVisible: true, score: 5 },
-    ],
+it('loadActiveGame accepts legacy "history" field and migrates to events on next save', () => {
+  const dir = mkdtempSync(...); // existing pattern
+  const legacy = {
+    phase: 'playing',
+    players: [/* three players */],
     turnIndex: 0,
-    board: Array.from({ length: 15 }, () => Array(15).fill(null)),
+    board: createEmptyBoard(),
     bag: [],
     centerBonusUsed: false,
-    events: [],
-    startedAt: 1000,
-    ...overrides,
+    history: [],          // legacy field
+    startedAt: 1,
   };
-}
-
-let dir: string;
-beforeEach(() => {
-  dir = mkdtempSync(path.join(tmpdir(), 'scrabble-persist-'));
+  writeFileSync(path.join(dir, 'game.json'), JSON.stringify(legacy), 'utf-8');
+  const loaded = loadActiveGame(dir);
+  expect(loaded).not.toBeNull();
+  expect(loaded!.events).toEqual([]);
+  expect((loaded as unknown as { history?: unknown }).history).toBeUndefined();
 });
 
-describe('persistence — archive', () => {
-  it('archiveFinishedGame writes a GameArchive with finalBoard + events', () => {
-    const state = makeState();
-    saveActiveGame(dir, state);
-    const summary = archiveFinishedGame(dir);
-    expect(summary.players[1]!.finalScore).toBe(20);
-    expect(summary.winnerSlot).toBe(1);
+it('archiveFinishedGame writes a flat GameArchive with finalBoard and events', () => {
+  const dir = mkdtempSync(...);
+  // Set up an active game on disk that has at least one move event and a non-empty board.
+  // Simplest path: instantiate a Game, run a move, save, then archive.
+  const g = newStartedGame();
+  // ... apply one move ...
+  saveActiveGame(dir, g.snapshot());
+  const archive = archiveFinishedGame(dir);
+  expect(archive.events.length).toBeGreaterThan(0);
+  expect(archive.finalBoard.length).toBe(15);
+  // Round-trip through the loader.
+  const loaded = loadArchive(dir, archive.id);
+  expect(loaded).not.toBeNull();
+  expect(loaded!.id).toBe(archive.id);
+  expect(loaded!.events.length).toBe(archive.events.length);
+});
 
-    const archive = loadArchive(dir, summary.id);
-    expect(archive).not.toBeNull();
-    expect(archive!.id).toBe(summary.id);
-    expect(archive!.finalBoard.length).toBe(15);
-    expect(archive!.events).toEqual([]);
-  });
-
-  it('listGameSummaries returns just the summary slice (not full state)', () => {
-    saveActiveGame(dir, makeState());
-    archiveFinishedGame(dir);
-    const list = listGameSummaries(dir);
-    expect(list.length).toBe(1);
-    const entry = list[0]!;
-    expect(entry).toHaveProperty('winnerSlot');
-    expect(entry).not.toHaveProperty('finalBoard');
-    expect(entry).not.toHaveProperty('events');
-  });
-
-  it('loadActiveGame accepts legacy `history` field and rewrites as `events`', () => {
-    const state = makeState();
-    // Hand-write a legacy file with `history` instead of `events`.
-    const legacy = { ...state, history: [], events: undefined };
-    delete (legacy as { events?: unknown }).events;
-    const fs = require('node:fs');
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'game.json'), JSON.stringify(legacy));
-
-    const loaded = loadActiveGame(dir);
-    expect(loaded).not.toBeNull();
-    expect(loaded!.events).toEqual([]);
-  });
+it('listGameSummaries returns just the summary slice', () => {
+  // Write a synthetic GameArchive file to history/, then read.
+  const dir = mkdtempSync(...);
+  const histDir = path.join(dir, 'history');
+  mkdirSync(histDir, { recursive: true });
+  const archive: GameArchive = {
+    id: 'g-1', startedAt: 1, finishedAt: 2,
+    players: [/* three */], winnerSlot: 0,
+    finalBoard: createEmptyBoard(),
+    events: [],
+  };
+  writeFileSync(path.join(histDir, 'g-1.json'), JSON.stringify(archive), 'utf-8');
+  const list = listGameSummaries(dir);
+  expect(list).toEqual([{
+    id: 'g-1', startedAt: 1, finishedAt: 2,
+    players: archive.players, winnerSlot: 0,
+  }]);
 });
 ```
 
-- [ ] **Step 2: Run — verify failures**
+Run: `npm test -- tests/persistence.test.ts`
+Expected: FAIL.
 
-Run: `npx vitest run tests/persistence.test.ts`
-Expected: FAIL — `loadArchive` not exported, summary still includes the full state under a `state` field, legacy load doesn't translate.
-
-- [ ] **Step 3: Rewrite `server/persistence.ts`**
+- [ ] **Step 2: Update `server/persistence.ts`**
 
 ```ts
-import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, readdirSync, renameSync } from 'node:fs';
-import path from 'node:path';
 import type { GameState, GameSummary, GameArchive, Slot } from '@shared/types';
 
-const ACTIVE_FILE = 'game.json';
-const HISTORY_DIR = 'history';
-
-export function saveActiveGame(dataDir: string, state: GameState): void {
-  mkdirSync(dataDir, { recursive: true });
-  const final = path.join(dataDir, ACTIVE_FILE);
-  const tmp = `${final}.tmp`;
-  writeFileSync(tmp, JSON.stringify(state), 'utf-8');
-  renameSync(tmp, final);
-}
-
+// loadActiveGame: accept legacy `history` field
 export function loadActiveGame(dataDir: string): GameState | null {
   const file = path.join(dataDir, ACTIVE_FILE);
   if (!existsSync(file)) return null;
@@ -419,32 +863,27 @@ export function loadActiveGame(dataDir: string): GameState | null {
   if (raw.events === undefined && Array.isArray(raw.history)) {
     raw.events = raw.history as GameState['events'];
     delete raw.history;
-    saveActiveGame(dataDir, raw);
   }
   return raw;
 }
 
-function summarize(state: GameState, id: string): GameSummary {
-  const players = state.players.map((p) => ({ slot: p.slot, name: p.name, finalScore: p.score }));
+// archiveFinishedGame: write flat GameArchive
+export function archiveFinishedGame(dataDir: string): GameArchive {
+  const state = loadActiveGame(dataDir);
+  if (!state) throw new Error('No active game to archive');
+  const id = `g-${Date.now()}`;
+  const players = state.players.map((p) => ({
+    slot: p.slot, name: p.name, finalScore: p.score,
+  }));
   const top = Math.max(...players.map((p) => p.finalScore));
   const winners = players.filter((p) => p.finalScore === top);
   const winnerSlot: Slot | null = winners.length === 1 ? winners[0]!.slot : null;
-  return {
+  const archive: GameArchive = {
     id,
     startedAt: state.startedAt ?? Date.now(),
     finishedAt: Date.now(),
     players,
     winnerSlot,
-  };
-}
-
-export function archiveFinishedGame(dataDir: string): GameSummary {
-  const state = loadActiveGame(dataDir);
-  if (!state) throw new Error('No active game to archive');
-  const id = `g-${Date.now()}`;
-  const summary = summarize(state, id);
-  const archive: GameArchive = {
-    ...summary,
     finalBoard: state.board,
     events: state.events,
   };
@@ -452,19 +891,26 @@ export function archiveFinishedGame(dataDir: string): GameSummary {
   mkdirSync(histDir, { recursive: true });
   writeFileSync(path.join(histDir, `${id}.json`), JSON.stringify(archive), 'utf-8');
   rmSync(path.join(dataDir, ACTIVE_FILE));
-  return summary;
+  return archive;
 }
 
+// listGameSummaries: tolerate both old `{summary,state}` and new flat archive
 export function listGameSummaries(dataDir: string): GameSummary[] {
   const histDir = path.join(dataDir, HISTORY_DIR);
   if (!existsSync(histDir)) return [];
   const files = readdirSync(histDir).filter((f) => f.endsWith('.json'));
-  const summaries = files.map<GameSummary>((f) => {
-    const raw = JSON.parse(readFileSync(path.join(histDir, f), 'utf-8')) as Partial<GameArchive> & { summary?: GameSummary };
-    // Legacy {summary, state} format: pull out the inner summary.
-    if (raw.summary) return raw.summary;
-    const { id, startedAt, finishedAt, players, winnerSlot } = raw as GameArchive;
-    return { id, startedAt, finishedAt, players, winnerSlot };
+  const summaries: GameSummary[] = files.map((f) => {
+    const raw = JSON.parse(readFileSync(path.join(histDir, f), 'utf-8')) as
+      | { summary: GameSummary }
+      | GameArchive;
+    if ('summary' in raw) return raw.summary;
+    return {
+      id: raw.id,
+      startedAt: raw.startedAt,
+      finishedAt: raw.finishedAt,
+      players: raw.players,
+      winnerSlot: raw.winnerSlot,
+    };
   });
   summaries.sort((a, b) => b.finishedAt - a.finishedAt);
   return summaries;
@@ -473,49 +919,82 @@ export function listGameSummaries(dataDir: string): GameSummary[] {
 export function loadArchive(dataDir: string, id: string): GameArchive | null {
   const file = path.join(dataDir, HISTORY_DIR, `${id}.json`);
   if (!existsSync(file)) return null;
-  const raw = JSON.parse(readFileSync(file, 'utf-8')) as Partial<GameArchive> & { summary?: GameSummary; state?: GameState };
-  // Legacy {summary, state} format: assemble.
-  if (raw.summary && raw.state) {
+  const raw = JSON.parse(readFileSync(file, 'utf-8')) as
+    | { summary: GameSummary; state: GameState & { history?: unknown } }
+    | GameArchive;
+  if ('summary' in raw) {
+    // Pre-snapshots format: synthesize a GameArchive with a placeholder board/events.
     return {
-      ...raw.summary,
+      id: raw.summary.id,
+      startedAt: raw.summary.startedAt,
+      finishedAt: raw.summary.finishedAt,
+      players: raw.summary.players,
+      winnerSlot: raw.summary.winnerSlot,
       finalBoard: raw.state.board,
-      events: (raw.state.events ?? (raw.state as { history?: GameState['events'] }).history ?? []) as GameState['events'],
+      events: (raw.state.events ?? raw.state.history ?? []) as GameEvent[],
     };
   }
-  return raw as GameArchive;
+  return raw;
 }
 ```
 
-- [ ] **Step 4: Run tests**
+Add the `GameEvent` import if needed. Update `archiveFinishedGame`'s callers in `server/index.ts` only if they relied on the old return shape (they currently don't — it's never called there yet; M5a will introduce the call site in Task 10).
 
-Run: `npm test`
-Expected: PASS (persistence + assist + everything else).
+The persistence comment about `lastSnapshot` not being persisted stays as-is.
+
+- [ ] **Step 3: Run tests**
+
+Run: `npm test -- tests/persistence.test.ts`
+Expected: green.
+
+- [ ] **Step 4: Run full suite**
+
+Run: `npm run typecheck && npm test`
+Expected: green.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add server/persistence.ts tests/persistence.test.ts
-git commit -m "feat(server): GameArchive — finalBoard + events in history files; loaders"
+git commit -m "feat(persistence): GameArchive (finalBoard+events); loadArchive; history→events shim"
 ```
 
 ---
 
-## Task 4: Server wiring — endGame archives, HTTP endpoints, broadcast plumbing
+## Task 10: Server — call `archiveFinishedGame` on `endGame`; HTTP endpoints `/api/history` and `/api/history/:id`
 
 **Files:**
 - Modify: `server/index.ts`
-- Modify: `tests/server-http.test.ts` (create if missing)
+- Modify: `tests/integration/m4b-server.test.ts` (or new `tests/integration/m5a-server.test.ts` — pick whichever fits naming better; integration tests already cluster by milestone, so a new file is fine)
 
-- [ ] **Step 1: Inspect current `server/index.ts`** to find:
-  - The Express `app` instance (where routes are registered).
-  - The `endGame` switch case (currently returns `'not yet implemented'`).
-  - The `dataDir` value used for persistence.
+The engine sets `phase = 'finished'` on `endGame`. The server (which is the I/O boundary) should react to that by archiving and clearing the active game so the next `data/game.json` boot sees nothing.
 
-Run: `grep -n "app\.\|dataDir\|endGame\|saveActive\|archiveFinish" server/index.ts`
+- [ ] **Step 1: Hook archive into the WS handler**
 
-- [ ] **Step 2: Add HTTP endpoints**
+In `server/index.ts`, replace the existing `endGame` handler clause:
 
-In the same file (near the existing static-file middleware, before the WS upgrade), add:
+```ts
+case 'endGame':
+  handleEngineAction(ws, () => game!.endGame(slot));
+  // After phase flips to 'finished' on disk, archive and clear.
+  if (game !== null && game.snapshot().phase === 'finished') {
+    try {
+      archiveFinishedGame(dataDir);
+    } catch (err) {
+      console.error('[scrabble] archiveFinishedGame failed:', err);
+    }
+    game = null;
+  }
+  return;
+```
+
+Note: `handleEngineAction` already calls `saveActiveGame`, so by the time we read `phase === 'finished'` the file on disk has the finished state — `archiveFinishedGame` reads it back and writes the archive, then deletes `game.json`.
+
+Add the import at the top: `import { saveActiveGame, loadActiveGame, archiveFinishedGame, listGameSummaries, loadArchive } from './persistence.js';`.
+
+- [ ] **Step 2: Add the HTTP endpoints**
+
+Below the existing static-serving block in `startServer`:
 
 ```ts
 app.get('/api/history', (_req, res) => {
@@ -524,7 +1003,7 @@ app.get('/api/history', (_req, res) => {
 
 app.get('/api/history/:id', (req, res) => {
   const archive = loadArchive(dataDir, req.params.id);
-  if (!archive) {
+  if (archive === null) {
     res.status(404).json({ error: 'not found' });
     return;
   }
@@ -532,458 +1011,699 @@ app.get('/api/history/:id', (req, res) => {
 });
 ```
 
-Add the necessary imports at top:
+These must be registered **before** the catch-all `app.get('*', ...)` static fallback. Move the `app.get('*', ...)` to run *after* the API routes.
+
+- [ ] **Step 3: Add integration test**
+
+Create `tests/integration/m5a-server.test.ts`. Use the existing `tests/integration/m4-server.test.ts` or `m4b-server.test.ts` as the boilerplate template (three-client harness, `startServer({ port: 0, dataDir })`, etc.). Cover:
 
 ```ts
-import { listGameSummaries, loadArchive } from './persistence.js';
-```
+describe('M5a — archive + history endpoints', () => {
+  it('endGame archives a flat GameArchive and clears game.json', async () => {
+    // 1. Start server, seat 3 clients, wait for 'state' phase: 'playing'.
+    // 2. Have slot 0 send { type: 'endGame' }; wait for the broadcast 'state' phase: 'finished'.
+    // 3. Assert data/game.json no longer exists; data/history/<id>.json exists with `events`/`finalBoard`/no `summary` wrapper.
+  });
 
-(`saveActiveGame` and `archiveFinishedGame` are likely already imported.)
+  it('GET /api/history returns the summary list', async () => {
+    // After arrange-archive, fetch http://localhost:<port>/api/history
+    // Expect a 200 with one entry: { id, startedAt, finishedAt, players, winnerSlot }.
+  });
 
-- [ ] **Step 3: Wire `endGame`**
-
-Replace the `case 'endGame':` arm:
-
-```ts
-case 'endGame': {
-  game.endGame(slot);
-  saveActiveGame(dataDir, game.snapshot());
-  const summary = archiveFinishedGame(dataDir);
-  broadcastState();
-  // Reset for next game lifecycle is handled when a new game starts; for M5 we just archive.
-  // Optional: notify the lobby with the new summary list (broadcastState already includes recentGames).
-  void summary;
-  return;
-}
-```
-
-Note: do NOT auto-create a new `Game` here — keep the server in `finished` phase until the operator restarts. The lobby already shows `recentGames` on next boot via `listGameSummaries`.
-
-- [ ] **Step 4: Wire submit's optional `helperSlot`**
-
-Find `handleSubmitMove` (or similar). Pass `{ helperSlot: msg.helperSlot }` through to `game.submitMove`. If the result is `ok: false` with `kind: 'invalid-helper'`, send a `moveRejected` with reason `'Помощник указан неверно'` (matching existing Russian-text style if present; otherwise English `'invalid helper'`).
-
-```ts
-const result = game.submitMove(slot, msg.placements, { helperSlot: msg.helperSlot });
-```
-
-Extend `humanReadableReason` to handle `'invalid-helper'`:
-
-```ts
-case 'invalid-helper': return 'Invalid helper slot';
-```
-
-- [ ] **Step 5: HTTP smoke test** in `tests/server-http.test.ts`:
-
-```ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { startServer } from '@server/index.js'; // adjust to actual exported name
-
-let server: Awaited<ReturnType<typeof startServer>>;
-let dir: string;
-
-beforeEach(async () => {
-  dir = mkdtempSync(path.join(tmpdir(), 'scrabble-http-'));
-  server = await startServer({ port: 0, dataDir: dir }); // adjust args
-});
-afterEach(async () => { await server.close(); rmSync(dir, { recursive: true, force: true }); });
-
-describe('history HTTP', () => {
-  it('GET /api/history returns [] when no archives exist', async () => {
-    const res = await fetch(`http://127.0.0.1:${server.port}/api/history`);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual([]);
+  it('GET /api/history/:id returns the full GameArchive', async () => {
+    // Fetch http://localhost:<port>/api/history/<id>
+    // Expect events array and a 15x15 finalBoard.
   });
 
   it('GET /api/history/:id 404s for unknown id', async () => {
-    const res = await fetch(`http://127.0.0.1:${server.port}/api/history/nope`);
-    expect(res.status).toBe(404);
+    // Fetch /api/history/g-does-not-exist → 404.
   });
 });
 ```
 
-If `startServer` does not accept `dataDir` as an option today, look at the existing signature and either pass through env var `DATA_DIR` (set via `process.env.DATA_DIR = dir` before calling) or thread the option through. Match what already exists; do not invent a new API.
-
-- [ ] **Step 6: Run tests + typecheck**
-
-Run: `npm test && npm run typecheck`
+Run: `npm test -- tests/integration/m5a-server.test.ts`
 Expected: PASS.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add server/index.ts tests/server-http.test.ts
-git commit -m "feat(server): /api/history endpoints; endGame archives + broadcasts"
-```
-
----
-
-## Task 5: Demo script — at least one assisted move
-
-**Files:**
-- Modify: `scripts/demo-game.ts`
-
-- [ ] **Step 1: Read the current script** to find an existing `submitMove` call.
-
-Run: `grep -n "submitMove" scripts/demo-game.ts`
-
-- [ ] **Step 2: Add a `helperSlot`** to one of the submitMove calls (e.g., the second one): pass `{ helperSlot: ((slot + 1) % 3) as Slot }`. After the move, log the helper's score change and the assist event.
-
-```ts
-const res = g.submitMove(currentSlot, placements, { helperSlot: ((currentSlot + 1) % 3) as Slot });
-// existing logging…
-const last = g.snapshot().events.at(-1);
-if (last && last.kind === 'assist') {
-  console.log(`  ↳ помог: slot ${last.toSlot} +${last.points}`);
-}
-```
-
-- [ ] **Step 3: Run the demo**
-
-Run: `npm run demo`
-Expected: full game prints to stdout including at least one `↳ помог: slot N +5` line.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add scripts/demo-game.ts
-git commit -m "chore(demo): include an assisted move and print assist events"
+git add server/index.ts tests/integration/m5a-server.test.ts
+git commit -m "feat(server): archive on endGame; GET /api/history and /api/history/:id"
 ```
 
 ---
 
-## Task 6: Client store + WS — `events` rename, helper plumbing
+## Task 11: Client — store + ws plumbing for events and helperSlot
 
 **Files:**
 - Modify: `client/src/store.ts`
 - Modify: `client/src/ws.ts`
 
-- [ ] **Step 1: Audit client for `state.history`**
+The store already takes a full `GameState` snapshot, so the rename `history → events` is automatic on the wire. The only client-side work here is:
+1. A `pendingHelperSlot: Slot | null` field in the store, with setter, cleared on `clearPending`.
+2. A new `sendSubmitMove(placements, helperSlot)` helper (mirroring the existing `sendPass` etc.) so call sites stop using `send({ type: 'submitMove', ... })` directly.
 
-Run: `grep -rn "\.history\b" client/src`
-Replace each with `.events`.
+- [ ] **Step 1: Extend the store**
 
-- [ ] **Step 2: Add helper-selection state to the store**
+In `client/src/store.ts`:
 
 ```ts
 type Store = {
-  // …existing fields
-  pendingHelper: Slot | null;
-  setPendingHelper: (slot: Slot | null) => void;
+  // ... existing fields ...
+  pendingHelperSlot: Slot | null;
+  setPendingHelperSlot: (slot: Slot | null) => void;
+  // ...
 };
-// in the create() body:
-pendingHelper: null,
-setPendingHelper: (pendingHelper) => set({ pendingHelper }),
-// also clear in clearPending:
-clearPending: () => set({ pendingPlacements: [], pendingHelper: null, lastError: null }),
+
+export const useGameStore = create<Store>((set) => ({
+  // ... existing ...
+  pendingHelperSlot: null,
+  setPendingHelperSlot: (pendingHelperSlot) => set({ pendingHelperSlot }),
+  clearPending: () => set({ pendingPlacements: [], pendingHelperSlot: null, lastError: null }),
+  // ...
+}));
 ```
 
-- [ ] **Step 3: Update `client/src/ws.ts`** so the `submitMove` send function accepts and forwards an optional `helperSlot`:
+- [ ] **Step 2: Add a `sendSubmitMove` helper**
+
+In `client/src/ws.ts`:
 
 ```ts
-export function sendSubmitMove(placements: Placement[], helperSlot?: Slot) {
-  send({ type: 'submitMove', placements, helperSlot });
+import type { ClientMessage, ServerMessage, Slot, Placement } from '@shared/types';
+
+// ...
+
+export function sendSubmitMove(placements: Placement[], helperSlot: Slot | null): void {
+  const msg: Extract<ClientMessage, { type: 'submitMove' }> =
+    helperSlot === null
+      ? { type: 'submitMove', placements }
+      : { type: 'submitMove', placements, helperSlot };
+  send(msg);
 }
 ```
 
-If a generic `send(msg)` is what's there today, keep it generic and let the call site build the message — match the existing pattern.
+- [ ] **Step 3: Update `PlayerCard.tsx`'s submit call to feed the new helper**
 
-- [ ] **Step 4: Typecheck**
+This is a lightweight wire-up; the *modal* lands in Task 12. For now keep the direct submit but pass `null`:
 
-Run: `npm run typecheck`
-Expected: PASS (or only client-component errors handled in next tasks).
+```ts
+import { sendSubmitMove } from '../ws.js';
+// ...
+function onSubmit() {
+  const placements = pending.map((p) => ({ tileId: p.tileId, row: p.row, col: p.col, playedAs: p.playedAs }));
+  sendSubmitMove(placements, null);  // helper picker arrives in Task 12
+}
+```
+
+- [ ] **Step 4: Run typecheck + tests**
+
+Run: `npm run typecheck && npm test`
+Expected: green.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add client/src/store.ts client/src/ws.ts
-git commit -m "feat(client): pendingHelper state; helperSlot through submit"
+git add client/src/store.ts client/src/ws.ts client/src/components/PlayerCard.tsx
+git commit -m "feat(client): pendingHelperSlot in store; sendSubmitMove helper"
 ```
 
 ---
 
-## Task 7: Client UI — Helper picker on submit
+## Task 12: Client — submit confirm modal with helper picker
 
 **Files:**
-- Modify: the component that renders the Submit/Recall buttons (likely `client/src/App.tsx` or a controls block within it — locate via `grep -n "Submit" client/src/**/*.tsx`)
+- Create: `client/src/components/SubmitConfirmModal.tsx`
+- Modify: `client/src/components/PlayerCard.tsx`
 
-- [ ] **Step 1: Locate the Submit button**
+Replace `PlayerCard`'s direct submit with a confirm modal that shows the words/score preview and the "Кто помог?" picker. The modal reuses the existing `ConfirmModal` shell (read it first to match the visual pattern).
 
-Run: `grep -rn "Submit\|submitMove\|sendSubmitMove" client/src`
+The score preview is awkward server-authoritative-wise — we don't want to duplicate scoring logic on the client. The pragmatic family-app answer: show the placed letters and a **count** of tiles, no preview score. The label can read e.g. *"Сходить (5 плиток)?"*. If you want to preview the formed words, that requires running validation client-side, which violates the server-authoritative principle in CLAUDE.md — skip it.
 
-- [ ] **Step 2: Add a helper-picker dropdown next to Submit**
-
-Render only when `pendingPlacements.length > 0` and it's the local player's turn.
+- [ ] **Step 1: Create the modal**
 
 ```tsx
-const others = state.players.filter((p) => p.slot !== mySlot);
-// …in JSX, near the Submit button:
-<label className="text-sm">
-  Помог:&nbsp;
-  <select
-    value={pendingHelper ?? ''}
-    onChange={(e) => setPendingHelper(e.target.value === '' ? null : Number(e.target.value) as Slot)}
-    className="border rounded px-1"
-  >
-    <option value="">никто</option>
-    {others.map((p) => (
-      <option key={p.slot} value={p.slot}>{p.name}</option>
-    ))}
-  </select>
-</label>
+// client/src/components/SubmitConfirmModal.tsx
+import type { Slot } from '@shared/types';
+import { useGameStore } from '../store.js';
+
+type Props = {
+  open: boolean;
+  mySlot: Slot;
+  otherPlayers: { slot: Slot; name: string }[];
+  tileCount: number;
+  onCancel: () => void;
+  onConfirm: () => void;
+};
+
+export function SubmitConfirmModal({ open, otherPlayers, tileCount, onCancel, onConfirm }: Props) {
+  const helper = useGameStore((s) => s.pendingHelperSlot);
+  const setHelper = useGameStore((s) => s.setPendingHelperSlot);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="w-80 rounded-lg bg-tile p-4 shadow-lg">
+        <p className="mb-3 text-base font-semibold text-ink">
+          Сходить? ({tileCount} {pluralRu(tileCount, 'плитка', 'плитки', 'плиток')})
+        </p>
+        <fieldset className="mb-4">
+          <legend className="mb-2 text-sm text-ink/70">Кто помог?</legend>
+          <label className="mb-1 flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="helper"
+              checked={helper === null}
+              onChange={() => setHelper(null)}
+            />
+            никто
+          </label>
+          {otherPlayers.map((p) => (
+            <label key={p.slot} className="mb-1 flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="helper"
+                checked={helper === p.slot}
+                onChange={() => setHelper(p.slot)}
+              />
+              {p.name}
+            </label>
+          ))}
+        </fieldset>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded bg-ink/10 px-3 py-1.5 text-sm hover:bg-ink/20"
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded bg-sage px-3 py-1.5 text-sm font-semibold text-ink shadow hover:bg-sage-light"
+          >
+            Сходить
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function pluralRu(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
 ```
 
-When Submit is clicked, pass `pendingHelper ?? undefined` as the `helperSlot` argument.
+(Match Tailwind class names to existing components — read `ConfirmModal.tsx` first and align colors / spacing with it. The above uses the same `bg-tile`, `bg-sage`, `bg-ink/10` tokens as the rest of the codebase.)
 
-- [ ] **Step 3: Manual UI smoke**
+- [ ] **Step 2: Wire the modal into `PlayerCard.tsx`**
+
+```tsx
+import { useState } from 'react';
+import { SubmitConfirmModal } from './SubmitConfirmModal.js';
+import { sendSubmitMove } from '../ws.js';
+// ...
+
+export function PlayerCard({ player, isCurrentTurn }: Props) {
+  const identity = useGameStore((s) => s.identity);
+  const pending = useGameStore((s) => s.pendingPlacements);
+  const helper = useGameStore((s) => s.pendingHelperSlot);
+  const clearPending = useGameStore((s) => s.clearPending);
+  const allPlayers = useGameStore((s) => s.state?.players ?? []);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const isMine = identity?.slot === player.slot;
+  const showButtons = isMine && isCurrentTurn && pending.length > 0;
+  const bg = isCurrentTurn ? 'bg-peach' : 'bg-tile';
+
+  const others = allPlayers
+    .filter((p) => identity !== null && p.slot !== identity.slot)
+    .map((p) => ({ slot: p.slot, name: p.name || `Slot ${p.slot}` }));
+
+  function onConfirm() {
+    const placements = pending.map((p) => ({
+      tileId: p.tileId, row: p.row, col: p.col, playedAs: p.playedAs,
+    }));
+    sendSubmitMove(placements, helper);
+    setConfirmOpen(false);
+  }
+
+  return (
+    <div className={`rounded-md ${bg} p-3 shadow-sm`}>
+      {/* existing header + Rack */}
+      {showButtons && (
+        <div className="mt-3 flex gap-2">
+          <button type="button" onClick={() => setConfirmOpen(true)} className="rounded bg-sage ...">Сходить</button>
+          <button type="button" onClick={clearPending} className="rounded bg-ink/10 ...">Вернуть</button>
+        </div>
+      )}
+      {identity !== null && (
+        <SubmitConfirmModal
+          open={confirmOpen}
+          mySlot={identity.slot}
+          otherPlayers={others}
+          tileCount={pending.length}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={onConfirm}
+        />
+      )}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 3: Manual smoke**
 
 Run: `npm run dev`
-Open three tabs with `?slot=0&name=A`, `?slot=1&name=B`, `?slot=2&name=C`. As the active slot, place tiles, pick "Помог: B", click Submit. Verify both your score and B's score update.
+- Open three tabs (`?slot=0/1/2`). Place a few tiles as slot 0. Click "Сходить" → modal opens → pick "никто" or another player → confirm. Verify: move accepts; if helper chosen, that player's score gains +5.
+- Repeat with helper === yourself (UI doesn't allow this — the picker only lists the other two). Sanity OK.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Run typecheck + tests**
+
+Run: `npm run typecheck && npm test`
+Expected: green.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add client/src/App.tsx  # adjust to actual file
-git commit -m "feat(client): helper picker beside Submit"
+git add client/src/components/SubmitConfirmModal.tsx client/src/components/PlayerCard.tsx
+git commit -m "feat(client): submit confirm modal with helper picker"
 ```
 
 ---
 
-## Task 8: Client UI — `<MoveLog>` panel
+## Task 13: Client — `<MoveLog>` component in the right rail
 
 **Files:**
 - Create: `client/src/components/MoveLog.tsx`
-- Modify: `client/src/App.tsx` to mount it
+- Modify: `client/src/App.tsx`
+
+Renders `state.events` newest-at-bottom; auto-scrolls on append. Lives in the right rail below the player cards (read `App.tsx` first to find the existing right-column layout and append the log inside it).
 
 - [ ] **Step 1: Create the component**
 
 ```tsx
-import type { GameEvent, Player, Slot } from '@shared/types';
+// client/src/components/MoveLog.tsx
 import { useEffect, useRef } from 'react';
+import type { GameEvent, GameState } from '@shared/types';
 
-type Props = { events: GameEvent[]; players: readonly Player[] };
+type Props = { state: GameState };
 
-const nameOf = (players: readonly Player[], slot: Slot) =>
-  players.find((p) => p.slot === slot)?.name ?? `slot ${slot}`;
-
-export function MoveLog({ events, players }: Props) {
+export function MoveLog({ state }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (ref.current) ref.current.scrollTop = ref.current.scrollHeight;
-  }, [events.length]);
+    if (ref.current === null) return;
+    ref.current.scrollTop = ref.current.scrollHeight;
+  }, [state.events.length]);
+
+  const nameOf = (slot: number) => state.players[slot]?.name || `Slot ${slot}`;
 
   return (
-    <div ref={ref} className="h-64 overflow-y-auto border rounded p-2 text-sm font-mono">
-      {events.length === 0 && <div className="text-gray-400">No moves yet</div>}
-      {events.map((ev, i) => {
-        if (ev.kind === 'move') {
-          const words = ev.wordsFormed.map((w) => w.word).join(', ');
-          return (
-            <div key={i}>
-              <span className="font-semibold">{nameOf(players, ev.slot)}</span>
-              {' • '}
-              <span>{words}</span>
-              {' — '}
-              <span>{ev.totalScore}</span>
-              {ev.bingoBonus && <span className="ml-1 px-1 rounded bg-yellow-200">+10 бинго</span>}
-            </div>
-          );
-        }
-        return (
-          <div key={i} className="pl-4 text-gray-600">
-            ↳ помог{ev.toSlot === 0 ? 'ла' : ''}а {nameOf(players, ev.toSlot)} — +{ev.points}
-          </div>
-        );
-        // (Russian gender suffix is approximate; refine later.)
-      })}
+    <div
+      ref={ref}
+      className="flex-1 min-h-0 overflow-y-auto rounded-md bg-tile p-2 text-sm text-ink shadow-sm"
+      data-testid="move-log"
+    >
+      {state.events.length === 0 ? (
+        <p className="text-ink/50">Ещё нет ходов</p>
+      ) : (
+        <ol className="space-y-0.5">
+          {state.events.map((e, i) => (
+            <li key={i}>{renderEvent(e, nameOf)}</li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNode {
+  switch (e.kind) {
+    case 'move': {
+      const words = e.wordsFormed.map((w) => w.word).join(', ');
+      return (
+        <span>
+          <strong>{nameOf(e.slot)}</strong> • {words || '—'} — <span className="tabular-nums">{e.totalScore}</span>
+          {e.bingoBonus && <span className="ml-1 rounded bg-sage px-1 text-xs">+10 бинго</span>}
+        </span>
+      );
+    }
+    case 'assist':
+      return (
+        <span className="ml-4 text-ink/60">↳ помог{femEnding(nameOf(e.toSlot))} {nameOf(e.toSlot)} — +{e.points}</span>
+      );
+    case 'pass':
+      return <span><strong>{nameOf(e.slot)}</strong> • пас</span>;
+    case 'redraw': {
+      const reason = e.reason === 'allVowels' ? 'все гласные' : 'все согласные';
+      return (
+        <span><strong>{nameOf(e.slot)}</strong> • обмен ({reason}, {e.tileCount})</span>
+      );
+    }
+    case 'claimBlank': {
+      const cell = `${'abcdefghijklmno'[e.col]}${e.row + 1}`;
+      return <span><strong>{nameOf(e.slot)}</strong> • ★→{e.letterAs} на {cell}</span>;
+    }
+    case 'endGame': {
+      const cause =
+        e.cause === 'playerEnded' ? `${nameOf(e.slot)} завершил` :
+        e.cause === 'bagEmptyAndRackEmpty' ? 'закончились буквы' :
+        'шесть пасов';
+      return <em className="text-ink/70">Игра окончена ({cause})</em>;
+    }
+    case 'revert':
+      return <span className="ml-4 text-ink/50 line-through">↳ отменено</span>;
+  }
+}
+
+// Best-effort feminine ending for "помог/помогла". Without per-player gender, we
+// can't be precise — this is a tiny family app, so use a simple heuristic:
+// names ending in 'а' or 'я' get the feminine form.
+function femEnding(name: string): string {
+  const last = name.trim().slice(-1).toLowerCase();
+  return last === 'а' || last === 'я' ? 'ла' : '';
+}
+```
+
+(If the family-config carries gender per player, prefer that — read `server/family.ts` and `data/family.example.json`. If not, the heuristic above is good enough for М5а.)
+
+- [ ] **Step 2: Mount the log in `App.tsx`**
+
+Read `client/src/App.tsx` and find the right column where `<PlayerCard>`s are rendered. Append `<MoveLog state={state} />` immediately after the three cards, inside the same flex column. The column should be `flex flex-col` so `flex-1 min-h-0` on the log makes it fill the remaining height with internal scroll.
+
+- [ ] **Step 3: Manual smoke**
+
+Run: `npm run dev`
+- Place a move → log shows `Имя • СЛОВО — N`.
+- Pass → `Имя • пас`.
+- Redraw (rig an all-vowel rack via DevTools or just play to it) → log shows `обмен (все гласные, 7)`.
+- Claim a blank → log shows `★→Б на e7`.
+- Submit with helper → log shows move plus indented `↳ помогла Имя — +5`.
+- Revert → log shows `↳ отменено` lines.
+- End game → italic terminal line.
+
+- [ ] **Step 4: Run typecheck + tests**
+
+Run: `npm run typecheck && npm test`
+Expected: green.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add client/src/components/MoveLog.tsx client/src/App.tsx
+git commit -m "feat(client): MoveLog panel in right rail under player cards"
+```
+
+---
+
+## Task 13b: Client — bag-remaining indicator
+
+**Files:**
+- Create: `client/src/components/BagIndicator.tsx`
+- Modify: `client/src/App.tsx`
+
+A tiny chip showing `Мешок: N` where N is `state.bag.length`. Mounted at the top of the right rail (above the player cards), in-game only.
+
+- [ ] **Step 1: Create the component**
+
+```tsx
+// client/src/components/BagIndicator.tsx
+type Props = { count: number };
+
+export function BagIndicator({ count }: Props) {
+  return (
+    <div className="rounded-md bg-tile px-3 py-1.5 text-sm text-ink shadow-sm">
+      Мешок: <span className="tabular-nums font-semibold">{count}</span>
     </div>
   );
 }
 ```
 
-- [ ] **Step 2: Mount in App**
+- [ ] **Step 2: Mount above the player cards in `App.tsx`**
 
-Wherever the board + player cards are laid out, add:
+In the right column, before the first `<PlayerCard>`:
 
 ```tsx
-{state && <MoveLog events={state.events} players={state.players} />}
+<BagIndicator count={state.bag.length} />
 ```
 
-Place it under the board or in a side column — match the existing layout grid.
+Don't render it in `PastGamesDetail` (a finished archive's bag is uninteresting).
 
-- [ ] **Step 3: Manual UI check**
+- [ ] **Step 3: Manual smoke**
 
-Run `npm run dev`, play a couple of moves with one assist. Log shows them in order; assist line is indented under its move; auto-scrolls.
+`npm run dev` — verify the chip shows the starting count (104 minus 21 dealt = 83 at game start) and decreases as tiles are played, increases on redraw.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add client/src/components/MoveLog.tsx client/src/App.tsx
-git commit -m "feat(client): live MoveLog panel"
+git add client/src/components/BagIndicator.tsx client/src/App.tsx
+git commit -m "feat(client): bag-remaining indicator above player cards"
 ```
 
 ---
 
-## Task 9: Client UI — Past Games viewer
+## Task 14: Client — Past Games viewer (list + detail)
 
 **Files:**
-- Create: `client/src/PastGames.tsx`
-- Modify: `client/src/App.tsx` (or `main.tsx`) — add a route or a toggle
+- Create: `client/src/components/PastGamesList.tsx`
+- Create: `client/src/components/PastGamesDetail.tsx`
+- Modify: `client/src/App.tsx`
 
-- [ ] **Step 1: Decide route mechanism**
+No router dependency in the existing project (read `App.tsx` to confirm — if there's no router, we'll do a tiny URL-hash router locally rather than adding `react-router`). The trigger is a button on the lobby screen ("Прошлые игры") and on the in-game screen (a small link in the top-right). Detail view is reached by clicking a list row.
 
-This project does not use react-router (verify with `grep -rn "react-router" client/`). If absent, use a simple URL-based switch in `App.tsx`:
+The detail view re-renders the final board read-only. The existing `<Board>` component is currently interactive (drop targets, drag handlers). Pass a `readOnly` prop and gate dnd-kit registration behind it. (Read `Board.tsx` first to see the dnd hooks; it should be a small change to short-circuit them when read-only.)
 
-```tsx
-const view = new URLSearchParams(location.search).get('view');
-if (view === 'past') return <PastGames />;
-```
-
-A button on the missing-params/lobby screen sets `?view=past`.
-
-- [ ] **Step 2: Create `PastGames.tsx`**
+- [ ] **Step 1: Add a tiny hash-based view switch in `App.tsx`**
 
 ```tsx
 import { useEffect, useState } from 'react';
-import type { GameSummary, GameArchive } from '@shared/types';
-import { Board } from './components/Board';
-import { MoveLog } from './components/MoveLog';
-
-export function PastGames() {
-  const [summaries, setSummaries] = useState<GameSummary[] | null>(null);
-  const [open, setOpen] = useState<GameArchive | null>(null);
-
+// ...
+export default function App() {
+  const [route, setRoute] = useState(() => window.location.hash);
   useEffect(() => {
-    void fetch('/api/history').then((r) => r.json()).then(setSummaries);
+    const onChange = () => setRoute(window.location.hash);
+    window.addEventListener('hashchange', onChange);
+    return () => window.removeEventListener('hashchange', onChange);
   }, []);
 
-  if (open) {
-    return (
-      <div className="p-4">
-        <button onClick={() => setOpen(null)} className="mb-3 underline">← back</button>
-        <h2 className="text-lg font-semibold mb-2">
-          {new Date(open.finishedAt).toLocaleString()} — winner: {
-            open.winnerSlot === null ? 'tie' : open.players.find((p) => p.slot === open.winnerSlot)?.name
-          }
-        </h2>
-        <div className="flex gap-4">
-          {/* Reuse Board in non-interactive mode: pass board prop, omit drag/drop wiring. */}
-          <Board board={open.finalBoard} interactive={false} />
-          <div className="flex-1">
-            <ul className="mb-3">
-              {open.players.map((p) => (
-                <li key={p.slot}>{p.name}: {p.finalScore}</li>
-              ))}
-            </ul>
-            <MoveLog
-              events={open.events}
-              players={open.players.map((p) => ({
-                slot: p.slot, name: p.name, connected: false, rack: [], rackVisible: false, score: p.finalScore,
-              }))}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  if (route === '#past') return <PastGamesList />;
+  if (route.startsWith('#past/')) return <PastGamesDetail id={route.slice('#past/'.length)} />;
+
+  return /* existing main render */;
+}
+```
+
+Add a "Прошлые игры" link/button in the existing lobby/`MissingParams`/in-game header. The link's href is `#past`.
+
+- [ ] **Step 2: `PastGamesList.tsx`**
+
+```tsx
+import { useEffect, useState } from 'react';
+import type { GameSummary } from '@shared/types';
+
+export function PastGamesList() {
+  const [items, setItems] = useState<GameSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/history')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))))
+      .then((data: GameSummary[]) => setItems(data))
+      .catch((e: Error) => setError(e.message));
+  }, []);
 
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-semibold mb-3">Прошлые игры</h1>
-      {summaries === null && <div>Loading…</div>}
-      {summaries !== null && summaries.length === 0 && <div>No games yet.</div>}
-      <ul className="space-y-1">
-        {summaries?.map((s) => (
-          <li key={s.id}>
-            <button
-              className="underline text-left"
-              onClick={() => fetch(`/api/history/${s.id}`).then((r) => r.json()).then(setOpen)}
-            >
-              {new Date(s.finishedAt).toLocaleString()} — {s.players.map((p) => `${p.name}:${p.finalScore}`).join(' / ')}
-              {s.winnerSlot !== null && ` — winner: ${s.players.find((p) => p.slot === s.winnerSlot)?.name}`}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <main className="mx-auto max-w-2xl p-6">
+      <header className="mb-4 flex items-baseline justify-between">
+        <h1 className="text-xl font-semibold text-ink">Прошлые игры</h1>
+        <a href="#" className="text-sm text-ink/70 hover:underline">← назад</a>
+      </header>
+      {error !== null && <p className="text-red-700">Ошибка: {error}</p>}
+      {items === null && error === null && <p>Загрузка…</p>}
+      {items !== null && items.length === 0 && <p>Пока нет архивных игр.</p>}
+      {items !== null && items.length > 0 && (
+        <ul className="space-y-2">
+          {items.map((g) => (
+            <li key={g.id} className="rounded bg-tile p-3 shadow-sm">
+              <a href={`#past/${g.id}`} className="block hover:underline">
+                <div className="text-sm text-ink/70">{new Date(g.finishedAt).toLocaleString('ru-RU')}</div>
+                <div className="text-base">
+                  {g.players.map((p) => `${p.name} — ${p.finalScore}`).join(' · ')}
+                </div>
+                <div className="text-sm text-ink/70">
+                  Победитель: {g.winnerSlot === null ? 'ничья' : g.players.find((p) => p.slot === g.winnerSlot)?.name}
+                </div>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </main>
   );
 }
 ```
 
-- [ ] **Step 3: Make `<Board>` accept an `interactive` prop**
-
-Open `client/src/components/Board.tsx`. Add an optional `interactive?: boolean` prop (default `true`). When `false`, render the same cells/tiles but skip the DnD context wiring. Keep the change minimal — wrap the DnD bits in a conditional, do not duplicate the JSX tree.
-
-If this becomes more invasive than expected, a pragmatic alternative: copy the cell-rendering block into a small `<StaticBoard>` component and use it in `PastGames`. Choose whichever yields fewer lines changed.
-
-- [ ] **Step 4: Add an entry-point button**
-
-In `MissingParams.tsx` or wherever the lobby screen lives, add:
+- [ ] **Step 3: `PastGamesDetail.tsx`**
 
 ```tsx
-<a href="?view=past" className="underline">Посмотреть прошлые игры</a>
+import { useEffect, useState } from 'react';
+import type { GameArchive, GameState } from '@shared/types';
+import { Board } from './Board.js';
+import { MoveLog } from './MoveLog.js';
+
+export function PastGamesDetail({ id }: { id: string }) {
+  const [archive, setArchive] = useState<GameArchive | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/history/${encodeURIComponent(id)}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`${r.status}`))))
+      .then((data: GameArchive) => setArchive(data))
+      .catch((e: Error) => setError(e.message));
+  }, [id]);
+
+  if (error !== null) return <p className="p-6 text-red-700">Ошибка: {error}</p>;
+  if (archive === null) return <p className="p-6">Загрузка…</p>;
+
+  // Synthesize a minimal GameState for <MoveLog>.
+  const fakeState: GameState = {
+    phase: 'finished',
+    players: archive.players.map((p) => ({
+      slot: p.slot, name: p.name, connected: false,
+      rack: [], rackVisible: false, score: p.finalScore,
+      redrawEligible: false, canRevert: false,
+    })) as GameState['players'],
+    turnIndex: 0,
+    board: archive.finalBoard,
+    bag: [],
+    centerBonusUsed: false,
+    events: archive.events,
+    startedAt: archive.startedAt,
+  };
+
+  return (
+    <main className="grid grid-cols-[auto_18rem] gap-4 p-4">
+      <div>
+        <header className="mb-2 flex items-baseline justify-between">
+          <h1 className="text-lg font-semibold">
+            {new Date(archive.finishedAt).toLocaleString('ru-RU')}
+          </h1>
+          <a href="#past" className="text-sm text-ink/70 hover:underline">← назад</a>
+        </header>
+        <Board state={fakeState} readOnly />
+      </div>
+      <aside className="flex flex-col gap-2">
+        <ul className="space-y-1 rounded bg-tile p-2 text-sm shadow-sm">
+          {archive.players.map((p) => (
+            <li key={p.slot} className={archive.winnerSlot === p.slot ? 'font-semibold' : ''}>
+              {p.name} — <span className="tabular-nums">{p.finalScore}</span>
+            </li>
+          ))}
+        </ul>
+        <MoveLog state={fakeState} />
+      </aside>
+    </main>
+  );
+}
 ```
+
+(Adjust the grid columns and aside width to match the live in-game layout — read `App.tsx` for the current proportions.)
+
+- [ ] **Step 4: Make `<Board>` accept `readOnly`**
+
+Read `client/src/components/Board.tsx`. Add a `readOnly?: boolean` prop. When true:
+- Skip the dnd-kit `useDroppable` registrations (or set `disabled: true`).
+- Don't render the pending-placement / drop-highlight overlays.
+- Render existing committed cells normally.
+
+The simplest: at the top of `Board`, if `readOnly`, render a stripped-down `<table>` of `<Square>`s without any drag/drop or pending-placement logic. Mirror `<Square>`'s read-only rendering by passing `readOnly` through.
+
+(Concrete Board.tsx changes can't be specified verbatim here without re-reading the file — apply the principle, keep the change minimal, and ensure the live game still passes its existing manual smoke test.)
 
 - [ ] **Step 5: Manual smoke**
 
-Build: `npm run build && npm start`. Or `npm run dev`. Open `http://localhost:5173/?view=past`. Verify the empty list. Play a quick game (use scripted demo or three tabs), end it, refresh `?view=past`, see the new entry, click it, see board + scores + log.
+Run: `npm run dev`
+- Play a short game in three tabs, end it via "Завершить игру".
+- Visit `http://localhost:5173/#past` → list shows the archived game.
+- Click it → detail view shows board, scores, full log including assists/passes/etc.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Run typecheck + tests**
+
+Run: `npm run typecheck && npm test`
+Expected: green.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add client/src/PastGames.tsx client/src/App.tsx client/src/components/Board.tsx client/src/MissingParams.tsx
-git commit -m "feat(client): Past Games viewer (list + detail with board and log)"
+git add client/src/components/PastGamesList.tsx client/src/components/PastGamesDetail.tsx client/src/App.tsx client/src/components/Board.tsx client/src/components/Square.tsx
+git commit -m "feat(client): Past Games viewer (list + detail with read-only board + log)"
 ```
 
 ---
 
-## Task 10: Spec sync + final verification
+## Task 15: Demo script + final manual pass
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-04-30-scrabble-design.md` (the source-of-truth spec, NOT the M5-additions design doc)
+- Modify: `scripts/demo-game.ts`
 
-- [ ] **Step 1: Update §13 Out of Scope** — remove `- Game replay (history shows summary list only).` line. Optionally add `- Step-through replay (still out of scope).` to make the boundary explicit.
+- [ ] **Step 1: Update the demo to exercise assist + revert**
 
-- [ ] **Step 2: Update §12 Milestones M5** — replace the existing M5 line with:
+Read `scripts/demo-game.ts` first; it already drives a full game in-process. Insert (a) at least one `submitMove(slot, placements, otherSlot)` call so the helper path runs, and (b) one `revertLastTurn` followed by a re-submit so the revert + re-submit path is exercised. Print the final `events` array and the assist-receiver's score so a human can eyeball it.
 
-```
-5. **M5 — Polish.** Disconnect/pause overlay, live move log panel, finished-game snapshots + Past Games viewer, "мама помогла" assist credit, dictionary advisory warnings, animations, deploy to Render.
-```
+- [ ] **Step 2: Run the demo**
 
-- [ ] **Step 3: Add a brief mention of assist** to spec §3 (Russian house rules), one bullet:
+Run: `npm run demo`
+Expected: prints a final state with at least one `assist` record and at least one `revert` record; helper's score reflects +5; nothing throws.
 
-```
-- **Assist credit ("мама помогла").** When submitting a move, the active player may attribute it to one helper (one of the other two slots); the helper is awarded +5. Optional, at most one helper per move.
-```
+- [ ] **Step 3: Run the full test+typecheck once more**
 
-- [ ] **Step 4: Update CLAUDE.md status line** — change `M4 = lobby UI + remaining rule actions, M5 = polish + deploy.` to mention the new M5 scope. Replace with:
+Run: `npm run typecheck && npm test`
+Expected: green.
 
-```
-M4 = lobby UI + remaining rule actions, M5 = polish + log + snapshots + assist + deploy.
-```
+- [ ] **Step 4: Manual UI pass**
 
-- [ ] **Step 5: Final verification**
+`npm run dev`, three tabs, walk through:
+- Move with helper → both scores update; log shows move + `↳ помогла X — +5`.
+- Revert that move → both scores roll back; log shows two `↳ отменено` lines under the move + assist.
+- Pass / redraw / claim-blank / endGame each appear in the log with the right phrasing.
+- After endGame, `#past` shows the archive; opening it renders the final board (read-only) + the full log.
 
-Run: `npm run typecheck && npm test && npm run demo`
-Expected: all PASS; demo prints at least one `↳ помог:` line.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add docs/superpowers/specs/2026-04-30-scrabble-design.md CLAUDE.md
-git commit -m "docs: sync spec + CLAUDE.md with M5 additions"
+git add scripts/demo-game.ts
+git commit -m "chore(demo): exercise assist + revert in demo-game"
 ```
 
 ---
 
-## Done
+## Out-of-plan notes
 
-At this point:
-- Engine credits assists, validates helper slots, and records assists as first-class events.
-- Persistence archives full game state with board + events; legacy files load via shim.
-- Server exposes `/api/history` and `/api/history/:id`; `endGame` triggers archive + broadcast.
-- Client shows a live move log, a helper picker on submit, and a Past Games viewer.
-- Spec, CLAUDE.md, and the M5-additions design doc are consistent.
+- The `bagEmptyAndRackEmpty` and `sixPasses` end-game causes are forward-looking enum members — no auto-detection in M5a. Add detection in M5b (or later) and emit those causes there.
+- Pre-snapshots archives (the old `{ summary, state }` shape) are rendered through `loadArchive`'s synthesis path; their event log will be sparse but readable. No migration script.
+- The "(archived before snapshots existed)" annotation mentioned in the spec is implicit — pre-snapshot archives just have no `assist`/`pass`/etc. records to show. If you want an explicit banner, add a single line in `PastGamesDetail` checking whether `archive.events.length === 0` and rendering it; deferred unless someone asks.
+
+---
+
+## Self-Review
+
+**Spec coverage:**
+- §3 Data model — Task 1 ✓
+- §4 Assist mechanics — Task 8 ✓ (validation, application, revert reverses)
+- §5 Move log UI — Task 13 ✓ (entry formats per kind, right-rail placement)
+- §5c Bag-remaining indicator — Task 13b ✓
+- §5b Helper picker UX — Task 12 ✓ (on submit confirm modal)
+- §6 Past Games viewer — Task 10 (HTTP) + Task 14 (UI) ✓
+- §7 Persistence — Task 9 ✓ (GameArchive, summary loader, archive loader, history→events shim)
+- §8 Tests — covered across Tasks 2–10 ✓
+- §9 Order of work — Tasks 1–15 follow the spec's order ✓
+
+**Placeholder scan:** none — every code step has actual code. The `Board.tsx` `readOnly` change in Task 14 Step 4 is described by principle rather than verbatim code because the file's current shape determines the cleanest cut.
+
+**Type consistency:** `events` (not `history`), `helperSlot` consistent across types/server/client, `GameEvent` kind discriminants spelled the same in types, engine, and renderer.
