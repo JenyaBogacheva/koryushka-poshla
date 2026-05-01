@@ -56,11 +56,42 @@ async function freshServer() {
   return { server, url: `ws://localhost:${server.port}/ws`, dataDir, port: server.port };
 }
 
+// Drive the draw-for-order to completion, handling possible tiebreak rounds.
+async function driveDraws(bs: readonly [Buffered, Buffered, Buffered]): Promise<void> {
+  const sentRound = new Map<number, Set<number>>();
+  while (true) {
+    const latest = bs[0].messages.filter((m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state').at(-1);
+    if (latest && latest.state.phase === 'playing') return;
+    if (!latest || latest.state.phase !== 'drawing') {
+      await new Promise((r) => setTimeout(r, 5));
+      continue;
+    }
+    const drawState = latest.state.drawState!;
+    let sent = sentRound.get(drawState.round);
+    if (!sent) { sent = new Set(); sentRound.set(drawState.round, sent); }
+    for (const slot of drawState.candidates) {
+      if (sent.has(slot)) continue;
+      send(bs[slot], { type: 'drawTile' });
+      sent.add(slot);
+    }
+    const before = bs[0].messages.length;
+    await new Promise<void>((resolve) => {
+      const check = (): void => {
+        if (bs[0].messages.length > before) resolve();
+        else setTimeout(check, 5);
+      };
+      check();
+    });
+  }
+}
+
 async function threeJoined() {
   const ctx = await freshServer();
   const a = await buffered(ctx.url); join(a, 0, 'A');
   const b = await buffered(ctx.url); join(b, 1, 'B');
   const c = await buffered(ctx.url); join(c, 2, 'C');
+  await driveDraws([a, b, c]);
   await waitFor(a, isStateWithPhase('playing'));
   await waitFor(b, isStateWithPhase('playing'));
   await waitFor(c, isStateWithPhase('playing'));

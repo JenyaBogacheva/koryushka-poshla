@@ -66,11 +66,44 @@ async function freshServer() {
   return { server, url: `ws://localhost:${server.port}/ws`, dataDir };
 }
 
+// Drive the draw-for-order to completion, handling possible tiebreak rounds.
+async function driveDraws(bs: readonly [Buffered, Buffered, Buffered]): Promise<void> {
+  const sentRound = new Map<number, Set<number>>();
+  while (true) {
+    const latest = bs[0].messages.filter((m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state').at(-1);
+    if (latest && latest.state.phase === 'playing') return;
+    if (!latest || latest.state.phase !== 'drawing') {
+      await new Promise((r) => setTimeout(r, 5));
+      continue;
+    }
+    const drawState = latest.state.drawState!;
+    let sent = sentRound.get(drawState.round);
+    if (!sent) { sent = new Set(); sentRound.set(drawState.round, sent); }
+    for (const slot of drawState.candidates) {
+      if (sent.has(slot)) continue;
+      send(bs[slot], { type: 'drawTile' });
+      sent.add(slot);
+    }
+    // Wait for next state broadcast that advances things.
+    const before = bs[0].messages.length;
+    await new Promise<void>((resolve) => {
+      const check = (): void => {
+        if (bs[0].messages.length > before) resolve();
+        else setTimeout(check, 5);
+      };
+      check();
+    });
+  }
+}
+
 async function threeJoined() {
   const ctx = await freshServer();
   const a = await buffered(ctx.url); join(a, 0, 'A');
   const b = await buffered(ctx.url); join(b, 1, 'B');
   const c = await buffered(ctx.url); join(c, 2, 'C');
+  const bs0 = [a, b, c] as const;
+  await driveDraws(bs0);
   const [snapA] = await Promise.all([
     waitFor(a, isStateWithPhase('playing')),
     waitFor(b, isStateWithPhase('playing')),
@@ -132,6 +165,33 @@ describe('M4b server: action handlers', () => {
       const s = await waitFor(bs[second], isStateWithPhase('finished'));
       for (const p of s.state.players) expect(p.canRevert).toBe(false);
     } finally { await server.close(); }
+  });
+
+  it('drawTile records the player\'s draw and broadcasts updated drawState', async () => {
+    const ctx = await freshServer();
+    try {
+      const a = await buffered(ctx.url); join(a, 0, 'A');
+      const b = await buffered(ctx.url); join(b, 1, 'B');
+      const c = await buffered(ctx.url); join(c, 2, 'C');
+      await waitFor(a, isStateWithPhase('drawing'));
+
+      send(a, { type: 'drawTile' });
+      const afterA = await waitFor(a, (m): m is Extract<ServerMessage, { type: 'state' }> =>
+        m.type === 'state' && m.state.drawState !== null && m.state.drawState.draws.some((d) => d.slot === 0));
+      expect(afterA.state.drawState!.draws.find((d) => d.slot === 0)).toBeDefined();
+
+      // Other players also see the broadcast
+      const seenOnB = await waitFor(b, (m): m is Extract<ServerMessage, { type: 'state' }> =>
+        m.type === 'state' && m.state.drawState !== null && m.state.drawState.draws.some((d) => d.slot === 0));
+      expect(seenOnB.state.drawState!.draws.find((d) => d.slot === 0)).toBeDefined();
+
+      // A second drawTile from the same slot is rejected
+      send(a, { type: 'drawTile' });
+      const err = await waitFor(a, isError);
+      expect(err.message).toMatch(/already|drawn|drawing|slot/i);
+
+      a.ws.close(); b.ws.close(); c.ws.close();
+    } finally { await ctx.server.close(); }
   });
 
   it('cross-player action clears the previous revert window', async () => {
