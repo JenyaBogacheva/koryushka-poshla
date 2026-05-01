@@ -12,7 +12,7 @@ type Props = {
 export function Tile({ cell, tile, size = 36 }: Props) {
   const t = cell?.tile ?? tile;
   if (!t) return null;
-  const display = cell ? cell.playedAs : (t.isBlank ? '' : t.letter);
+  const display = cell ? cell.playedAs : (t.isBlank ? '★' : t.letter);
   const points = cell ? (cell.fromBlank ? 0 : t.points) : t.points;
 
   return (
