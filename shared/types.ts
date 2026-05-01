@@ -78,7 +78,7 @@ export type LobbySlot = { slot: Slot; name: string; connected: boolean };
 // --- WebSocket protocol (M4a: join+lobby added; non-placement actions stubbed in server; M4b will implement them) ---
 
 export type ClientMessage =
-  | { type: 'join'; slot: Slot; name: string }
+  | { type: 'join'; slot: Slot; name: string; password: string }
   | { type: 'submitMove'; placements: Placement[] }
   | { type: 'swapTiles'; tileIds: string[] }
   | { type: 'claimBlank'; row: number; col: number; myTileId: string }

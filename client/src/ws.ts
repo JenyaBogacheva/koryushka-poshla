@@ -45,7 +45,7 @@ export function connect(): void {
     reconnectAttempts = 0;
     useGameStore.getState().setConnected(true);
     const { identity } = useGameStore.getState();
-    if (identity !== null) sendJoin(identity.slot, identity.name);
+    if (identity !== null) sendJoin(identity.slot, identity.name, identity.password);
   });
 
   ws.addEventListener('message', (e) => {
@@ -87,7 +87,7 @@ export function connect(): void {
         store.setError(msg.reason);
         return;
       case 'error':
-        if (msg.message === 'Slot taken') {
+        if (msg.message === 'Slot taken' || msg.message === 'Wrong password' || msg.message === 'Wrong name for this slot') {
           store.clearIdentity();
         }
         store.setError(msg.message);
@@ -130,6 +130,6 @@ export function send(msg: ClientMessage): void {
   }
 }
 
-export function sendJoin(slot: Slot, name: string): void {
-  send({ type: 'join', slot, name });
+export function sendJoin(slot: Slot, name: string, password: string): void {
+  send({ type: 'join', slot, name, password });
 }

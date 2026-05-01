@@ -1,0 +1,8 @@
+{
+  "password": "piter",
+  "players": [
+    { "slot": 0, "name": "Мама" },
+    { "slot": 1, "name": "Папа" },
+    { "slot": 2, "name": "Женя" }
+  ]
+}

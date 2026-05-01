@@ -27,9 +27,9 @@ export function App() {
     return () => disconnect();
   }, []);
 
-  function handleJoin(slot: Slot, name: string) {
-    setIdentity(slot, name);
-    sendJoin(slot, name);
+  function handleJoin(slot: Slot, name: string, password: string) {
+    setIdentity(slot, name, password);
+    sendJoin(slot, name, password);
   }
 
   function findRackTile(tileId: string): TileT | null {

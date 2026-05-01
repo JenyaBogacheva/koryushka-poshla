@@ -2,18 +2,20 @@ import { create } from 'zustand';
 import type { GameState, Letter, LobbySlot, Slot } from '@shared/types';
 
 type Pending = { tileId: string; row: number; col: number; playedAs: Letter };
+type Identity = { slot: Slot; name: string; password: string };
 
 const IDENTITY_KEY = 'scrabble.identity';
 
-function loadIdentity(): { slot: Slot; name: string } | null {
+function loadIdentity(): Identity | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = window.localStorage.getItem(IDENTITY_KEY);
     if (raw === null) return null;
-    const parsed = JSON.parse(raw) as { slot: number; name: string };
+    const parsed = JSON.parse(raw) as { slot: number; name: string; password?: string };
     if (parsed.slot !== 0 && parsed.slot !== 1 && parsed.slot !== 2) return null;
     if (typeof parsed.name !== 'string' || parsed.name.trim() === '') return null;
-    return { slot: parsed.slot as Slot, name: parsed.name };
+    if (typeof parsed.password !== 'string' || parsed.password === '') return null;
+    return { slot: parsed.slot as Slot, name: parsed.name, password: parsed.password };
   } catch {
     return null;
   }
@@ -23,14 +25,14 @@ type Store = {
   state: GameState | null;
   connected: boolean;
   lobby: LobbySlot[] | null;
-  identity: { slot: Slot; name: string } | null;
+  identity: Identity | null;
   pendingPlacements: Pending[];
   lastError: string | null;
   warning: string | null;
   setState: (state: GameState) => void;
   setConnected: (connected: boolean) => void;
   setLobby: (slots: LobbySlot[]) => void;
-  setIdentity: (slot: Slot, name: string) => void;
+  setIdentity: (slot: Slot, name: string, password: string) => void;
   clearIdentity: () => void;
   addPending: (p: Pending) => void;
   removePending: (tileId: string) => void;
@@ -51,11 +53,12 @@ export const useGameStore = create<Store>((set) => ({
   setState: (state) => set({ state }),
   setConnected: (connected) => set({ connected }),
   setLobby: (slots) => set({ lobby: slots }),
-  setIdentity: (slot, name) => {
+  setIdentity: (slot, name, password) => {
+    const identity: Identity = { slot, name, password };
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(IDENTITY_KEY, JSON.stringify({ slot, name }));
+      window.localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
     }
-    set({ identity: { slot, name } });
+    set({ identity });
   },
   clearIdentity: () => {
     if (typeof window !== 'undefined') {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import WebSocket, { type RawData } from 'ws';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { ClientMessage, GameState, ServerMessage } from '@shared/types';
@@ -48,12 +48,22 @@ const isStateWithPhase = (phase: GameState['phase']) =>
 function send(b: Buffered, msg: ClientMessage): void {
   b.ws.send(JSON.stringify(msg));
 }
-function join(b: Buffered, slot: 0 | 1 | 2, name: string): void {
-  send(b, { type: 'join', slot, name });
+function join(b: Buffered, slot: 0 | 1 | 2, name: string, password = 'pw'): void {
+  send(b, { type: 'join', slot, name, password });
 }
+
+const FAMILY = {
+  password: 'pw',
+  players: [
+    { slot: 0, name: 'A' },
+    { slot: 1, name: 'B' },
+    { slot: 2, name: 'C' },
+  ],
+};
 
 async function freshServer() {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'scrabble-m4-'));
+  writeFileSync(path.join(dataDir, 'family.json'), JSON.stringify(FAMILY));
   const server = await startServer({ port: 0, serveStatic: false, dataDir });
   const url = `ws://localhost:${server.port}/ws`;
   return { server, url, dataDir };
@@ -65,7 +75,7 @@ describe('M4a server: lobby → join → state', () => {
     try {
       const b = await buffered(url);
       const lobby = await waitFor(b, isType('lobby'));
-      expect(lobby.slots.map((s) => s.name)).toEqual(['', '', '']);
+      expect(lobby.slots.map((s) => s.name)).toEqual(['A', 'B', 'C']);
       expect(lobby.slots.every((s) => !s.connected)).toBe(true);
 
       send(b, { type: 'submitMove', placements: [] });
@@ -122,23 +132,29 @@ describe('M4a server: lobby → join → state', () => {
     }
   });
 
-  it('rejects different name on a held slot with "Slot taken" and closes the ws', async () => {
+  it('rejects wrong-name-for-slot from family config', async () => {
     const { server, url } = await freshServer();
     try {
-      const b0 = await buffered(url);
-      await waitFor(b0, isType('lobby'));
-      join(b0, 0, 'A');
-      await waitFor(b0, isType('state'));
-
       const bad = await buffered(url);
       await waitFor(bad, isType('lobby'));
-      join(bad, 0, 'B');
+      join(bad, 0, 'NotA');
       const err = await waitFor(bad, isType('error'));
-      expect(err.message).toBe('Slot taken');
+      expect(err.message).toBe('Wrong name for this slot');
       const closed = await new Promise<number>((resolve) => bad.ws.on('close', (code) => resolve(code)));
       expect(closed).toBe(1008);
+    } finally {
+      await server.close();
+    }
+  });
 
-      b0.ws.close();
+  it('rejects wrong password', async () => {
+    const { server, url } = await freshServer();
+    try {
+      const bad = await buffered(url);
+      await waitFor(bad, isType('lobby'));
+      send(bad, { type: 'join', slot: 0, name: 'A', password: 'nope' });
+      const err = await waitFor(bad, isType('error'));
+      expect(err.message).toBe('Wrong password');
     } finally {
       await server.close();
     }
@@ -215,28 +231,4 @@ describe('M4a server: lobby → join → state', () => {
     }
   });
 
-  it('rejects join with mismatched name against persisted game state', async () => {
-    const { server, url } = await freshServer();
-    try {
-      const [b0, b1, b2] = await Promise.all([buffered(url), buffered(url), buffered(url)]);
-      await waitFor(b0, isType('lobby'));
-      join(b0, 0, 'A'); join(b1, 1, 'B'); join(b2, 2, 'C');
-      await waitFor(b0, isStateWithPhase('playing'));
-
-      await new Promise<void>((resolve) => {
-        b0.ws.on('close', () => resolve());
-        b0.ws.close();
-      });
-
-      const bad = await buffered(url);
-      await waitFor(bad, isType('lobby'));
-      join(bad, 0, 'X');
-      const err = await waitFor(bad, isType('error'));
-      expect(err.message).toBe('Slot taken');
-
-      b1.ws.close(); b2.ws.close();
-    } finally {
-      await server.close();
-    }
-  });
 });

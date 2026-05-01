@@ -9,6 +9,7 @@ import { Game } from './game.js';
 import { createEmptyBoard } from './board.js';
 import { createSeats, seat, unseat, allSeated, namesInSlotOrder, type Seats } from './connections.js';
 import { saveActiveGame, loadActiveGame } from './persistence.js';
+import { loadFamilyConfig, type FamilyConfig } from './family.js';
 
 export type ServerOptions = {
   port?: number;
@@ -41,6 +42,15 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
 
   const seats: Seats = createSeats();
   let game: Game | null = null;
+  const loadedFamily = loadFamilyConfig(dataDir);
+  if (loadedFamily === null) {
+    throw new Error(
+      `[scrabble] missing or invalid ${path.join(dataDir, 'family.json')}. ` +
+      `Copy ${path.join(dataDir, 'family.example.json')} to family.json and edit.`,
+    );
+  }
+  const familyConfig: FamilyConfig = loadedFamily;
+  console.log(`[scrabble] family: ${familyConfig.players.map((p) => p.name).join(', ')}`);
 
   const loaded = loadActiveGame(dataDir);
   if (loaded !== null) {
@@ -111,7 +121,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       type: 'lobby',
       slots: ([0, 1, 2] as Slot[]).map((i) => ({
         slot: i,
-        name: seats[i]!.name ?? '',
+        name: seats[i]!.name ?? familyConfig.players[i].name,
         connected: seats[i]!.ws !== null,
       })) as [LobbySlot, LobbySlot, LobbySlot],
     };
@@ -165,6 +175,18 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     if (!name) {
       sendMsg(ws, { type: 'error', message: 'Name required' });
       ws.close(1008, 'Name required');
+      return;
+    }
+
+    const expectedName = familyConfig.players[slot].name;
+    if (name !== expectedName) {
+      sendMsg(ws, { type: 'error', message: 'Wrong name for this slot' });
+      ws.close(1008, 'Wrong name for this slot');
+      return;
+    }
+    if (msg.password !== familyConfig.password) {
+      sendMsg(ws, { type: 'error', message: 'Wrong password' });
+      ws.close(1008, 'Wrong password');
       return;
     }
 
