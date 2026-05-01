@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-05-01-m5a-snapshots-assist-log-design.md`.
 
+**Russian-only UI:** every user-visible string in this milestone (labels, buttons, headings, empty states, loading indicators, error messages, log entries, route titles) must be in Russian. No English placeholder text. Coordinates (`e7`) and numbers are fine. If you find existing English strings in adjacent code while wiring something up, leave them alone — fix them in a separate pass, not here.
+
 **Conventions reminder (from CLAUDE.md):**
 - `.js` extension on relative imports (NodeNext / ESNext)
 - Path aliases `@shared/*`, `@server/*`

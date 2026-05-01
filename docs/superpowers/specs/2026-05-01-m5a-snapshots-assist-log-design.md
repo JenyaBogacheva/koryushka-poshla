@@ -163,6 +163,10 @@ The "мама помогла" selector lives **on the existing submit confirm mo
 
 Show how many tiles are left in the bag during play. Render as a small chip at the top of the right rail (above the player cards) — `Мешок: 47`. Reads `state.bag.length` directly; no new server fields. Hidden in the Past Games detail view (a finished game's bag is uninteresting). Updates automatically with each state snapshot.
 
+## 5d. Localization
+
+All user-visible strings must be in Russian — labels, buttons, headings, empty states, loading indicators, error messages, log entries, route titles. No English placeholder text in any UI surface introduced by M5a (or anywhere else; this is a project-wide rule, but it's worth restating because a fresh implementer might leave defaults like "Loading…" or "Past games" in place). Numbers and slot/cell coordinates (`e7`) are fine.
+
 ## 6. Past Games viewer
 
 **HTTP endpoints** (added to existing Express server):
