@@ -217,3 +217,20 @@ describe('persistence: revert window is not preserved', () => {
     expect(() => g2.revertLastTurn(first)).toThrow();
   });
 });
+
+describe('persistence: mid-draw state', () => {
+  it('round-trips drawing phase with single draw', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'scrabble-draw-'));
+    const g = new Game({ seed: 3 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    g.drawForOrderTile(0);
+    saveActiveGame(dir, g.snapshot());
+    const loaded = loadActiveGame(dir);
+    expect(loaded).not.toBeNull();
+    expect(loaded!.phase).toBe('drawing');
+    expect(loaded!.drawState).not.toBeNull();
+    expect(loaded!.drawState!.draws.length).toBe(1);
+    expect(loaded!.drawState!.draws[0]!.slot).toBe(0);
+  });
+});
