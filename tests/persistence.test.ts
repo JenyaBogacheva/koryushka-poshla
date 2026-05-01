@@ -158,6 +158,39 @@ describe('persistence', () => {
 });
 
 import { Game } from '../server/game.js';
+import type { MoveRecord } from '@shared/types';
+
+describe('MoveRecord.dictionaryWarnings persistence', () => {
+  it('round-trips dictionaryWarnings through save/load', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'scrabble-dictw-'));
+    const s = sampleState();
+    const moveRecord: MoveRecord = {
+      kind: 'move', slot: 0, placements: [], wordsFormed: [],
+      totalScore: 10, bingoBonus: false, helperSlot: null,
+      dictionaryWarnings: ['ЯБЛЫРГ'], timestamp: 1,
+    };
+    s.events = [moveRecord];
+    saveActiveGame(dir, s);
+    const loaded = loadActiveGame(dir)!;
+    const ev = loaded.events[0]!;
+    expect(ev.kind).toBe('move');
+    if (ev.kind === 'move') expect(ev.dictionaryWarnings).toEqual(['ЯБЛЫРГ']);
+  });
+
+  it('back-fills missing dictionaryWarnings as []', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'scrabble-backfill-'));
+    const s = sampleState() as unknown as Record<string, unknown>;
+    s['events'] = [{
+      kind: 'move', slot: 0, placements: [], wordsFormed: [],
+      totalScore: 5, bingoBonus: false, helperSlot: null, timestamp: 1,
+    }];
+    writeFileSync(path.join(dir, 'game.json'), JSON.stringify(s), 'utf-8');
+    const loaded = loadActiveGame(dir)!;
+    const ev = loaded.events[0]!;
+    expect(ev.kind).toBe('move');
+    if (ev.kind === 'move') expect(ev.dictionaryWarnings).toEqual([]);
+  });
+});
 
 describe('persistence: revert window is not preserved', () => {
   it('round-trips without canRevert leaking into the loaded state', () => {

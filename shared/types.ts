@@ -42,6 +42,7 @@ export type MoveRecord = {
   totalScore: number;
   bingoBonus: boolean;
   helperSlot: Slot | null;
+  dictionaryWarnings: string[];
   timestamp: number;
 };
 

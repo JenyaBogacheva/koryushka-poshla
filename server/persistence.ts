@@ -1,9 +1,17 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, readdirSync, renameSync } from 'node:fs';
 import path from 'node:path';
-import type { GameState, GameSummary, GameArchive, GameEvent, Slot } from '@shared/types';
+import type { GameState, GameSummary, GameArchive, GameEvent, MoveRecord, Slot } from '@shared/types';
 
 const ACTIVE_FILE = 'game.json';
 const HISTORY_DIR = 'history';
+
+function backfillEvents(events: GameEvent[]): void {
+  for (const ev of events) {
+    if (ev.kind === 'move' && (ev as Partial<MoveRecord>).dictionaryWarnings === undefined) {
+      (ev as MoveRecord).dictionaryWarnings = [];
+    }
+  }
+}
 
 // NOTE: GameState's per-player `canRevert` is recomputed from the engine's transient
 // `lastSnapshot` field, which is intentionally NOT persisted. A server restart drops
@@ -24,6 +32,7 @@ export function loadActiveGame(dataDir: string): GameState | null {
     raw.events = raw.history as GameEvent[];
     delete raw.history;
   }
+  if (Array.isArray(raw.events)) backfillEvents(raw.events);
   return raw;
 }
 
@@ -83,6 +92,7 @@ export function loadArchive(dataDir: string, id: string): GameArchive | null {
   if ('summary' in raw) {
     // Legacy { summary, state } shape: synthesize a flat GameArchive.
     const events = ((raw.state.events ?? raw.state.history) as GameEvent[] | undefined) ?? [];
+    backfillEvents(events);
     return {
       id: raw.summary.id,
       startedAt: raw.summary.startedAt,
@@ -93,5 +103,6 @@ export function loadArchive(dataDir: string, id: string): GameArchive | null {
       events,
     };
   }
+  backfillEvents(raw.events);
   return raw;
 }

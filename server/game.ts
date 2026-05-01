@@ -116,6 +116,7 @@ export class Game {
     addTilesToRack(player.rack, drawn);
     this.state.bag = this.bag.tiles;
 
+    const dictionaryWarnings = checkWords(words.map((w) => w.word));
     const moveRecord: MoveRecord = {
       kind: 'move',
       slot,
@@ -126,6 +127,7 @@ export class Game {
       totalScore: score.totalScore,
       bingoBonus: score.bingoBonus,
       helperSlot: helperSlot ?? null,
+      dictionaryWarnings,
       timestamp: Date.now(),
     };
     const startLen = this.state.events.length;
@@ -146,7 +148,6 @@ export class Game {
 
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
 
-    const dictionaryWarnings = checkWords(words.map((w) => w.word));
     const appended = this.state.events.slice(startLen);
     this.armRevert(slot, preStateForRevert, appended);
     return { ok: true, moveRecord, dictionaryWarnings };
