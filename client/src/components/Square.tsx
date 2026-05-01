@@ -26,9 +26,10 @@ type Props = {
   cell: Cell | null;
   premium: Premium;
   size: number;
+  readOnly?: boolean;
 };
 
-export function Square({ row, col, cell, premium, size }: Props) {
+export function Square({ row, col, cell, premium, size, readOnly = false }: Props) {
   const identity = useGameStore((s) => s.identity);
   const state = useGameStore((s) => s.state);
   const pending = useGameStore((s) => s.pendingPlacements);
@@ -36,10 +37,10 @@ export function Square({ row, col, cell, premium, size }: Props) {
   const togglePendingSubstitution = useGameStore((s) => s.togglePendingSubstitution);
 
   const mySlot = identity?.slot ?? null;
-  const pendingHere = pending.find((p) => p.row === row && p.col === col) ?? null;
-  const isMyTurn = state !== null && mySlot !== null && state.turnIndex === mySlot && state.phase === 'playing';
+  const pendingHere = readOnly ? null : (pending.find((p) => p.row === row && p.col === col) ?? null);
+  const isMyTurn = !readOnly && state !== null && mySlot !== null && state.turnIndex === mySlot && state.phase === 'playing';
   const isClaimBlankTarget = cell !== null && cell.fromBlank && isMyTurn;
-  const canDrop = (cell === null && pendingHere === null && isMyTurn) || isClaimBlankTarget;
+  const canDrop = !readOnly && ((cell === null && pendingHere === null && isMyTurn) || isClaimBlankTarget);
 
   const { setNodeRef, isOver } = useDroppable({ id: `sq-${row}-${col}`, disabled: !canDrop });
 

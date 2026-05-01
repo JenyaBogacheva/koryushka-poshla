@@ -13,10 +13,21 @@ import { ActionBar } from './components/ActionBar.js';
 import { MoveLog } from './components/MoveLog.js';
 import { BagIndicator } from './components/BagIndicator.js';
 import { CYRILLIC_LETTERS } from './letters.js';
+import { PastGamesList } from './components/PastGamesList.js';
+import { PastGamesDetail } from './components/PastGamesDetail.js';
 
 type PendingDrop = { tile: TileT; row: number; col: number };
 
 export function App() {
+  const [route, setRoute] = useState<string>(() =>
+    typeof window !== 'undefined' ? window.location.hash : '',
+  );
+  useEffect(() => {
+    const onChange = (): void => setRoute(window.location.hash);
+    window.addEventListener('hashchange', onChange);
+    return () => window.removeEventListener('hashchange', onChange);
+  }, []);
+
   const state = useGameStore((s) => s.state);
   const lobby = useGameStore((s) => s.lobby);
   const identity = useGameStore((s) => s.identity);
@@ -95,6 +106,9 @@ export function App() {
     setPendingBlank(null);
   }
 
+  if (route === '#past') return <PastGamesList />;
+  if (route.startsWith('#past/')) return <PastGamesDetail id={route.slice('#past/'.length)} />;
+
   if (!connected) return <Center>connecting…</Center>;
   if (identity === null) {
     return <SlotPicker lobby={lobby} onJoin={handleJoin} />;
@@ -112,8 +126,9 @@ export function App() {
           <ErrorBanner />
         </div>
         <aside className="flex h-full w-72 flex-col gap-3">
-          <header className="text-sm uppercase tracking-wide text-ink/60">
-            {state.phase === 'finished' ? 'Game over' : `${state.players[state.turnIndex]?.name ?? '—'}'s turn`}
+          <header className="flex items-baseline justify-between text-sm uppercase tracking-wide text-ink/60">
+            <span>{state.phase === 'finished' ? 'Game over' : `${state.players[state.turnIndex]?.name ?? '—'}'s turn`}</span>
+            <a href="#past" className="normal-case text-xs text-ink/50 hover:underline">Прошлые игры</a>
           </header>
           <BagIndicator count={state.bag.length} />
           {state.players.map((p) => (
