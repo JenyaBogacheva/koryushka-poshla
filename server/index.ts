@@ -131,6 +131,17 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       console.error('[scrabble] saveActiveGame failed:', err);
     }
     broadcastState();
+    // Games can end three ways: explicit endGame, bagEmptyAndRackEmpty, or sixPasses.
+    // The latter two happen inside submitMove/passTurn, so archive here, not just in
+    // the 'endGame' handler — otherwise game stays non-null and 'newGame' is ignored.
+    if (game.snapshot().phase === 'finished') {
+      try {
+        archiveFinishedGame(dataDir);
+      } catch (err) {
+        console.error('[scrabble] archiveFinishedGame failed:', err);
+      }
+      game = null;
+    }
   }
 
   function handleSubmitMove(slot: Slot, msg: Extract<ClientMessage, { type: 'submitMove' }>, ws: WebSocket): void {
@@ -197,15 +208,6 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
           return;
         case 'endGame':
           handleEngineAction(ws, () => game!.endGame(slot));
-          // After phase flips to 'finished' on disk, archive and clear.
-          if (game !== null && game.snapshot().phase === 'finished') {
-            try {
-              archiveFinishedGame(dataDir);
-            } catch (err) {
-              console.error('[scrabble] archiveFinishedGame failed:', err);
-            }
-            game = null;
-          }
           return;
         case 'revertLastTurn':
           handleEngineAction(ws, () => game!.revertLastTurn(slot));
@@ -214,6 +216,16 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
           sendMsg(ws, { type: 'error', message: 'not yet implemented' });
           return;
         case 'newGame': {
+          // Recover from a stuck finished game (e.g. older server build that didn't
+          // archive on auto-end): treat it as if endGame had cleaned up.
+          if (game !== null && game.snapshot().phase === 'finished') {
+            try {
+              archiveFinishedGame(dataDir);
+            } catch (err) {
+              console.error('[scrabble] archiveFinishedGame failed:', err);
+            }
+            game = null;
+          }
           if (game !== null) return; // ignore if game already running (race)
           if (!allSeated(seats)) {
             sendMsg(ws, { type: 'error', message: 'Не все игроки подключены' });
