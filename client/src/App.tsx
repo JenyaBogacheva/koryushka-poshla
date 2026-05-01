@@ -126,7 +126,7 @@ export function App() {
   if (identity === null) {
     return <SlotPicker lobby={lobby} onJoin={handleJoin} />;
   }
-  if (state === null) return <Center>Заход в игру…</Center>;
+  if (state === null) return <Center>Загружаем игру…</Center>;
   if (state.phase === 'waiting') {
     return <WaitingRoom players={state.players} mySlot={identity.slot} />;
   }
