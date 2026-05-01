@@ -18,5 +18,6 @@
       "@server/*": ["server/*"]
     }
   },
-  "include": ["server/**/*.ts", "shared/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "include": ["server/**/*.ts", "shared/**/*.ts", "scripts/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
+  "exclude": ["client/**"]
 }

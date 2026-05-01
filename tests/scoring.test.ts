@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { scoreMove } from '../server/scoring';
 import { createEmptyBoard, applyPlacements, extractWordsFormed, SIZE } from '../server/board';
-import { PREMIUMS } from '../server/premiums';
+import { PREMIUMS } from '@shared/premiums';
 import type { Placement, Tile } from '@shared/types';
 
 const tile = (id: string, letter: string, points: number, isBlank = false): Tile => ({

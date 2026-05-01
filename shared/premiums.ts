@@ -1,4 +1,4 @@
-import type { Premium, PremiumMap } from '@shared/types';
+import type { Premium, PremiumMap } from './types.js';
 
 // Standard Scrabble premium-square layout (also used by Russian Эрудит).
 // Encoding: '.' = none, 'L' = DL, 'l' = TL, 'W' = DW, 'w' = TW, '*' = center.

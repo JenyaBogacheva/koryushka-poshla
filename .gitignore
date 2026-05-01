@@ -4,3 +4,4 @@ node_modules/
 dist/
 data/game.json
 data/history/
+client/dist
