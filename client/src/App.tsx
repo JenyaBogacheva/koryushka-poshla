@@ -121,11 +121,11 @@ export function App() {
   if (route === '#past') return <PastGamesList />;
   if (route.startsWith('#past/')) return <PastGamesDetail id={route.slice('#past/'.length)} />;
 
-  if (!connected) return <Center>connecting…</Center>;
+  if (!connected) return <Center>Подключение…</Center>;
   if (identity === null) {
     return <SlotPicker lobby={lobby} onJoin={handleJoin} />;
   }
-  if (state === null) return <Center>joining…</Center>;
+  if (state === null) return <Center>Заход в игру…</Center>;
   if (state.phase === 'waiting') {
     return <WaitingRoom players={state.players} mySlot={identity.slot} />;
   }
