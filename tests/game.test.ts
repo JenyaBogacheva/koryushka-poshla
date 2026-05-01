@@ -563,6 +563,23 @@ describe('startGame draw-for-order', () => {
     const ev = g.snapshot().events[0] as DrawForOrderRecord;
     expect(ev.draws.map((d) => d.slot)).toEqual([0, 1, 2]);
   });
+  it('handles a tie via redraw without leaking tiles', () => {
+    const g = new Game({ seed: 7 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    const snap = g.snapshot();
+    const ev = snap.events[0] as DrawForOrderRecord;
+    // Two of the three initial draws were the same letter (the tie that triggered redraw).
+    const letters = ev.draws.map((d) => d.letter);
+    const counts = new Map<string | null, number>();
+    for (const l of letters) counts.set(l, (counts.get(l) ?? 0) + 1);
+    const maxCount = Math.max(...counts.values());
+    expect(maxCount).toBeGreaterThanOrEqual(2);
+    // Game state remains consistent — no tile leaked through the redraw loop.
+    expect(snap.bag.length).toEqual(104 - 21);
+    // firstSlot resolves to a single slot (deterministic, even after tie-break).
+    expect([0, 1, 2]).toContain(ev.firstSlot);
+  });
 });
 
 describe('Game.revertLastTurn — append-only RevertRecord log', () => {
