@@ -27,6 +27,7 @@ type Store = {
   lobby: LobbySlot[] | null;
   identity: Identity | null;
   pendingPlacements: Pending[];
+  pendingHelperSlot: Slot | null;
   lastError: string | null;
   warning: string | null;
   setState: (state: GameState) => void;
@@ -38,6 +39,7 @@ type Store = {
   removePending: (tileId: string) => void;
   togglePendingSubstitution: (tileId: string, real: Letter, sub: Letter) => void;
   clearPending: () => void;
+  setPendingHelperSlot: (slot: Slot | null) => void;
   setError: (message: string | null) => void;
   setWarning: (message: string | null) => void;
 };
@@ -48,6 +50,7 @@ export const useGameStore = create<Store>((set) => ({
   lobby: null,
   identity: loadIdentity(),
   pendingPlacements: [],
+  pendingHelperSlot: null,
   lastError: null,
   warning: null,
   setState: (state) => set({ state }),
@@ -88,7 +91,8 @@ export const useGameStore = create<Store>((set) => ({
         p.tileId === tileId ? { ...p, playedAs: p.playedAs === real ? sub : real } : p,
       ),
     })),
-  clearPending: () => set({ pendingPlacements: [], lastError: null }),
+  clearPending: () => set({ pendingPlacements: [], pendingHelperSlot: null, lastError: null }),
+  setPendingHelperSlot: (pendingHelperSlot) => set({ pendingHelperSlot }),
   setError: (lastError) => set({ lastError }),
   setWarning: (warning) => set({ warning }),
 }));

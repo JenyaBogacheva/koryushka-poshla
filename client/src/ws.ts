@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, Slot } from '@shared/types';
+import type { ClientMessage, ServerMessage, Slot, Placement } from '@shared/types';
 import { useGameStore } from './store.js';
 
 const RECONNECT_BASE_MS = 1000;
@@ -153,3 +153,10 @@ export function sendClaimBlank(row: number, col: number, tileId: string): void {
 }
 export function sendEndGame(): void { send({ type: 'endGame' }); }
 export function sendRevertLastTurn(): void { send({ type: 'revertLastTurn' }); }
+export function sendSubmitMove(placements: Placement[], helperSlot: Slot | null): void {
+  const msg: Extract<ClientMessage, { type: 'submitMove' }> =
+    helperSlot === null
+      ? { type: 'submitMove', placements }
+      : { type: 'submitMove', placements, helperSlot };
+  send(msg);
+}

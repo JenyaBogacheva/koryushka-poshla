@@ -1,7 +1,7 @@
 import type { Player } from '@shared/types';
 import { Rack } from './Rack.js';
 import { useGameStore } from '../store.js';
-import { send } from '../ws.js';
+import { sendSubmitMove } from '../ws.js';
 
 type Props = {
   player: Player;
@@ -24,7 +24,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
       col: p.col,
       playedAs: p.playedAs,
     }));
-    send({ type: 'submitMove', placements });
+    sendSubmitMove(placements, null);
   }
 
   return (
