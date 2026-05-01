@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import type { Slot } from '@shared/types';
 import { useGameStore } from './store.js';
-import { connect } from './ws.js';
+import { connect, disconnect } from './ws.js';
 import { Board } from './components/Board.js';
 import { PlayerCard } from './components/PlayerCard.js';
 import { ErrorBanner } from './components/ErrorBanner.js';
@@ -38,6 +38,9 @@ export function App() {
     setIdentity(slot, name);
     connect();
     setReady(true);
+    return () => {
+      disconnect();
+    };
   }, [setIdentity]);
 
   if (bad) return <MissingParams />;

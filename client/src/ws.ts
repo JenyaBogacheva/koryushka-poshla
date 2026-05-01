@@ -7,6 +7,7 @@ const RECONNECT_MAX_MS = 30_000;
 let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let socket: WebSocket | null = null;
+let intentionalClose = false;
 
 function scheduleReconnect(): void {
   if (reconnectTimer !== null) return;
@@ -24,6 +25,10 @@ export function connect(): void {
     console.warn('[ws] connect called before identity was set');
     return;
   }
+  if (socket !== null && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+  intentionalClose = false;
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = `${proto}//${location.host}/ws?slot=${mySlot}&name=${encodeURIComponent(myName)}`;
   const ws = new WebSocket(url);
@@ -73,8 +78,24 @@ export function connect(): void {
   });
   ws.addEventListener('close', () => {
     useGameStore.getState().setConnected(false);
+    if (intentionalClose) {
+      intentionalClose = false;
+      return;
+    }
     scheduleReconnect();
   });
+}
+
+export function disconnect(): void {
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (socket !== null) {
+    intentionalClose = true;
+    socket.close();
+    socket = null;
+  }
 }
 
 export function send(msg: ClientMessage): void {
