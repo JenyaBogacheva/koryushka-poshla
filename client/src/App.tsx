@@ -20,6 +20,7 @@ export function App() {
   const connected = useGameStore((s) => s.connected);
   const setIdentity = useGameStore((s) => s.setIdentity);
   const addPending = useGameStore((s) => s.addPending);
+  const pendingPlacements = useGameStore((s) => s.pendingPlacements);
 
   const [pendingBlank, setPendingBlank] = useState<PendingDrop | null>(null);
 
@@ -48,6 +49,14 @@ export function App() {
     const col = Number(m[2]);
     const tile = findRackTile(tileId);
     if (tile === null) return;
+
+    // Moving an already-placed pending tile — keep the chosen playedAs (no blank re-prompt).
+    const existing = pendingPlacements.find((p) => p.tileId === tileId);
+    if (existing !== undefined) {
+      addPending({ tileId, row, col, playedAs: existing.playedAs });
+      return;
+    }
+
     if (tile.isBlank) {
       setPendingBlank({ tile, row, col });
       return;

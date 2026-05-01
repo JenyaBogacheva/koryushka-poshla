@@ -67,11 +67,16 @@ export const useGameStore = create<Store>((set) => ({
     set({ identity: null });
   },
   addPending: (p) =>
-    set((s) =>
-      s.pendingPlacements.some((x) => x.tileId === p.tileId)
-        ? s
-        : { pendingPlacements: [...s.pendingPlacements, p], lastError: null },
-    ),
+    set((s) => {
+      const i = s.pendingPlacements.findIndex((x) => x.tileId === p.tileId);
+      if (i < 0) {
+        return { pendingPlacements: [...s.pendingPlacements, p], lastError: null };
+      }
+      // upsert — moving an already-pending tile keeps its row/col/playedAs updated.
+      const next = s.pendingPlacements.slice();
+      next[i] = p;
+      return { pendingPlacements: next, lastError: null };
+    }),
   removePending: (tileId) =>
     set((s) => ({
       pendingPlacements: s.pendingPlacements.filter((x) => x.tileId !== tileId),

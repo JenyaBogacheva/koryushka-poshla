@@ -72,19 +72,19 @@ export function Square({ row, col, cell, premium, size }: Props) {
       {cell ? (
         <Tile cell={cell} size={size - 4} />
       ) : pendingTile !== null && pendingHere !== null ? (
-        <button
-          onClick={() => removePending(pendingHere.tileId)}
-          className="contents"
-          aria-label="Recall tile"
+        <div
+          onDoubleClick={() => removePending(pendingHere.tileId)}
+          title="Перетащи или дважды кликни, чтобы убрать"
         >
           <Tile
             tile={pendingTile}
             size={size - 4}
             ghost
+            draggableId={isMyTurn ? pendingTile.id : undefined}
             displayOverride={pendingHere.playedAs}
             subBadge={subBadge}
           />
-        </button>
+        </div>
       ) : premium ? (
         <span className="text-[10px] font-medium text-ink/60">{PREMIUM_LABEL[premium]}</span>
       ) : null}
