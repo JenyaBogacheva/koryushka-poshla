@@ -9,6 +9,7 @@ let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let warningTimer: ReturnType<typeof setTimeout> | null = null;
 let socket: WebSocket | null = null;
+let lastFlashedMoveTs = 0;
 
 function scheduleReconnect(): void {
   if (reconnectTimer !== null) return;
@@ -78,8 +79,16 @@ export function connect(): void {
         const FRESH_MS = 5000;
         const events = msg.state.events;
         const last = events[events.length - 1];
-        if (last !== undefined && last.kind === 'move' && Date.now() - last.timestamp < FRESH_MS) {
+        // Skip moves we've already flashed for so reconnects/reloads inside the freshness
+        // window don't replay the animation on already-committed tiles.
+        if (
+          last !== undefined &&
+          last.kind === 'move' &&
+          last.timestamp > lastFlashedMoveTs &&
+          Date.now() - last.timestamp < FRESH_MS
+        ) {
           const cells = last.placements.map((p) => ({ row: p.row, col: p.col }));
+          lastFlashedMoveTs = last.timestamp;
           useGameStore.getState().setLastPlaced(cells, Date.now());
         }
         return;

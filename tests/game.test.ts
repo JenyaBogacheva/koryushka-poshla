@@ -175,6 +175,7 @@ describe('Game — redrawRack', () => {
   it('redrawRack appends a RedrawRecord with reason and tileCount', () => {
     const g = makeReadyGame(11);
     const s = g.snapshot();
+    s.turnIndex = 0;
     s.players[0]!.rack = s.players[0]!.rack.map((t, i) =>
       ({ ...t, letter: ['А','Е','И','О','У','Ы','Э'][i % 7]!, points: 1, isBlank: false }),
     );

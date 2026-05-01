@@ -80,7 +80,7 @@ export function formatDrawForOrder(
   nameOf: (slot: number) => string,
 ): string {
   const draws = ev.draws.map((d) => `${nameOf(d.slot)} — ${d.letter ?? '★'}`).join(', ');
-  return `🎲 ${draws}. Перв${firstAdj(nameOf(ev.firstSlot))} ходит ${nameOf(ev.firstSlot)}.`;
+  return `Жребий: ${draws}. Перв${firstAdj(nameOf(ev.firstSlot))} ходит ${nameOf(ev.firstSlot)}.`;
 }
 
 // Best-effort feminine ending for "помог/помогла". Names ending in 'а' or 'я' get the feminine form.
