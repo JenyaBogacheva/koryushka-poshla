@@ -254,6 +254,18 @@ describe('Game — endGame', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.kind).toBe('not-playing');
   });
+
+  it('endGame appends an EndGameRecord with cause "playerEnded"', () => {
+    const g = makeReadyGame(1);
+    g.endGame(0);
+    const last = g.snapshot().events.at(-1)!;
+    expect(last.kind).toBe('endGame');
+    if (last.kind === 'endGame') {
+      expect(last.slot).toBe(0);
+      expect(last.cause).toBe('playerEnded');
+    }
+    expect(g.snapshot().phase).toBe('finished');
+  });
 });
 
 describe('Game — toggleRackVisibility', () => {

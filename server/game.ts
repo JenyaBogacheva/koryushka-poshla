@@ -205,6 +205,12 @@ export class Game {
     this.maybeClearRevertOnActionBy(slot);
     this.lastSnapshot = null; // ending the game finalizes everything
     this.state.phase = 'finished';
+    this.state.events.push({
+      kind: 'endGame',
+      slot,
+      cause: 'playerEnded',
+      timestamp: Date.now(),
+    });
   }
 
   revertLastTurn(slot: Slot): void {
