@@ -259,7 +259,7 @@ Three layers, in priority order:
 1. **M1 — Bones.** Server with game state, board, bag, racks. No UI. Programmatic script runs a full game and prints scores. Get the rules right in isolation.
 2. **M2 — Read-only client.** React app connects via WS and renders board / player cards / racks / scores. No interaction; server runs a scripted game and the client reflects it.
 3. **M3 — Place-and-submit.** Drag tiles onto the board, submit, see score update. Single-spot placement, no substitutions, no blanks.
-4. **M4 — All the rules.** Multi-spot placement, substitution picker, blank picker, blank-swap, swap-tiles, all-vowel redraw, rack visibility toggle.
+4. **M4 — All the rules.** Slot picker UI + name input + reconnect-by-name (§10), multi-spot placement, substitution picker, blank picker, blank-swap, swap-tiles, pass, all-vowel/all-consonant redraw, end-game button, rack visibility toggle, dictionary advisory display. (M3 stubs the join flow with `?slot=N&name=X` URL params and replies `not yet implemented` to non-`submitMove` actions; M4 fills both in.)
 5. **M5 — Polish.** Disconnect/pause overlay, history panel, dictionary advisory warnings, animations, deploy to Render.
 
 Each milestone is end-to-end playable or testable before moving on.
