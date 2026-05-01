@@ -5,7 +5,7 @@ import { SIZE } from './board.js';
 export type ScriptedRunOptions = {
   /** Delay between moves in milliseconds. 0 in tests/demo, ~2000 in the live server so a human can watch. */
   delayMs: number;
-  /** Called once after each successful Game mutation (joinPlayer, startGame, submitMove/passTurn, endGame). */
+  /** Called with the initial post-startGame snapshot, then after each submitMove/passTurn and after endGame. */
   onSnapshot: (state: GameState) => void;
 };
 

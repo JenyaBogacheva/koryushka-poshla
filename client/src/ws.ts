@@ -3,13 +3,30 @@ import { useGameStore } from './store.js';
 
 type ServerMessage = { type: 'state'; state: GameState };
 
-const RECONNECT_DELAY_MS = 1000;
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 30_000;
+
+let reconnectAttempts = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleReconnect(): void {
+  if (reconnectTimer !== null) return;
+  const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempts, RECONNECT_MAX_MS);
+  reconnectAttempts++;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connect();
+  }, delay);
+}
 
 export function connect(): void {
   const url = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`;
   const ws = new WebSocket(url);
 
-  ws.addEventListener('open', () => useGameStore.getState().setConnected(true));
+  ws.addEventListener('open', () => {
+    reconnectAttempts = 0;
+    useGameStore.getState().setConnected(true);
+  });
 
   ws.addEventListener('message', (e) => {
     let msg: ServerMessage;
@@ -33,6 +50,6 @@ export function connect(): void {
   });
   ws.addEventListener('close', () => {
     useGameStore.getState().setConnected(false);
-    setTimeout(connect, RECONNECT_DELAY_MS);
+    scheduleReconnect();
   });
 }

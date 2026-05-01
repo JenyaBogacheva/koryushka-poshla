@@ -3,7 +3,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { GameState } from '@shared/types';
 import { buildScriptedGame, runScriptedGame } from './scripted-game.js';
 
@@ -38,7 +38,10 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
-  let latest: GameState | null = null;
+  // Build the game and capture its initial snapshot before we start listening,
+  // so any client connecting immediately gets a non-null state.
+  const game = buildScriptedGame();
+  let latest: GameState = game.snapshot();
 
   function broadcast(message: object): void {
     const payload = JSON.stringify(message);
@@ -48,22 +51,20 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   }
 
   wss.on('connection', (socket) => {
-    if (latest) socket.send(JSON.stringify({ type: 'state', state: latest }));
+    socket.send(JSON.stringify({ type: 'state', state: latest }));
   });
 
   await new Promise<void>((resolve) => httpServer.listen(port, resolve));
   const actualPort = (httpServer.address() as AddressInfo).port;
 
-  const start = (): Promise<void> => {
-    const game = buildScriptedGame();
-    return runScriptedGame(game, {
+  const start = (): Promise<void> =>
+    runScriptedGame(game, {
       delayMs,
       onSnapshot: (state) => {
         latest = state;
         broadcast({ type: 'state', state });
       },
     });
-  };
 
   const close = async (): Promise<void> => {
     for (const client of wss.clients) client.terminate();
@@ -74,7 +75,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   return { httpServer, wss, port: actualPort, start, close };
 }
 
-const isMain = import.meta.url === `file://${process.argv[1]}`;
+const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   startServer()
     .then(async (server) => {
