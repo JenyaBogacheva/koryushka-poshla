@@ -8,7 +8,7 @@ import type { ClientMessage, ServerMessage, GameState, LobbySlot, Slot } from '@
 import { Game } from './game.js';
 import { createEmptyBoard } from './board.js';
 import { createSeats, seat, unseat, allSeated, namesInSlotOrder, type Seats } from './connections.js';
-import { saveActiveGame, loadActiveGame } from './persistence.js';
+import { saveActiveGame, loadActiveGame, archiveFinishedGame, listGameSummaries, loadArchive } from './persistence.js';
 import { loadFamilyConfig, type FamilyConfig } from './family.js';
 
 export type ServerOptions = {
@@ -30,6 +30,20 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const dataDir = opts.dataDir ?? path.resolve(process.cwd(), 'data');
 
   const app = express();
+
+  app.get('/api/history', (_req, res) => {
+    res.json(listGameSummaries(dataDir));
+  });
+
+  app.get('/api/history/:id', (req, res) => {
+    const archive = loadArchive(dataDir, req.params['id'] ?? '');
+    if (archive === null) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    res.json(archive);
+  });
+
   if (serveStatic) {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const clientDist = path.resolve(__dirname, '../client/dist');
@@ -183,6 +197,15 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
           return;
         case 'endGame':
           handleEngineAction(ws, () => game!.endGame(slot));
+          // After phase flips to 'finished' on disk, archive and clear.
+          if (game !== null && game.snapshot().phase === 'finished') {
+            try {
+              archiveFinishedGame(dataDir);
+            } catch (err) {
+              console.error('[scrabble] archiveFinishedGame failed:', err);
+            }
+            game = null;
+          }
           return;
         case 'revertLastTurn':
           handleEngineAction(ws, () => game!.revertLastTurn(slot));
