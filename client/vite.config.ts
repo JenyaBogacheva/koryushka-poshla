@@ -12,6 +12,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    watch: {
+      // Don't reload the page when the server's runtime files change.
+      ignored: ['**/data/**'],
+    },
     proxy: {
       '/ws': {
         target: 'ws://localhost:3000',
