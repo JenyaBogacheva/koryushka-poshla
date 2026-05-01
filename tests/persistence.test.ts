@@ -31,6 +31,7 @@ const sampleState = (): GameState => ({
   centerBonusUsed: false,
   events: [],
   startedAt: 1_700_000_000_000,
+  drawState: null,
 });
 
 describe('persistence', () => {
@@ -198,6 +199,14 @@ describe('persistence: revert window is not preserved', () => {
     const g = new Game({ seed: 3 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
     g.startGame();
+    while (g.snapshot().phase === 'drawing') {
+      const ds = g.snapshot().drawState!;
+      for (const slot of ds.candidates) {
+        const cur = g.snapshot().drawState!;
+        if (cur.draws.some((d) => d.slot === slot)) continue;
+        g.drawForOrderTile(slot);
+      }
+    }
     const first = g.snapshot().turnIndex;
     g.passTurn(first);
     expect(g.snapshot().players[first]!.canRevert).toBe(true);

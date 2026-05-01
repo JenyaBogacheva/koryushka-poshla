@@ -37,6 +37,7 @@ export function PastGamesDetail({ id }: { id: string }) {
     centerBonusUsed: false,
     events: archive.events,
     startedAt: archive.startedAt,
+    drawState: null,
   };
 
   return (

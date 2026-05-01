@@ -41,6 +41,14 @@ export function buildScriptedGame(): Game {
   g.joinPlayer(1, 'Мама');
   g.joinPlayer(2, 'Папа');
   g.startGame();
+  while (g.snapshot().phase === 'drawing') {
+    const ds = g.snapshot().drawState!;
+    for (const slot of ds.candidates) {
+      const cur = g.snapshot().drawState!;
+      if (cur.draws.some((d) => d.slot === slot)) continue;
+      g.drawForOrderTile(slot);
+    }
+  }
   return g;
 }
 

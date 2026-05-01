@@ -22,6 +22,10 @@ export class Game {
   // Records appended by the most recent action, kept so revert can preserve
   // them in the log even after restoring `state` from `lastSnapshot`.
   private lastActionRecords: GameEvent[] | null = null;
+  // Round-1 draw snapshot: captured the moment all three candidates have drawn,
+  // so the eventual DrawForOrderRecord reflects the initial three-way draw rather
+  // than the tiebreak round(s).
+  private initialDrawSnapshot: { slot: Slot; letter: Letter | null }[] | null = null;
 
   constructor(opts: GameOpts) {
     this.bag = createBag(makeRng(opts.seed));
@@ -44,6 +48,7 @@ export class Game {
       centerBonusUsed: false,
       events: [],
       startedAt: null,
+      drawState: null,
     };
   }
 
@@ -52,11 +57,18 @@ export class Game {
     const cloned = structuredClone(state);
     const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
     cloned.bag = bag.tiles;
-    type Mutable = { bag: Bag; state: GameState; lastSnapshot: null; lastActionRecords: null };
+    type Mutable = {
+      bag: Bag;
+      state: GameState;
+      lastSnapshot: null;
+      lastActionRecords: null;
+      initialDrawSnapshot: null;
+    };
     (g as unknown as Mutable).bag = bag;
     (g as unknown as Mutable).state = cloned;
     (g as unknown as Mutable).lastSnapshot = null;
     (g as unknown as Mutable).lastActionRecords = null;
+    (g as unknown as Mutable).initialDrawSnapshot = null;
     return g;
   }
 
@@ -70,45 +82,68 @@ export class Game {
     if (!this.state.players.every((p) => p.connected)) {
       throw new Error('Cannot start until all three slots are connected');
     }
+    this.state.phase = 'drawing';
+    this.state.drawState = { round: 1, candidates: [0, 1, 2], draws: [] };
+    this.initialDrawSnapshot = null;
+  }
 
-    let candidates: Slot[] = [0, 1, 2];
-    let firstDraws: { slot: Slot; letter: Letter | null }[] = [];
-    let firstSlot: Slot;
-    while (true) {
-      const drawn = candidates.map((s) => {
-        const tile = drawTiles(this.bag, 1)[0]!;
-        return { slot: s, tile, letter: tile.isBlank ? null : tile.letter };
-      });
-      if (firstDraws.length === 0) {
-        // The first snapshot is captured before any tie-redraw, so the event reflects the initial three-way draw.
-        firstDraws = drawn.map((d) => ({ slot: d.slot, letter: d.letter }));
-      }
-      drawn.sort((a, b) => compareLetterOrder(a.letter, b.letter));
-      const best = drawn[0]!;
-      const tied = drawn.filter((d) => compareLetterOrder(d.letter, best.letter) === 0);
-      returnTiles(this.bag, drawn.map((d) => d.tile));
-      if (tied.length === 1) {
-        firstSlot = best.slot;
-        break;
-      }
-      candidates = tied.map((d) => d.slot);
+  drawForOrderTile(slot: Slot): void {
+    if (this.state.phase !== 'drawing' || this.state.drawState === null) {
+      throw new Error('Game is not in drawing phase');
     }
-
-    for (const p of this.state.players) {
-      const drawn = drawTiles(this.bag, 7);
-      addTilesToRack(p.rack, drawn);
+    const ds = this.state.drawState;
+    if (!ds.candidates.includes(slot)) {
+      throw new Error(`Slot ${slot} is not a draw candidate`);
     }
-
-    this.state.events.push({
-      kind: 'drawForOrder',
-      draws: firstDraws,
-      firstSlot,
-      timestamp: Date.now(),
-    });
-    this.state.turnIndex = firstSlot;
-    this.state.phase = 'playing';
+    if (ds.draws.some((d) => d.slot === slot)) {
+      throw new Error(`Slot ${slot} has already drawn this round`);
+    }
+    const tile = drawTiles(this.bag, 1)[0]!;
+    const letter: Letter | null = tile.isBlank ? null : tile.letter;
+    ds.draws.push({ slot, letter });
+    returnTiles(this.bag, [tile]);
     this.state.bag = this.bag.tiles;
-    this.state.startedAt = Date.now();
+
+    if (ds.round === 1 && ds.draws.length === ds.candidates.length && this.initialDrawSnapshot === null) {
+      this.initialDrawSnapshot = ds.draws.map((d) => ({ slot: d.slot, letter: d.letter }));
+    }
+
+    if (ds.draws.length < ds.candidates.length) return;
+    this.resolveDrawRound();
+  }
+
+  private resolveDrawRound(): void {
+    const ds = this.state.drawState!;
+    const sorted = [...ds.draws].sort((a, b) => compareLetterOrder(a.letter, b.letter));
+    const best = sorted[0]!;
+    const tied = sorted.filter((d) => compareLetterOrder(d.letter, best.letter) === 0);
+
+    if (tied.length === 1) {
+      const firstSlot = best.slot;
+      for (const p of this.state.players) {
+        const drawn = drawTiles(this.bag, 7);
+        addTilesToRack(p.rack, drawn);
+      }
+      this.state.events.push({
+        kind: 'drawForOrder',
+        draws: this.initialDrawSnapshot ?? ds.draws.map((d) => ({ slot: d.slot, letter: d.letter })),
+        firstSlot,
+        timestamp: Date.now(),
+      });
+      this.state.turnIndex = firstSlot;
+      this.state.phase = 'playing';
+      this.state.bag = this.bag.tiles;
+      this.state.startedAt = Date.now();
+      this.state.drawState = null;
+      this.initialDrawSnapshot = null;
+      return;
+    }
+
+    this.state.drawState = {
+      round: ds.round + 1,
+      candidates: tied.map((d) => d.slot),
+      draws: [],
+    };
   }
 
   submitMove(slot: Slot, placements: Placement[], helperSlot?: Slot): SubmitResult {

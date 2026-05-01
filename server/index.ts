@@ -24,6 +24,19 @@ export type RunningServer = {
   close: () => Promise<void>;
 };
 
+// Interim helper: drive the interactive draw-for-order to completion server-side.
+// Task 4 will replace this with explicit drawTile message routing.
+function driveDrawsToCompletion(g: Game): void {
+  while (g.snapshot().phase === 'drawing') {
+    const ds = g.snapshot().drawState!;
+    for (const slot of ds.candidates) {
+      const cur = g.snapshot().drawState!;
+      if (cur.draws.some((d) => d.slot === slot)) continue;
+      g.drawForOrderTile(slot);
+    }
+  }
+}
+
 export async function startServer(opts: ServerOptions = {}): Promise<RunningServer> {
   const port = opts.port ?? Number(process.env.PORT ?? 3000);
   const serveStatic = opts.serveStatic ?? process.env.NODE_ENV === 'production';
@@ -94,6 +107,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       centerBonusUsed: false,
       events: [],
       startedAt: null,
+      drawState: null,
     };
   }
 
@@ -237,6 +251,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
           game.joinPlayer(1, names[1]);
           game.joinPlayer(2, names[2]);
           game.startGame();
+          driveDrawsToCompletion(game);
           try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
           broadcastState();
           return;
@@ -306,6 +321,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       game.joinPlayer(1, names[1]);
       game.joinPlayer(2, names[2]);
       game.startGame();
+      driveDrawsToCompletion(game);
       try {
         saveActiveGame(dataDir, game.snapshot());
       } catch (err) {

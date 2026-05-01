@@ -3,6 +3,25 @@ import { Game } from '../server/game';
 import type { Placement, DrawForOrderRecord } from '@shared/types';
 import { isAllVowels, isAllConsonants } from '../server/rack';
 
+/**
+ * Drive the interactive draw-for-order to completion. Calls drawForOrderTile
+ * for each candidate slot in ascending order until the game transitions to
+ * the playing phase.
+ */
+function startAndDraw(g: Game): void {
+  g.startGame();
+  // Loop in case round 1 ties — round 2 will have fewer candidates.
+  while (g.snapshot().phase === 'drawing') {
+    const ds = g.snapshot().drawState!;
+    for (const slot of ds.candidates) {
+      if (g.snapshot().phase !== 'drawing') break;
+      const cur = g.snapshot().drawState!;
+      if (cur.draws.some((d) => d.slot === slot)) continue;
+      g.drawForOrderTile(slot);
+    }
+  }
+}
+
 describe('Game — init', () => {
   it('starts in waiting phase with three empty slots', () => {
     const g = new Game({ seed: 1 });
@@ -29,10 +48,10 @@ describe('Game — init', () => {
     expect(s.players[0]!.connected).toBe(true);
   });
 
-  it('startGame deals 7 tiles to each player and moves to playing', () => {
+  it('startGame followed by draws deals 7 tiles to each player and moves to playing', () => {
     const g = new Game({ seed: 1 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     const s = g.snapshot();
     expect(s.phase).toBe('playing');
     expect(s.bag.length).toBe(104 - 21);
@@ -48,7 +67,7 @@ describe('Game — init', () => {
   it('snapshot is a deep copy (no shared mutable references)', () => {
     const g = new Game({ seed: 1 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     const s1 = g.snapshot();
     s1.players[0]!.score = 999;
     const s2 = g.snapshot();
@@ -59,7 +78,7 @@ describe('Game — init', () => {
 function makeReadyGame(seed: number) {
   const g = new Game({ seed });
   g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-  g.startGame();
+  startAndDraw(g);
   return g;
 }
 
@@ -296,7 +315,7 @@ describe('Game.fromState', () => {
     original.joinPlayer(0, 'A');
     original.joinPlayer(1, 'B');
     original.joinPlayer(2, 'C');
-    original.startGame();
+    startAndDraw(original);
     const snap = original.snapshot();
     const restored = Game.fromState(snap);
     expect(restored.snapshot()).toEqual(snap);
@@ -307,7 +326,7 @@ describe('Game.fromState', () => {
     original.joinPlayer(0, 'A');
     original.joinPlayer(1, 'B');
     original.joinPlayer(2, 'C');
-    original.startGame();
+    startAndDraw(original);
     const snap = original.snapshot();
     const restored = Game.fromState(snap);
     const racks = restored.snapshot().players.map((p) => p.rack);
@@ -321,7 +340,7 @@ describe('snapshot per-player flags', () => {
   it('exposes redrawEligible=false and canRevert=false on a fresh game', () => {
     const g = new Game({ seed: 1 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     const snap = g.snapshot();
     for (const p of snap.players) {
       expect(typeof p.redrawEligible).toBe('boolean');
@@ -332,7 +351,7 @@ describe('snapshot per-player flags', () => {
   it('redrawEligible is true when the rack is all-vowel', () => {
     const g = new Game({ seed: 1 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     const state = g.snapshot();
     state.players[0]!.rack = state.players[0]!.rack.map((t, i) =>
       ({ ...t, letter: ['А','Е','И','О','У','Ы','Э'][i % 7]!, points: 1, isBlank: false }),
@@ -347,7 +366,7 @@ describe('Game.revertLastTurn after submitMove', () => {
   function setup() {
     const g = new Game({ seed: 7 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     return g;
   }
 
@@ -397,7 +416,7 @@ describe('revert across action types', () => {
   function setup() {
     const g = new Game({ seed: 11 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     return g;
   }
 
@@ -452,7 +471,7 @@ describe('Game — submitMove with helperSlot (assist credit)', () => {
   function setup() {
     const g = new Game({ seed: 1 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     return g;
   }
 
@@ -536,14 +555,14 @@ describe('startGame draw-for-order', () => {
   it('emits a DrawForOrderRecord as the first event', () => {
     const g = new Game({ seed: 12345 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     const events = g.snapshot().events;
     expect(events[0]?.kind).toEqual('drawForOrder');
   });
   it('sets turnIndex to firstSlot', () => {
     const g = new Game({ seed: 12345 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     const snap = g.snapshot();
     const first = (snap.events[0] as DrawForOrderRecord).firstSlot;
     expect(snap.turnIndex).toEqual(first);
@@ -551,7 +570,7 @@ describe('startGame draw-for-order', () => {
   it('returns drawn tiles to bag — full racks dealt', () => {
     const g = new Game({ seed: 12345 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     const snap = g.snapshot();
     const totalRacks = snap.players.reduce((s, p) => s + p.rack.length, 0);
     expect(totalRacks).toEqual(21);
@@ -560,14 +579,14 @@ describe('startGame draw-for-order', () => {
   it('records draws in slot order', () => {
     const g = new Game({ seed: 12345 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     const ev = g.snapshot().events[0] as DrawForOrderRecord;
     expect(ev.draws.map((d) => d.slot)).toEqual([0, 1, 2]);
   });
   it('handles a tie via redraw without leaking tiles', () => {
     const g = new Game({ seed: 7 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     const snap = g.snapshot();
     const ev = snap.events[0] as DrawForOrderRecord;
     // Two of the three initial draws were the same letter (the tie that triggered redraw).
@@ -583,11 +602,106 @@ describe('startGame draw-for-order', () => {
   });
 });
 
+describe('interactive draw-for-order', () => {
+  function ready(seed = 1): Game {
+    const g = new Game({ seed });
+    g.joinPlayer(0, 'A');
+    g.joinPlayer(1, 'B');
+    g.joinPlayer(2, 'C');
+    return g;
+  }
+
+  it('startGame transitions to drawing phase without dealing racks', () => {
+    const g = ready();
+    g.startGame();
+    const s = g.snapshot();
+    expect(s.phase).toBe('drawing');
+    expect(s.drawState).toEqual({ round: 1, candidates: [0, 1, 2], draws: [] });
+    for (const p of s.players) expect(p.rack).toEqual([]);
+    expect(s.events.filter((e) => e.kind === 'drawForOrder')).toEqual([]);
+  });
+
+  it('drawForOrderTile records the slot+letter and keeps the tile in the bag', () => {
+    const g = ready();
+    g.startGame();
+    const bagBefore = g.snapshot().bag.length;
+    g.drawForOrderTile(0);
+    const s = g.snapshot();
+    expect(s.drawState?.draws.length).toBe(1);
+    expect(s.drawState?.draws[0]?.slot).toBe(0);
+    expect(s.bag.length).toBe(bagBefore); // tile returned to bag
+    expect(s.phase).toBe('drawing');
+  });
+
+  it('drawForOrderTile rejects double-draws by the same slot', () => {
+    const g = ready();
+    g.startGame();
+    g.drawForOrderTile(0);
+    expect(() => g.drawForOrderTile(0)).toThrow(/already drawn/);
+  });
+
+  it('drawForOrderTile throws when phase is not drawing', () => {
+    const g = ready();
+    expect(() => g.drawForOrderTile(0)).toThrow(/not in drawing phase/);
+  });
+
+  it('resolves to playing and deals racks once a unique winner emerges', () => {
+    let g!: Game;
+    for (let s = 1; s < 200; s++) {
+      const candidate = ready(s);
+      candidate.startGame();
+      candidate.drawForOrderTile(0);
+      candidate.drawForOrderTile(1);
+      candidate.drawForOrderTile(2);
+      if (candidate.snapshot().phase === 'playing') {
+        g = candidate;
+        break;
+      }
+    }
+    if (!g) throw new Error('Could not find a non-tied seed in range');
+
+    const s = g.snapshot();
+    expect(s.phase).toBe('playing');
+    expect(s.drawState).toBeNull();
+    for (const p of s.players) expect(p.rack.length).toBe(7);
+    const ev = s.events.find((e) => e.kind === 'drawForOrder');
+    expect(ev).toBeDefined();
+    if (ev?.kind === 'drawForOrder') {
+      expect(ev.draws.length).toBe(3);
+      expect([0, 1, 2]).toContain(ev.firstSlot);
+    }
+  });
+
+  it('starts a tiebreak round when two or more slots tie', () => {
+    let g!: Game;
+    for (let s = 1; s < 500; s++) {
+      const candidate = ready(s);
+      candidate.startGame();
+      candidate.drawForOrderTile(0);
+      candidate.drawForOrderTile(1);
+      candidate.drawForOrderTile(2);
+      const ds = candidate.snapshot().drawState;
+      if (candidate.snapshot().phase === 'drawing' && ds && ds.round === 2) {
+        g = candidate;
+        break;
+      }
+    }
+    if (!g) throw new Error('Could not find a tied seed in range');
+
+    const s = g.snapshot();
+    expect(s.phase).toBe('drawing');
+    expect(s.drawState?.round).toBe(2);
+    expect(s.drawState?.draws).toEqual([]);
+    expect(s.drawState?.candidates.length).toBeGreaterThanOrEqual(2);
+    for (const p of s.players) expect(p.rack).toEqual([]);
+  });
+});
+
 describe('Game.revertLastTurn — append-only RevertRecord log', () => {
   function makeReadyGame2(seed: number) {
     const g = new Game({ seed });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
-    g.startGame();
+    startAndDraw(g);
     return g;
   }
 
