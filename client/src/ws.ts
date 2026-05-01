@@ -9,7 +9,6 @@ let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let warningTimer: ReturnType<typeof setTimeout> | null = null;
 let socket: WebSocket | null = null;
-let intentionalClose = false;
 
 function scheduleReconnect(): void {
   if (reconnectTimer !== null) return;
@@ -35,13 +34,13 @@ export function connect(): void {
   if (socket !== null && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     return;
   }
-  intentionalClose = false;
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = `${proto}//${location.host}/ws`;
   const ws = new WebSocket(url);
   socket = ws;
 
   ws.addEventListener('open', () => {
+    if (socket !== ws) return;
     reconnectAttempts = 0;
     useGameStore.getState().setConnected(true);
     const { identity } = useGameStore.getState();
@@ -49,6 +48,7 @@ export function connect(): void {
   });
 
   ws.addEventListener('message', (e) => {
+    if (socket !== ws) return;
     let msg: ServerMessage;
     try {
       msg = JSON.parse(e.data) as ServerMessage;
@@ -96,14 +96,13 @@ export function connect(): void {
   });
 
   ws.addEventListener('error', (e) => {
+    if (socket !== ws) return;
     console.warn('ws error:', e);
   });
   ws.addEventListener('close', () => {
+    if (socket !== ws) return;   // a previous (replaced) socket closing — ignore.
+    socket = null;
     useGameStore.getState().setConnected(false);
-    if (intentionalClose) {
-      intentionalClose = false;
-      return;
-    }
     scheduleReconnect();
   });
 }
@@ -118,9 +117,9 @@ export function disconnect(): void {
     warningTimer = null;
   }
   if (socket !== null) {
-    intentionalClose = true;
-    socket.close();
-    socket = null;
+    const old = socket;
+    socket = null;          // detach first; the close listener on `old` checks `socket !== ws` and bails.
+    old.close();
   }
 }
 
