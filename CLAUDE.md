@@ -7,7 +7,7 @@ Family-style three-player Russian Scrabble (Эрудит) for browser play. Serv
 - **Variant:** Russian Эрудит (104 tiles, 2 blanks; Ё/Ъ separate tiles)
 - **Players:** Exactly 3, fixed slots, no accounts
 - **Scope:** Personal/family project — usability and house-rule fidelity matter more than competitive correctness
-- **Status:** M1 (server engine) complete. M2 = HTTP/WS, M3+ = UI.
+- **Status:** M1+M2+M3 complete. M4 = lobby UI + remaining rule actions, M5 = polish + deploy.
 
 ## Authoritative Documents
 
@@ -47,7 +47,12 @@ Family-style three-player Russian Scrabble (Эрудит) for browser play. Serv
 ```bash
 nvm use            # node 20 per .nvmrc
 npm install
-npm run dev        # vite (:5173) + express+ws (:3000) — open http://localhost:5173
+npm run dev        # vite (:5173) + express+ws (:3000) — open http://localhost:5173/?slot=N&name=Имя
+
+# Each browser tab needs identity in the URL (slot 0–2, any non-empty name).
+# Game starts when all three slots are connected. data/game.json persists the
+# active game and is reloaded on the next server boot. The lobby/slot-picker
+# UI lands in M4; M3 stubs identity via URL params.
 npm run build      # produce client/dist/
 npm start          # production: single Express process on :3000 serves client + /ws
 npm test           # vitest run
