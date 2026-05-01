@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import type { ClientMessage, ServerMessage, GameState, Slot } from '@shared/types';
+import type { ClientMessage, ServerMessage, GameState, LobbySlot, Slot } from '@shared/types';
 import { Game } from './game.js';
 import { createEmptyBoard } from './board.js';
 import { createSeats, seat, unseat, allSeated, namesInSlotOrder, type Seats } from './connections.js';
@@ -22,8 +22,6 @@ export type RunningServer = {
   port: number;
   close: () => Promise<void>;
 };
-
-const VALID_SLOTS = new Set(['0', '1', '2']);
 
 export async function startServer(opts: ServerOptions = {}): Promise<RunningServer> {
   const port = opts.port ?? Number(process.env.PORT ?? 3000);
@@ -108,15 +106,67 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     sendMsg(ws, { type: 'moveAccepted', moveRecord: result.moveRecord, dictionaryWarnings: result.dictionaryWarnings });
   }
 
-  wss.on('connection', (ws, req) => {
-    const url = new URL(req.url ?? '/ws', 'ws://localhost');
-    const slotStr = url.searchParams.get('slot');
-    const name = url.searchParams.get('name')?.trim();
-    if (slotStr === null || !VALID_SLOTS.has(slotStr) || !name) {
-      ws.close(1008, 'Bad join params');
+  function lobbyMessage(): ServerMessage {
+    return {
+      type: 'lobby',
+      slots: ([0, 1, 2] as Slot[]).map((i) => ({
+        slot: i,
+        name: seats[i]!.name ?? '',
+        connected: seats[i]!.ws !== null,
+      })) as [LobbySlot, LobbySlot, LobbySlot],
+    };
+  }
+
+  function broadcastLobby(): void {
+    const data = JSON.stringify(lobbyMessage());
+    for (const client of wss.clients) {
+      if (client.readyState === WebSocket.OPEN) client.send(data);
+    }
+  }
+
+  function attachInGameHandler(ws: WebSocket, slot: Slot): void {
+    ws.on('message', (raw: RawData) => {
+      let msg: ClientMessage;
+      try {
+        msg = JSON.parse(raw.toString()) as ClientMessage;
+      } catch {
+        sendMsg(ws, { type: 'error', message: 'Invalid JSON' });
+        return;
+      }
+      switch (msg.type) {
+        case 'join':
+          sendMsg(ws, { type: 'error', message: 'Already joined' });
+          return;
+        case 'submitMove':
+          handleSubmitMove(slot, msg, ws);
+          return;
+        case 'swapTiles':
+        case 'claimBlank':
+        case 'pass':
+        case 'redraw':
+        case 'toggleRackVisible':
+        case 'endGame':
+          sendMsg(ws, { type: 'error', message: 'not yet implemented' });
+          return;
+        default:
+          sendMsg(ws, { type: 'error', message: 'Unknown message type' });
+      }
+    });
+  }
+
+  function handleJoin(ws: WebSocket, msg: Extract<ClientMessage, { type: 'join' }>): void {
+    const slot = msg.slot;
+    const name = msg.name?.trim();
+    if (slot !== 0 && slot !== 1 && slot !== 2) {
+      sendMsg(ws, { type: 'error', message: 'Bad slot' });
+      ws.close(1008, 'Bad slot');
       return;
     }
-    const slot = Number(slotStr) as Slot;
+    if (!name) {
+      sendMsg(ws, { type: 'error', message: 'Name required' });
+      ws.close(1008, 'Name required');
+      return;
+    }
 
     if (game !== null) {
       const persistedName = game.snapshot().players[slot]!.name;
@@ -132,6 +182,14 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       sendMsg(ws, { type: 'error', message: result.reason });
       ws.close(1008, result.reason);
       return;
+    }
+
+    if (result.replaced !== null) {
+      try {
+        result.replaced.close(1000, 'replaced by same-name client');
+      } catch {
+        /* ignore */
+      }
     }
 
     if (game !== null) {
@@ -150,9 +208,15 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       }
     }
 
+    attachInGameHandler(ws, slot);
     broadcastState();
+    broadcastLobby();
+  }
 
-    ws.on('message', (raw: RawData) => {
+  wss.on('connection', (ws) => {
+    sendMsg(ws, lobbyMessage());
+
+    const preJoinHandler = (raw: RawData): void => {
       let msg: ClientMessage;
       try {
         msg = JSON.parse(raw.toString()) as ClientMessage;
@@ -160,27 +224,20 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         sendMsg(ws, { type: 'error', message: 'Invalid JSON' });
         return;
       }
-      switch (msg.type) {
-        case 'submitMove':
-          handleSubmitMove(slot, msg, ws);
-          return;
-        case 'swapTiles':
-        case 'claimBlank':
-        case 'pass':
-        case 'redraw':
-        case 'toggleRackVisible':
-        case 'endGame':
-          sendMsg(ws, { type: 'error', message: 'not yet implemented' });
-          return;
-        default:
-          sendMsg(ws, { type: 'error', message: 'Unknown message type' });
+      if (msg.type !== 'join') {
+        sendMsg(ws, { type: 'error', message: 'Join first' });
+        return;
       }
-    });
+      ws.off('message', preJoinHandler);
+      handleJoin(ws, msg);
+    };
+    ws.on('message', preJoinHandler);
 
     ws.on('close', () => {
       const which = unseat(seats, ws);
       if (which === null) return;
       broadcastState();
+      broadcastLobby();
     });
   });
 

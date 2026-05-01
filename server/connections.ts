@@ -8,7 +8,9 @@ export type Seat = {
 
 export type Seats = [Seat, Seat, Seat];
 
-export type SeatResult = { ok: true } | { ok: false; reason: string };
+export type SeatResult =
+  | { ok: true; replaced: WebSocket | null }
+  | { ok: false; reason: string };
 
 export function createSeats(): Seats {
   return [
@@ -23,12 +25,10 @@ export function seat(seats: Seats, slot: Slot, name: string, ws: WebSocket): Sea
   if (s.name !== null && s.name !== name) {
     return { ok: false, reason: 'Slot taken' };
   }
-  if (s.name === name && s.ws !== null) {
-    return { ok: false, reason: 'Slot taken' };
-  }
+  const replaced = s.ws !== null && s.name === name ? s.ws : null;
   s.name = name;
   s.ws = ws;
-  return { ok: true };
+  return { ok: true, replaced };
 }
 
 export function unseat(seats: Seats, ws: WebSocket): Slot | null {
