@@ -213,7 +213,7 @@ describe('M4a server: lobby → join → state', () => {
     }
   });
 
-  it('replies "not yet implemented" for stubbed actions after join', async () => {
+  it('replies "not yet implemented" for the still-stubbed toggleRackVisible', async () => {
     const { server, url } = await freshServer();
     try {
       const [b0, b1, b2] = await Promise.all([buffered(url), buffered(url), buffered(url)]);
@@ -221,7 +221,7 @@ describe('M4a server: lobby → join → state', () => {
       join(b0, 0, 'A'); join(b1, 1, 'B'); join(b2, 2, 'C');
       await waitFor(b0, isStateWithPhase('playing'));
 
-      send(b0, { type: 'pass' });
+      send(b0, { type: 'toggleRackVisible', visible: false });
       const err = await waitFor(b0, isType('error'));
       expect(err.message).toBe('not yet implemented');
 

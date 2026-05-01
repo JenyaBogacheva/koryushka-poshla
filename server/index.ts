@@ -99,6 +99,26 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     }
   }
 
+  function handleEngineAction(ws: WebSocket, fn: () => void): void {
+    if (game === null) {
+      sendMsg(ws, { type: 'error', message: 'Game not started' });
+      return;
+    }
+    try {
+      fn();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Engine error';
+      sendMsg(ws, { type: 'error', message });
+      return;
+    }
+    try {
+      saveActiveGame(dataDir, game.snapshot());
+    } catch (err) {
+      console.error('[scrabble] saveActiveGame failed:', err);
+    }
+    broadcastState();
+  }
+
   function handleSubmitMove(slot: Slot, msg: Extract<ClientMessage, { type: 'submitMove' }>, ws: WebSocket): void {
     if (game === null) {
       sendMsg(ws, { type: 'error', message: 'Game not started' });
@@ -152,11 +172,22 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'submitMove':
           handleSubmitMove(slot, msg, ws);
           return;
-        case 'claimBlank':
         case 'pass':
+          handleEngineAction(ws, () => game!.passTurn(slot));
+          return;
         case 'redraw':
-        case 'toggleRackVisible':
+          handleEngineAction(ws, () => game!.redrawRack(slot));
+          return;
+        case 'claimBlank':
+          handleEngineAction(ws, () => game!.claimBlank(slot, msg.row, msg.col, msg.myTileId));
+          return;
         case 'endGame':
+          handleEngineAction(ws, () => game!.endGame(slot));
+          return;
+        case 'revertLastTurn':
+          handleEngineAction(ws, () => game!.revertLastTurn(slot));
+          return;
+        case 'toggleRackVisible':
           sendMsg(ws, { type: 'error', message: 'not yet implemented' });
           return;
         default:

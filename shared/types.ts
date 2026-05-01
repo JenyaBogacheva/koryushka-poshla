@@ -86,7 +86,8 @@ export type ClientMessage =
   | { type: 'pass' }
   | { type: 'redraw' }
   | { type: 'toggleRackVisible'; visible: boolean }
-  | { type: 'endGame' };
+  | { type: 'endGame' }
+  | { type: 'revertLastTurn' };
 
 export type ServerMessage =
   | { type: 'lobby'; slots: [LobbySlot, LobbySlot, LobbySlot] }
