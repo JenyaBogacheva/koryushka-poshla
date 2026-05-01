@@ -1,4 +1,4 @@
-import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed, GameEvent } from '@shared/types';
+import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed, GameEvent, Letter } from '@shared/types';
 import { createBag, drawTiles, returnTiles, makeRng, bagFromTiles, type Bag } from './bag.js';
 import { addTilesToRack, removeTilesFromRack, redrawEligible, isAllVowels } from './rack.js';
 import { createEmptyBoard, applyPlacements, isEmpty, extractWordsFormed } from './board.js';
@@ -72,7 +72,7 @@ export class Game {
     }
 
     let candidates: Slot[] = [0, 1, 2];
-    let firstDraws: { slot: Slot; letter: import('@shared/types').Letter | null }[] = [];
+    let firstDraws: { slot: Slot; letter: Letter | null }[] = [];
     let firstSlot: Slot;
     while (true) {
       const drawn = candidates.map((s) => {

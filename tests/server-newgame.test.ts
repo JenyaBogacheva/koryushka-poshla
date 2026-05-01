@@ -75,8 +75,8 @@ async function arrangeFinished() {
   const ctx = await threeJoined();
   send(ctx.a, { type: 'endGame' });
   await waitFor(ctx.b, isStateWithPhase('finished'));
-  // Give server a tick to finish archiving.
-  await new Promise<void>((r) => setTimeout(r, 50));
+  // Wait for archive to complete: next state broadcast will be the fresh lobby snapshot (phase 'waiting')
+  await waitFor(ctx.b, isStateWithPhase('waiting'));
   return ctx;
 }
 
