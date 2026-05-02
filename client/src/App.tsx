@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import type { Letter, Slot, Tile as TileT } from '@shared/types';
 import { useGameStore } from './store.js';
@@ -17,6 +17,7 @@ import { PastGamesList } from './components/PastGamesList.js';
 import { PastGamesDetail } from './components/PastGamesDetail.js';
 import { FinishedScreen } from './components/FinishedScreen.js';
 import { DrawForOrderScreen } from './components/DrawForOrderScreen.js';
+import { GameEndCelebration } from './components/GameEndCelebration.js';
 
 type PendingDrop = { tile: TileT; row: number; col: number };
 
@@ -57,6 +58,16 @@ export function App() {
     }, 120);
     return () => clearTimeout(t);
   }, [pendingPlacements, setMovePreview]);
+
+  const phase = state?.phase;
+  const [celebrationOpen, setCelebrationOpen] = useState(false);
+  const prevPhase = useRef(phase);
+  useEffect(() => {
+    if (prevPhase.current !== 'finished' && phase === 'finished') {
+      setCelebrationOpen(true);
+    }
+    prevPhase.current = phase;
+  }, [phase]);
 
   function handleJoin(slot: Slot, name: string, password: string) {
     setIdentity(slot, name, password);
@@ -151,7 +162,14 @@ export function App() {
           <ActionBar />
           <MoveLog state={state} />
         </aside>
-        {state.phase === 'finished' && <FinishedScreen state={state} />}
+        {state.phase === 'finished' && (
+          <>
+            <FinishedScreen state={state} />
+            {celebrationOpen && (
+              <GameEndCelebration state={state} onDismiss={() => setCelebrationOpen(false)} />
+            )}
+          </>
+        )}
         {state.phase === 'drawing' && <DrawForOrderScreen state={state} mySlot={identity.slot} />}
       </main>
       {pendingBlank !== null && (
