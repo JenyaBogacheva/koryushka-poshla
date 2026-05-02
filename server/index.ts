@@ -8,7 +8,7 @@ import type { ClientMessage, ServerMessage, GameState, LobbySlot, Slot } from '@
 import { Game } from './game.js';
 import { createEmptyBoard } from './board.js';
 import { createSeats, seat, unseat, allSeated, namesInSlotOrder, type Seats } from './connections.js';
-import { saveActiveGame, loadActiveGame } from './persistence.js';
+import { saveActiveGame, loadActiveGame, archiveFinishedGame, listGameSummaries, loadArchive } from './persistence.js';
 import { loadFamilyConfig, type FamilyConfig } from './family.js';
 
 export type ServerOptions = {
@@ -30,6 +30,25 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const dataDir = opts.dataDir ?? path.resolve(process.cwd(), 'data');
 
   const app = express();
+
+  app.get('/api/history', (_req, res) => {
+    res.json(listGameSummaries(dataDir));
+  });
+
+  app.get('/api/history/:id', (req, res) => {
+    const id = req.params['id'] ?? '';
+    if (!/^g-\d+$/.test(id)) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    const archive = loadArchive(dataDir, id);
+    if (archive === null) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    res.json(archive);
+  });
+
   if (serveStatic) {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const clientDist = path.resolve(__dirname, '../client/dist');
@@ -78,8 +97,9 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       board: createEmptyBoard(),
       bag: [],
       centerBonusUsed: false,
-      history: [],
+      events: [],
       startedAt: null,
+      drawState: null,
     };
   }
 
@@ -117,6 +137,17 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       console.error('[scrabble] saveActiveGame failed:', err);
     }
     broadcastState();
+    // Games can end three ways: explicit endGame, bagEmptyAndRackEmpty, or sixPasses.
+    // The latter two happen inside submitMove/passTurn, so archive here, not just in
+    // the 'endGame' handler — otherwise game stays non-null and 'newGame' is ignored.
+    if (game.snapshot().phase === 'finished') {
+      try {
+        archiveFinishedGame(dataDir);
+      } catch (err) {
+        console.error('[scrabble] archiveFinishedGame failed:', err);
+      }
+      game = null;
+    }
   }
 
   function handleSubmitMove(slot: Slot, msg: Extract<ClientMessage, { type: 'submitMove' }>, ws: WebSocket): void {
@@ -124,7 +155,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       sendMsg(ws, { type: 'error', message: 'Game not started' });
       return;
     }
-    const result = game.submitMove(slot, msg.placements);
+    const result = game.submitMove(slot, msg.placements, msg.helperSlot);
     if (!result.ok) {
       sendMsg(ws, { type: 'moveRejected', reason: humanReadableReason(result.error) });
       return;
@@ -187,9 +218,57 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'revertLastTurn':
           handleEngineAction(ws, () => game!.revertLastTurn(slot));
           return;
+        case 'drawTile':
+          handleEngineAction(ws, () => game!.drawForOrderTile(slot));
+          return;
+        case 'previewMove': {
+          if (game === null) return;
+          const preview = game.previewMove(slot, msg.placements);
+          if (preview.ok) {
+            sendMsg(ws, {
+              type: 'movePreview',
+              preview: {
+                ok: true,
+                totalScore: preview.totalScore,
+                bingoBonus: preview.bingoBonus,
+                wordsFormed: preview.wordsFormed,
+                dictionaryWarnings: preview.dictionaryWarnings,
+              },
+            });
+          } else {
+            sendMsg(ws, { type: 'movePreview', preview: { ok: false, reason: humanReadableReason(preview.error) } });
+          }
+          return;
+        }
         case 'toggleRackVisible':
           sendMsg(ws, { type: 'error', message: 'not yet implemented' });
           return;
+        case 'newGame': {
+          // Recover from a stuck finished game (e.g. older server build that didn't
+          // archive on auto-end): treat it as if endGame had cleaned up.
+          if (game !== null && game.snapshot().phase === 'finished') {
+            try {
+              archiveFinishedGame(dataDir);
+            } catch (err) {
+              console.error('[scrabble] archiveFinishedGame failed:', err);
+            }
+            game = null;
+          }
+          if (game !== null) return; // ignore if game already running (race)
+          if (!allSeated(seats)) {
+            sendMsg(ws, { type: 'error', message: 'Не все игроки подключены' });
+            return;
+          }
+          game = new Game({ seed: Date.now() });
+          const names = namesInSlotOrder(seats);
+          game.joinPlayer(0, names[0]);
+          game.joinPlayer(1, names[1]);
+          game.joinPlayer(2, names[2]);
+          game.startGame();
+          try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
+          broadcastState();
+          return;
+        }
         default:
           sendMsg(ws, { type: 'error', message: 'Unknown message type' });
       }
@@ -311,6 +390,7 @@ function humanReadableReason(error: { kind: string }): string {
   switch (error.kind) {
     case 'not-your-turn': return 'Сейчас не ваш ход';
     case 'not-playing': return 'Игра не в процессе';
+    case 'invalid-helper': return 'Неверный помощник';
     case 'no-placements': return 'Нет плиток для хода';
     case 'out-of-range': return 'Плитка вне поля';
     case 'duplicate-target': return 'Две плитки в одну клетку';

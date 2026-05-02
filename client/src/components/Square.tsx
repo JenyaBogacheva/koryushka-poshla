@@ -4,6 +4,9 @@ import { Tile } from './Tile.js';
 import { useGameStore } from '../store.js';
 import { SUBSTITUTIONS, canSubstitute } from '../letters.js';
 
+// Must match @keyframes tile-flash duration in styles/index.css.
+const TILE_FLASH_MS = 1200;
+
 const PREMIUM_BG: Record<Exclude<Premium, null>, string> = {
   TW: 'bg-terracotta/70',
   DW: 'bg-peach',
@@ -26,22 +29,28 @@ type Props = {
   cell: Cell | null;
   premium: Premium;
   size: number;
+  readOnly?: boolean;
 };
 
-export function Square({ row, col, cell, premium, size }: Props) {
+export function Square({ row, col, cell, premium, size, readOnly = false }: Props) {
   const identity = useGameStore((s) => s.identity);
   const state = useGameStore((s) => s.state);
   const pending = useGameStore((s) => s.pendingPlacements);
   const removePending = useGameStore((s) => s.removePending);
   const togglePendingSubstitution = useGameStore((s) => s.togglePendingSubstitution);
+  const lastPlacedCells = useGameStore((s) => s.lastPlacedCells);
+  const lastPlacedAt = useGameStore((s) => s.lastPlacedAt);
 
   const mySlot = identity?.slot ?? null;
-  const pendingHere = pending.find((p) => p.row === row && p.col === col) ?? null;
-  const isMyTurn = state !== null && mySlot !== null && state.turnIndex === mySlot && state.phase === 'playing';
+  const pendingHere = readOnly ? null : (pending.find((p) => p.row === row && p.col === col) ?? null);
+  const isMyTurn = !readOnly && state !== null && mySlot !== null && state.turnIndex === mySlot && state.phase === 'playing';
   const isClaimBlankTarget = cell !== null && cell.fromBlank && isMyTurn;
-  const canDrop = (cell === null && pendingHere === null && isMyTurn) || isClaimBlankTarget;
+  const canDrop = !readOnly && ((cell === null && pendingHere === null && isMyTurn) || isClaimBlankTarget);
 
   const { setNodeRef, isOver } = useDroppable({ id: `sq-${row}-${col}`, disabled: !canDrop });
+
+  const isLastPlaced = cell !== null && Date.now() - lastPlacedAt < TILE_FLASH_MS &&
+    lastPlacedCells.some((c) => c.row === row && c.col === col);
 
   const base = 'relative flex items-center justify-center border border-ink/10';
   const bg = cell ? 'bg-bg' : (premium ? PREMIUM_BG[premium] : 'bg-bg');
@@ -73,7 +82,9 @@ export function Square({ row, col, cell, premium, size }: Props) {
       style={{ width: size, height: size }}
     >
       {cell ? (
-        <Tile cell={cell} size={size - 4} />
+        <div key={isLastPlaced ? lastPlacedAt : 'static'} className={isLastPlaced ? 'tile-flash' : undefined}>
+          <Tile cell={cell} size={size - 4} />
+        </div>
       ) : pendingTile !== null && pendingHere !== null ? (
         <div
           onDoubleClick={() => removePending(pendingHere.tileId)}

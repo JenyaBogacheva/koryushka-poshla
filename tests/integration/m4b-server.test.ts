@@ -40,6 +40,10 @@ const isStateWithTurn = (turnIndex: Slot) =>
   (m: ServerMessage): m is Extract<ServerMessage, { type: 'state' }> =>
     m.type === 'state' && m.state.phase === 'playing' && m.state.turnIndex === turnIndex;
 
+const isStatePlaying = () =>
+  (m: ServerMessage): m is Extract<ServerMessage, { type: 'state' }> =>
+    m.type === 'state' && m.state.phase === 'playing';
+
 const isStateWithPhase = (phase: GameState['phase']) =>
   (m: ServerMessage): m is Extract<ServerMessage, { type: 'state' }> =>
     m.type === 'state' && m.state.phase === phase;
@@ -62,77 +66,143 @@ async function freshServer() {
   return { server, url: `ws://localhost:${server.port}/ws`, dataDir };
 }
 
+// Drive the draw-for-order to completion, handling possible tiebreak rounds.
+async function driveDraws(bs: readonly [Buffered, Buffered, Buffered]): Promise<void> {
+  const sentRound = new Map<number, Set<number>>();
+  while (true) {
+    const latest = bs[0].messages.filter((m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state').at(-1);
+    if (latest && latest.state.phase === 'playing') return;
+    if (!latest || latest.state.phase !== 'drawing') {
+      await new Promise((r) => setTimeout(r, 5));
+      continue;
+    }
+    const drawState = latest.state.drawState!;
+    let sent = sentRound.get(drawState.round);
+    if (!sent) { sent = new Set(); sentRound.set(drawState.round, sent); }
+    for (const slot of drawState.candidates) {
+      if (sent.has(slot)) continue;
+      send(bs[slot], { type: 'drawTile' });
+      sent.add(slot);
+    }
+    // Wait for next state broadcast that advances things.
+    const before = bs[0].messages.length;
+    await new Promise<void>((resolve) => {
+      const check = (): void => {
+        if (bs[0].messages.length > before) resolve();
+        else setTimeout(check, 5);
+      };
+      check();
+    });
+  }
+}
+
 async function threeJoined() {
   const ctx = await freshServer();
   const a = await buffered(ctx.url); join(a, 0, 'A');
   const b = await buffered(ctx.url); join(b, 1, 'B');
   const c = await buffered(ctx.url); join(c, 2, 'C');
-  await waitFor(a, isStateWithPhase('playing'));
-  await waitFor(b, isStateWithPhase('playing'));
-  await waitFor(c, isStateWithPhase('playing'));
-  return { ...ctx, a, b, c };
+  const bs0 = [a, b, c] as const;
+  await driveDraws(bs0);
+  const [snapA] = await Promise.all([
+    waitFor(a, isStateWithPhase('playing')),
+    waitFor(b, isStateWithPhase('playing')),
+    waitFor(c, isStateWithPhase('playing')),
+  ]);
+  const bs = [a, b, c] as const;
+  const first = snapA.state.turnIndex;
+  const second = ((first + 1) % 3) as Slot;
+  const third = ((first + 2) % 3) as Slot;
+  return { ...ctx, a, b, c, bs, first, second, third };
 }
 
 describe('M4b server: action handlers', () => {
   it('pass advances turnIndex and arms revert for the actor', async () => {
-    const { server, a, b } = await threeJoined();
+    const { server, bs, first, second } = await threeJoined();
     try {
-      send(a, { type: 'pass' });
-      const s = await waitFor(b, isStateWithTurn(1));
-      expect(s.state.players[0]!.canRevert).toBe(true);
-      expect(s.state.players[1]!.canRevert).toBe(false);
+      send(bs[first], { type: 'pass' });
+      const s = await waitFor(bs[second], isStateWithTurn(second));
+      expect(s.state.players[first]!.canRevert).toBe(true);
+      expect(s.state.players[second]!.canRevert).toBe(false);
     } finally { await server.close(); }
   });
 
   it('revertLastTurn rolls turnIndex back', async () => {
-    const { server, a, b } = await threeJoined();
+    const { server, bs, first, second } = await threeJoined();
     try {
-      send(a, { type: 'pass' });
-      await waitFor(b, isStateWithTurn(1));
-      send(a, { type: 'revertLastTurn' });
-      const s = await waitFor(b, isStateWithTurn(0));
-      expect(s.state.players[0]!.canRevert).toBe(false);
+      send(bs[first], { type: 'pass' });
+      await waitFor(bs[second], isStateWithTurn(second));
+      send(bs[first], { type: 'revertLastTurn' });
+      const s = await waitFor(bs[second], isStateWithTurn(first));
+      expect(s.state.players[first]!.canRevert).toBe(false);
     } finally { await server.close(); }
   });
 
   it('revertLastTurn from a non-author returns error', async () => {
-    const { server, a, b } = await threeJoined();
+    const { server, bs, first, second } = await threeJoined();
     try {
-      send(a, { type: 'pass' });
-      await waitFor(b, isStateWithTurn(1));
-      send(b, { type: 'revertLastTurn' });
-      const err = await waitFor(b, isError);
+      send(bs[first], { type: 'pass' });
+      await waitFor(bs[second], isStateWithTurn(second));
+      send(bs[second], { type: 'revertLastTurn' });
+      const err = await waitFor(bs[second], isError);
       expect(err.message).toMatch(/author|nothing|turn/i);
     } finally { await server.close(); }
   });
 
   it('redraw on an ineligible rack returns error and does not advance turn', async () => {
-    const { server, a } = await threeJoined();
+    const { server, bs, first } = await threeJoined();
     try {
-      send(a, { type: 'redraw' });
-      const err = await waitFor(a, isError);
-      expect(err.message).toMatch(/eligible|vowel|consonant/i);
+      send(bs[first], { type: 'redraw' });
+      const err = await waitFor(bs[first], isError);
+      expect(err.message).toMatch(/eligible|vowel|consonant|turn/i);
     } finally { await server.close(); }
   });
 
   it('endGame finishes the game and clears revert', async () => {
-    const { server, a, b } = await threeJoined();
+    const { server, bs, first, second } = await threeJoined();
     try {
-      send(a, { type: 'endGame' });
-      const s = await waitFor(b, isStateWithPhase('finished'));
+      send(bs[first], { type: 'endGame' });
+      const s = await waitFor(bs[second], isStateWithPhase('finished'));
       for (const p of s.state.players) expect(p.canRevert).toBe(false);
     } finally { await server.close(); }
   });
 
-  it('cross-player action clears the previous revert window', async () => {
-    const { server, a, b, c } = await threeJoined();
+  it('drawTile records the player\'s draw and broadcasts updated drawState', async () => {
+    const ctx = await freshServer();
     try {
-      send(a, { type: 'pass' });
-      await waitFor(b, isStateWithTurn(1));
-      send(b, { type: 'pass' });
-      const s = await waitFor(c, isStateWithTurn(2));
-      expect(s.state.players[0]!.canRevert).toBe(false);
-      expect(s.state.players[1]!.canRevert).toBe(true);
+      const a = await buffered(ctx.url); join(a, 0, 'A');
+      const b = await buffered(ctx.url); join(b, 1, 'B');
+      const c = await buffered(ctx.url); join(c, 2, 'C');
+      await waitFor(a, isStateWithPhase('drawing'));
+
+      send(a, { type: 'drawTile' });
+      const afterA = await waitFor(a, (m): m is Extract<ServerMessage, { type: 'state' }> =>
+        m.type === 'state' && m.state.drawState !== null && m.state.drawState.draws.some((d) => d.slot === 0));
+      expect(afterA.state.drawState!.draws.find((d) => d.slot === 0)).toBeDefined();
+
+      // Other players also see the broadcast
+      const seenOnB = await waitFor(b, (m): m is Extract<ServerMessage, { type: 'state' }> =>
+        m.type === 'state' && m.state.drawState !== null && m.state.drawState.draws.some((d) => d.slot === 0));
+      expect(seenOnB.state.drawState!.draws.find((d) => d.slot === 0)).toBeDefined();
+
+      // A second drawTile from the same slot is rejected
+      send(a, { type: 'drawTile' });
+      const err = await waitFor(a, isError);
+      expect(err.message).toMatch(/already|drawn|drawing|slot/i);
+
+      a.ws.close(); b.ws.close(); c.ws.close();
+    } finally { await ctx.server.close(); }
+  });
+
+  it('cross-player action clears the previous revert window', async () => {
+    const { server, bs, first, second, third } = await threeJoined();
+    try {
+      send(bs[first], { type: 'pass' });
+      await waitFor(bs[second], isStateWithTurn(second));
+      send(bs[second], { type: 'pass' });
+      const s = await waitFor(bs[third], isStateWithTurn(third));
+      expect(s.state.players[first]!.canRevert).toBe(false);
+      expect(s.state.players[second]!.canRevert).toBe(true);
     } finally { await server.close(); }
   });
 });

@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import type { Letter, Slot, Tile as TileT } from '@shared/types';
 import { useGameStore } from './store.js';
-import { connect, disconnect, sendJoin, sendClaimBlank } from './ws.js';
+import { connect, disconnect, sendJoin, sendClaimBlank, sendPreviewMove } from './ws.js';
 import { Board } from './components/Board.js';
 import { PlayerCard } from './components/PlayerCard.js';
 import { ErrorBanner } from './components/ErrorBanner.js';
@@ -10,11 +10,26 @@ import { SlotPicker } from './components/SlotPicker.js';
 import { LetterPicker } from './components/LetterPicker.js';
 import { WaitingRoom } from './components/WaitingRoom.js';
 import { ActionBar } from './components/ActionBar.js';
+import { MoveLog } from './components/MoveLog.js';
+import { BagIndicator } from './components/BagIndicator.js';
 import { CYRILLIC_LETTERS } from './letters.js';
+import { PastGamesList } from './components/PastGamesList.js';
+import { PastGamesDetail } from './components/PastGamesDetail.js';
+import { FinishedScreen } from './components/FinishedScreen.js';
+import { DrawForOrderScreen } from './components/DrawForOrderScreen.js';
 
 type PendingDrop = { tile: TileT; row: number; col: number };
 
 export function App() {
+  const [route, setRoute] = useState<string>(() =>
+    typeof window !== 'undefined' ? window.location.hash : '',
+  );
+  useEffect(() => {
+    const onChange = (): void => setRoute(window.location.hash);
+    window.addEventListener('hashchange', onChange);
+    return () => window.removeEventListener('hashchange', onChange);
+  }, []);
+
   const state = useGameStore((s) => s.state);
   const lobby = useGameStore((s) => s.lobby);
   const identity = useGameStore((s) => s.identity);
@@ -30,6 +45,18 @@ export function App() {
     connect();
     return () => disconnect();
   }, []);
+
+  const setMovePreview = useGameStore((s) => s.setMovePreview);
+  useEffect(() => {
+    if (pendingPlacements.length === 0) {
+      setMovePreview(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      sendPreviewMove(pendingPlacements.map((p) => ({ tileId: p.tileId, row: p.row, col: p.col, playedAs: p.playedAs })));
+    }, 120);
+    return () => clearTimeout(t);
+  }, [pendingPlacements, setMovePreview]);
 
   function handleJoin(slot: Slot, name: string, password: string) {
     setIdentity(slot, name, password);
@@ -93,31 +120,39 @@ export function App() {
     setPendingBlank(null);
   }
 
-  if (!connected) return <Center>connecting…</Center>;
+  if (route === '#past') return <PastGamesList />;
+  if (route.startsWith('#past/')) return <PastGamesDetail id={route.slice('#past/'.length)} />;
+
+  if (!connected) return <Center>Подключение…</Center>;
   if (identity === null) {
     return <SlotPicker lobby={lobby} onJoin={handleJoin} />;
   }
-  if (state === null) return <Center>joining…</Center>;
+  if (state === null) return <Center>Загружаем игру…</Center>;
   if (state.phase === 'waiting') {
     return <WaitingRoom players={state.players} mySlot={identity.slot} />;
   }
 
   return (
     <DndContext onDragEnd={onDragEnd}>
-      <main className="flex h-full items-start justify-center gap-8 p-8">
+      <main className="relative flex h-full items-start justify-center gap-8 p-8">
         <div>
           <Board board={state.board} />
           <ErrorBanner />
         </div>
-        <aside className="flex w-72 flex-col gap-3">
-          <header className="text-sm uppercase tracking-wide text-ink/60">
-            {state.phase === 'finished' ? 'Game over' : `${state.players[state.turnIndex]?.name ?? '—'}'s turn`}
+        <aside className="flex h-full w-72 flex-col gap-3">
+          <header className="flex items-baseline justify-between text-sm uppercase tracking-wide text-ink/60">
+            <span>{state.phase === 'finished' ? 'Игра окончена' : `Ход: ${state.players[state.turnIndex]?.name ?? '—'}`}</span>
+            <a href="#past" className="normal-case text-xs text-ink/50 hover:underline">Прошлые игры</a>
           </header>
+          <BagIndicator count={state.bag.length} />
           {state.players.map((p) => (
             <PlayerCard key={p.slot} player={p} isCurrentTurn={p.slot === state.turnIndex && state.phase === 'playing'} />
           ))}
           <ActionBar />
+          <MoveLog state={state} />
         </aside>
+        {state.phase === 'finished' && <FinishedScreen state={state} />}
+        {state.phase === 'drawing' && <DrawForOrderScreen state={state} mySlot={identity.slot} />}
       </main>
       {pendingBlank !== null && (
         <LetterPicker

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isVowel, isConsonant, isSubstitutionAllowed } from '../server/letters';
+import { isVowel, isConsonant, isSubstitutionAllowed, compareLetterOrder } from '../server/letters';
 
 describe('letters', () => {
   it('identifies vowels', () => {
@@ -45,5 +45,22 @@ describe('letters', () => {
   it('rejects arbitrary unrelated substitutions', () => {
     expect(isSubstitutionAllowed('А', 'Б')).toBe(false);
     expect(isSubstitutionAllowed('К', 'Л')).toBe(false);
+  });
+});
+
+describe('compareLetterOrder', () => {
+  it('null (blank) beats any letter', () => {
+    expect(compareLetterOrder(null, 'А')).toBeLessThan(0);
+    expect(compareLetterOrder('А', null)).toBeGreaterThan(0);
+  });
+  it('two blanks tie', () => {
+    expect(compareLetterOrder(null, null)).toBe(0);
+  });
+  it('orders by alphabet position', () => {
+    expect(compareLetterOrder('А', 'Б')).toBeLessThan(0);
+    expect(compareLetterOrder('Я', 'А')).toBeGreaterThan(0);
+  });
+  it('equal letters tie', () => {
+    expect(compareLetterOrder('К', 'К')).toBe(0);
   });
 });

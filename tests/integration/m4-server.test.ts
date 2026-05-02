@@ -69,6 +69,36 @@ async function freshServer() {
   return { server, url, dataDir };
 }
 
+// Drive the draw-for-order to completion, handling possible tiebreak rounds.
+async function driveDraws(bs: readonly [Buffered, Buffered, Buffered]): Promise<void> {
+  const sentRound = new Map<number, Set<number>>();
+  while (true) {
+    const latest = bs[0].messages.filter((m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state').at(-1);
+    if (latest && latest.state.phase === 'playing') return;
+    if (!latest || latest.state.phase !== 'drawing') {
+      await new Promise((r) => setTimeout(r, 5));
+      continue;
+    }
+    const drawState = latest.state.drawState!;
+    let sent = sentRound.get(drawState.round);
+    if (!sent) { sent = new Set(); sentRound.set(drawState.round, sent); }
+    for (const slot of drawState.candidates) {
+      if (sent.has(slot)) continue;
+      send(bs[slot], { type: 'drawTile' });
+      sent.add(slot);
+    }
+    const before = bs[0].messages.length;
+    await new Promise<void>((resolve) => {
+      const check = (): void => {
+        if (bs[0].messages.length > before) resolve();
+        else setTimeout(check, 5);
+      };
+      check();
+    });
+  }
+}
+
 describe('M4a server: lobby → join → state', () => {
   it('sends lobby on connect; rejects non-join messages with "Join first"', async () => {
     const { server, url } = await freshServer();
@@ -98,6 +128,7 @@ describe('M4a server: lobby → join → state', () => {
       join(b1, 1, 'B');
       join(b2, 2, 'C');
 
+      await driveDraws([b0, b1, b2]);
       const playing = await waitFor(b0, isStateWithPhase('playing'));
       expect(playing.state.players.map((p) => p.name)).toEqual(['A', 'B', 'C']);
       expect(playing.state.players.every((p) => p.rack.length === 7)).toBe(true);
@@ -166,6 +197,7 @@ describe('M4a server: lobby → join → state', () => {
       const [b0, b1, b2] = await Promise.all([buffered(url), buffered(url), buffered(url)]);
       await waitFor(b0, isType('lobby'));
       join(b0, 0, 'A'); join(b1, 1, 'B'); join(b2, 2, 'C');
+      await driveDraws([b0, b1, b2]);
       await waitFor(b0, isStateWithPhase('playing'));
 
       await new Promise<void>((resolve) => {
@@ -191,20 +223,23 @@ describe('M4a server: lobby → join → state', () => {
     const { server, url } = await freshServer();
     try {
       const [b0, b1, b2] = await Promise.all([buffered(url), buffered(url), buffered(url)]);
+      const bs = [b0, b1, b2];
       await waitFor(b0, isType('lobby'));
       join(b0, 0, 'A'); join(b1, 1, 'B'); join(b2, 2, 'C');
+      await driveDraws([b0, b1, b2]);
       const playing = await waitFor(b0, isStateWithPhase('playing'));
 
-      const r0 = playing.state.players[0]!.rack;
-      const real = r0.filter((t) => !t.isBlank).slice(0, 2);
-      send(b0, {
+      const first = playing.state.turnIndex;
+      const rack = playing.state.players[first]!.rack;
+      const real = rack.filter((t) => !t.isBlank).slice(0, 2);
+      send(bs[first]!, {
         type: 'submitMove',
         placements: [
           { tileId: real[0]!.id, row: 7, col: 7, playedAs: real[0]!.letter },
           { tileId: real[1]!.id, row: 7, col: 8, playedAs: real[1]!.letter },
         ],
       });
-      const accepted = await waitFor(b0, isType('moveAccepted'));
+      const accepted = await waitFor(bs[first]!, isType('moveAccepted'));
       expect(accepted.moveRecord.placements.length).toBe(2);
 
       b0.ws.close(); b1.ws.close(); b2.ws.close();
@@ -219,6 +254,7 @@ describe('M4a server: lobby → join → state', () => {
       const [b0, b1, b2] = await Promise.all([buffered(url), buffered(url), buffered(url)]);
       await waitFor(b0, isType('lobby'));
       join(b0, 0, 'A'); join(b1, 1, 'B'); join(b2, 2, 'C');
+      await driveDraws([b0, b1, b2]);
       await waitFor(b0, isStateWithPhase('playing'));
 
       send(b0, { type: 'toggleRackVisible', visible: false });

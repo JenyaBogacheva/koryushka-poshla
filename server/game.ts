@@ -1,15 +1,26 @@
-import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed } from '@shared/types';
+import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed, GameEvent, Letter } from '@shared/types';
 import { createBag, drawTiles, returnTiles, makeRng, bagFromTiles, type Bag } from './bag.js';
-import { addTilesToRack, removeTilesFromRack, redrawEligible } from './rack.js';
+import { addTilesToRack, removeTilesFromRack, redrawEligible, isAllVowels } from './rack.js';
 import { createEmptyBoard, applyPlacements, isEmpty, extractWordsFormed } from './board.js';
 import { validateMove, type MoveError } from './moves.js';
 import { scoreMove } from './scoring.js';
 import { checkWords } from './dictionary.js';
+import { compareLetterOrder } from './letters.js';
 
 export type GameOpts = { seed: number };
 
 export type SubmitResult =
   | { ok: true; moveRecord: MoveRecord; dictionaryWarnings: string[] }
+  | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } | { kind: 'invalid-helper' } };
+
+export type PreviewResult =
+  | {
+      ok: true;
+      totalScore: number;
+      bingoBonus: boolean;
+      wordsFormed: WordFormed[];
+      dictionaryWarnings: string[];
+    }
   | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } };
 
 export class Game {
@@ -18,6 +29,13 @@ export class Game {
   // Single-level undo. Captured pre-mutation by submitMove/passTurn/redrawRack/claimBlank.
   // Cleared the moment a different slot acts. Not persisted to disk.
   private lastSnapshot: { state: GameState; bySlot: Slot } | null = null;
+  // Records appended by the most recent action, kept so revert can preserve
+  // them in the log even after restoring `state` from `lastSnapshot`.
+  private lastActionRecords: GameEvent[] | null = null;
+  // Round-1 draw snapshot: captured the moment all three candidates have drawn,
+  // so the eventual DrawForOrderRecord reflects the initial three-way draw rather
+  // than the tiebreak round(s).
+  private initialDrawSnapshot: { slot: Slot; letter: Letter | null }[] | null = null;
 
   constructor(opts: GameOpts) {
     this.bag = createBag(makeRng(opts.seed));
@@ -38,8 +56,9 @@ export class Game {
       board: createEmptyBoard(),
       bag: this.bag.tiles,
       centerBonusUsed: false,
-      history: [],
+      events: [],
       startedAt: null,
+      drawState: null,
     };
   }
 
@@ -48,10 +67,18 @@ export class Game {
     const cloned = structuredClone(state);
     const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
     cloned.bag = bag.tiles;
-    type Mutable = { bag: Bag; state: GameState; lastSnapshot: null };
+    type Mutable = {
+      bag: Bag;
+      state: GameState;
+      lastSnapshot: null;
+      lastActionRecords: null;
+      initialDrawSnapshot: null;
+    };
     (g as unknown as Mutable).bag = bag;
     (g as unknown as Mutable).state = cloned;
     (g as unknown as Mutable).lastSnapshot = null;
+    (g as unknown as Mutable).lastActionRecords = null;
+    (g as unknown as Mutable).initialDrawSnapshot = null;
     return g;
   }
 
@@ -65,18 +92,83 @@ export class Game {
     if (!this.state.players.every((p) => p.connected)) {
       throw new Error('Cannot start until all three slots are connected');
     }
-    for (const p of this.state.players) {
-      const drawn = drawTiles(this.bag, 7);
-      addTilesToRack(p.rack, drawn);
-    }
-    this.state.phase = 'playing';
-    this.state.bag = this.bag.tiles;
-    this.state.startedAt = Date.now();
+    this.state.phase = 'drawing';
+    this.state.drawState = { round: 1, candidates: [0, 1, 2], draws: [] };
+    this.initialDrawSnapshot = null;
   }
 
-  submitMove(slot: Slot, placements: Placement[]): SubmitResult {
+  drawForOrderTile(slot: Slot): void {
+    if (this.state.phase !== 'drawing' || this.state.drawState === null) {
+      throw new Error('Game is not in drawing phase');
+    }
+    const ds = this.state.drawState;
+    if (!ds.candidates.includes(slot)) {
+      throw new Error(`Slot ${slot} is not a draw candidate`);
+    }
+    if (ds.draws.some((d) => d.slot === slot)) {
+      throw new Error(`Slot ${slot} has already drawn this round`);
+    }
+    const tile = drawTiles(this.bag, 1)[0]!;
+    const letter: Letter | null = tile.isBlank ? null : tile.letter;
+    ds.draws.push({ slot, letter });
+    returnTiles(this.bag, [tile]);
+    this.state.bag = this.bag.tiles;
+
+    if (ds.round === 1 && ds.draws.length === ds.candidates.length && this.initialDrawSnapshot === null) {
+      this.initialDrawSnapshot = ds.draws.map((d) => ({ slot: d.slot, letter: d.letter }));
+    }
+
+    if (ds.draws.length < ds.candidates.length) return;
+    this.resolveDrawRound();
+  }
+
+  private resolveDrawRound(): void {
+    const ds = this.state.drawState!;
+    const sorted = [...ds.draws].sort((a, b) => compareLetterOrder(a.letter, b.letter));
+    const best = sorted[0]!;
+    const tied = sorted.filter((d) => compareLetterOrder(d.letter, best.letter) === 0);
+
+    if (tied.length === 1) {
+      const firstSlot = best.slot;
+      for (const p of this.state.players) {
+        const drawn = drawTiles(this.bag, 7);
+        addTilesToRack(p.rack, drawn);
+      }
+      this.state.events.push({
+        kind: 'drawForOrder',
+        draws: this.initialDrawSnapshot ?? ds.draws.map((d) => ({ slot: d.slot, letter: d.letter })),
+        firstSlot,
+        timestamp: Date.now(),
+      });
+      this.state.turnIndex = firstSlot;
+      this.state.phase = 'playing';
+      this.state.bag = this.bag.tiles;
+      this.state.startedAt = Date.now();
+      this.state.drawState = null;
+      this.initialDrawSnapshot = null;
+      return;
+    }
+
+    this.state.drawState = {
+      round: ds.round + 1,
+      candidates: tied.map((d) => d.slot),
+      draws: [],
+    };
+  }
+
+  submitMove(slot: Slot, placements: Placement[], helperSlot?: Slot): SubmitResult {
     if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
     if (slot !== this.state.turnIndex) return { ok: false, error: { kind: 'not-your-turn' } };
+
+    if (helperSlot !== undefined) {
+      if (helperSlot !== 0 && helperSlot !== 1 && helperSlot !== 2) {
+        return { ok: false, error: { kind: 'invalid-helper' } };
+      }
+      if (helperSlot === slot) {
+        return { ok: false, error: { kind: 'invalid-helper' } };
+      }
+    }
+
     const player = this.state.players[slot]!;
 
     const isFirst = isEmpty(this.state.board);
@@ -102,7 +194,9 @@ export class Game {
     addTilesToRack(player.rack, drawn);
     this.state.bag = this.bag.tiles;
 
+    const dictionaryWarnings = checkWords(words.map((w) => w.word));
     const moveRecord: MoveRecord = {
+      kind: 'move',
       slot,
       placements,
       wordsFormed: score.perWord.map<WordFormed>((w) => ({
@@ -110,14 +204,58 @@ export class Game {
       })),
       totalScore: score.totalScore,
       bingoBonus: score.bingoBonus,
+      helperSlot: helperSlot ?? null,
+      dictionaryWarnings,
       timestamp: Date.now(),
     };
-    this.state.history.push(moveRecord);
+    const startLen = this.state.events.length;
+    const moveIndex = this.state.events.length;
+    this.state.events.push(moveRecord);
+
+    if (helperSlot !== undefined) {
+      this.state.players[helperSlot]!.score += 5;
+      this.state.events.push({
+        kind: 'assist',
+        fromSlot: slot,
+        toSlot: helperSlot,
+        points: 5,
+        forMoveIndex: moveIndex,
+        timestamp: Date.now(),
+      });
+    }
+
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
 
-    const dictionaryWarnings = checkWords(words.map((w) => w.word));
-    this.armRevert(slot, preStateForRevert);
+    const appended = this.state.events.slice(startLen);
+    this.armRevert(slot, preStateForRevert, appended);
     return { ok: true, moveRecord, dictionaryWarnings };
+  }
+
+  previewMove(slot: Slot, placements: Placement[]): PreviewResult {
+    if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
+    if (slot !== this.state.turnIndex) return { ok: false, error: { kind: 'not-your-turn' } };
+
+    const player = this.state.players[slot]!;
+    const isFirst = isEmpty(this.state.board);
+    const validation = validateMove(this.state.board, player.rack, placements, isFirst);
+    if (!validation.ok) return { ok: false, error: validation.error };
+
+    const tileIds = placements.map((p) => p.tileId);
+    const previewRack = structuredClone(player.rack);
+    const placedTiles = removeTilesFromRack(previewRack, tileIds);
+    const previewBoard = structuredClone(this.state.board);
+    applyPlacements(previewBoard, placements, placedTiles);
+    const words = extractWordsFormed(previewBoard, placements);
+    const score = scoreMove(previewBoard, words, placements, { centerBonusUsed: this.state.centerBonusUsed });
+    const dictionaryWarnings = checkWords(words.map((w) => w.word));
+
+    return {
+      ok: true,
+      totalScore: score.totalScore,
+      bingoBonus: score.bingoBonus,
+      wordsFormed: score.perWord.map<WordFormed>((w) => ({ word: w.word, cells: w.cells, score: w.score })),
+      dictionaryWarnings,
+    };
   }
 
   snapshot(): GameState {
@@ -133,8 +271,11 @@ export class Game {
     this.assertTurn(slot);
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
+    const startLen = this.state.events.length;
     this.state.turnIndex = ((slot + 1) % 3) as Slot;
-    this.armRevert(slot, pre);
+    this.state.events.push({ kind: 'pass', slot, timestamp: Date.now() });
+    const appended = this.state.events.slice(startLen);
+    this.armRevert(slot, pre, appended);
   }
 
   redrawRack(slot: Slot): void {
@@ -143,8 +284,12 @@ export class Game {
     if (!redrawEligible(player.rack)) {
       throw new Error('Rack is not eligible for free redraw (must be all vowels or all consonants)');
     }
+    const reason: 'allVowels' | 'allConsonants' =
+      isAllVowels(player.rack) ? 'allVowels' : 'allConsonants';
+    const tileCount = player.rack.length;
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
+    const startLen = this.state.events.length;
     const allIds = player.rack.map((t) => t.id);
     const removed = removeTilesFromRack(player.rack, allIds);
     returnTiles(this.bag, removed);
@@ -152,7 +297,9 @@ export class Game {
     addTilesToRack(player.rack, drawn);
     this.state.bag = this.bag.tiles;
     // turn not advanced
-    this.armRevert(slot, pre);
+    this.state.events.push({ kind: 'redraw', slot, reason, tileCount, timestamp: Date.now() });
+    const appended = this.state.events.slice(startLen);
+    this.armRevert(slot, pre, appended);
   }
 
   /**
@@ -173,6 +320,7 @@ export class Game {
     }
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
+    const startLen = this.state.events.length;
     // Perform swap.
     const blank = cell.tile;
     player.rack.splice(idx, 1);
@@ -182,7 +330,16 @@ export class Game {
       playedAs: cell.playedAs,
       fromBlank: false,
     };
-    this.armRevert(slot, pre);
+    this.state.events.push({
+      kind: 'claimBlank',
+      slot,
+      row,
+      col,
+      letterAs: cell.playedAs,
+      timestamp: Date.now(),
+    });
+    const appended = this.state.events.slice(startLen);
+    this.armRevert(slot, pre, appended);
   }
 
   endGame(slot: Slot): void {
@@ -190,25 +347,54 @@ export class Game {
     this.maybeClearRevertOnActionBy(slot);
     this.lastSnapshot = null; // ending the game finalizes everything
     this.state.phase = 'finished';
+    this.state.events.push({
+      kind: 'endGame',
+      slot,
+      cause: 'playerEnded',
+      timestamp: Date.now(),
+    });
   }
 
   revertLastTurn(slot: Slot): void {
     if (this.lastSnapshot === null) throw new Error('Nothing to revert');
     if (this.lastSnapshot.bySlot !== slot) throw new Error('Only the action author can revert');
-    this.state = this.lastSnapshot.state;
+    const restored = this.lastSnapshot.state;
+    const appended = this.lastActionRecords ?? [];
+
+    // Roll game state back to the pre-action snapshot.
+    this.state = restored;
     // Keep the existing seeded rng closure; rewind the bag's tile array to the restored state.
     this.bag.tiles = [...this.state.bag];
     this.state.bag = this.bag.tiles;
+
+    // Re-attach the original action records so the log shows what happened…
+    for (const rec of appended) this.state.events.push(rec);
+
+    // …and append matching revert records in reverse order
+    // (so an AssistRecord pushed AFTER a MoveRecord is reverted FIRST).
+    const ts = Date.now();
+    for (let i = appended.length - 1; i >= 0; i--) {
+      this.state.events.push({
+        kind: 'revert',
+        slot,
+        revertedKind: appended[i]!.kind,
+        timestamp: ts,
+      });
+    }
+
     this.lastSnapshot = null;
+    this.lastActionRecords = null;
   }
 
-  private armRevert(slot: Slot, preState: GameState): void {
+  private armRevert(slot: Slot, preState: GameState, appended: GameEvent[]): void {
     this.lastSnapshot = { state: preState, bySlot: slot };
+    this.lastActionRecords = appended;
   }
 
   private maybeClearRevertOnActionBy(slot: Slot): void {
     if (this.lastSnapshot !== null && this.lastSnapshot.bySlot !== slot) {
       this.lastSnapshot = null;
+      this.lastActionRecords = null;
     }
   }
 

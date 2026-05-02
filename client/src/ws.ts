@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, Slot } from '@shared/types';
+import type { ClientMessage, ServerMessage, Slot, Placement } from '@shared/types';
 import { useGameStore } from './store.js';
 
 const RECONNECT_BASE_MS = 1000;
@@ -9,6 +9,7 @@ let reconnectAttempts = 0;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let warningTimer: ReturnType<typeof setTimeout> | null = null;
 let socket: WebSocket | null = null;
+let lastFlashedMoveTs = 0;
 
 function scheduleReconnect(): void {
   if (reconnectTimer !== null) return;
@@ -75,6 +76,21 @@ export function connect(): void {
             useGameStore.setState({ pendingPlacements: next });
           }
         }
+        const FRESH_MS = 5000;
+        const events = msg.state.events;
+        const last = events[events.length - 1];
+        // Skip moves we've already flashed for so reconnects/reloads inside the freshness
+        // window don't replay the animation on already-committed tiles.
+        if (
+          last !== undefined &&
+          last.kind === 'move' &&
+          last.timestamp > lastFlashedMoveTs &&
+          Date.now() - last.timestamp < FRESH_MS
+        ) {
+          const cells = last.placements.map((p) => ({ row: p.row, col: p.col }));
+          lastFlashedMoveTs = last.timestamp;
+          useGameStore.getState().setLastPlaced(cells, Date.now());
+        }
         return;
       }
       case 'moveAccepted':
@@ -89,6 +105,9 @@ export function connect(): void {
         return;
       case 'moveRejected':
         store.setError(msg.reason);
+        return;
+      case 'movePreview':
+        store.setMovePreview(msg.preview);
         return;
       case 'error':
         // Any error while still in the join phase (no game state yet) means the join was refused.
@@ -153,3 +172,15 @@ export function sendClaimBlank(row: number, col: number, tileId: string): void {
 }
 export function sendEndGame(): void { send({ type: 'endGame' }); }
 export function sendRevertLastTurn(): void { send({ type: 'revertLastTurn' }); }
+export function sendNewGame(): void { send({ type: 'newGame' }); }
+export function sendDrawTile(): void { send({ type: 'drawTile' }); }
+export function sendPreviewMove(placements: Placement[]): void {
+  send({ type: 'previewMove', placements });
+}
+export function sendSubmitMove(placements: Placement[], helperSlot: Slot | null): void {
+  const msg: Extract<ClientMessage, { type: 'submitMove' }> =
+    helperSlot === null
+      ? { type: 'submitMove', placements }
+      : { type: 'submitMove', placements, helperSlot };
+  send(msg);
+}

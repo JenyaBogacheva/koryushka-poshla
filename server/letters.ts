@@ -1,6 +1,17 @@
 import type { Letter } from '@shared/types';
 import { SUBSTITUTIONS } from '@shared/letters.js';
 
+const ORDER = 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ';
+
+// Compares two draw-for-order tiles by alphabet position. Blanks (null) beat all letters.
+// Used by Game.startGame to determine first turn.
+export function compareLetterOrder(a: Letter | null, b: Letter | null): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return -1;
+  if (b === null) return 1;
+  return ORDER.indexOf(a) - ORDER.indexOf(b);
+}
+
 const VOWELS = new Set(['А', 'Е', 'Ё', 'И', 'О', 'У', 'Ы', 'Э', 'Ю', 'Я']);
 const CONSONANTS = new Set([
   'Б','В','Г','Д','Ж','З','Й','К','Л','М','Н','П','Р','С','Т','Ф','Х','Ц','Ч','Ш','Щ',

@@ -35,13 +35,87 @@ export type WordFormed = {
 };
 
 export type MoveRecord = {
+  kind: 'move';
   slot: Slot;
   placements: Placement[];
   wordsFormed: WordFormed[];
   totalScore: number;
   bingoBonus: boolean;
+  helperSlot: Slot | null;
+  dictionaryWarnings: string[];
   timestamp: number;
 };
+
+export type AssistRecord = {
+  kind: 'assist';
+  fromSlot: Slot;
+  toSlot: Slot;
+  points: 5;
+  forMoveIndex: number;
+  timestamp: number;
+};
+
+export type PassRecord = {
+  kind: 'pass';
+  slot: Slot;
+  timestamp: number;
+};
+
+export type RedrawRecord = {
+  kind: 'redraw';
+  slot: Slot;
+  reason: 'allVowels' | 'allConsonants';
+  tileCount: number;
+  timestamp: number;
+};
+
+export type ClaimBlankRecord = {
+  kind: 'claimBlank';
+  slot: Slot;
+  row: number;
+  col: number;
+  letterAs: Letter;
+  timestamp: number;
+};
+
+export type EndGameRecord = {
+  kind: 'endGame';
+  slot: Slot;
+  cause: 'playerEnded' | 'bagEmptyAndRackEmpty' | 'sixPasses';
+  timestamp: number;
+};
+
+export type RevertRecord = {
+  kind: 'revert';
+  slot: Slot;
+  revertedKind: GameEventKind;
+  timestamp: number;
+};
+
+export type DrawState = {
+  round: number;            // 1 = initial three-way; 2+ = tiebreak rounds
+  candidates: Slot[];       // slots still in contention this round (subset of [0,1,2])
+  draws: { slot: Slot; letter: Letter | null }[]; // already-revealed draws this round (null = blank)
+};
+
+export type DrawForOrderRecord = {
+  kind: 'drawForOrder';
+  draws: { slot: Slot; letter: Letter | null }[]; // null = blank; one entry per player in slot order
+  firstSlot: Slot;
+  timestamp: number;
+};
+
+export type GameEvent =
+  | MoveRecord
+  | AssistRecord
+  | PassRecord
+  | RedrawRecord
+  | ClaimBlankRecord
+  | EndGameRecord
+  | RevertRecord
+  | DrawForOrderRecord;
+
+export type GameEventKind = GameEvent['kind'];
 
 export type Player = {
   slot: Slot;
@@ -54,7 +128,7 @@ export type Player = {
   canRevert: boolean;       // this player just acted and no one else has acted since
 };
 
-export type GamePhase = 'waiting' | 'playing' | 'finished';
+export type GamePhase = 'waiting' | 'drawing' | 'playing' | 'finished';
 
 export type GameState = {
   phase: GamePhase;
@@ -63,8 +137,9 @@ export type GameState = {
   board: Board;
   bag: Tile[];
   centerBonusUsed: boolean;
-  history: MoveRecord[];
+  events: GameEvent[];
   startedAt: number | null;
+  drawState: DrawState | null;
 };
 
 export type GameSummary = {
@@ -75,23 +150,41 @@ export type GameSummary = {
   winnerSlot: Slot | null;
 };
 
+export type GameArchive = {
+  id: string;
+  startedAt: number;
+  finishedAt: number;
+  players: { slot: Slot; name: string; finalScore: number }[];
+  winnerSlot: Slot | null;
+  finalBoard: Board;
+  events: GameEvent[];
+};
+
 export type LobbySlot = { slot: Slot; name: string; connected: boolean };
 
 // --- WebSocket protocol (M4a: join+lobby added; non-placement actions stubbed in server; M4b will implement them) ---
 
 export type ClientMessage =
   | { type: 'join'; slot: Slot; name: string; password: string }
-  | { type: 'submitMove'; placements: Placement[] }
+  | { type: 'submitMove'; placements: Placement[]; helperSlot?: Slot }
   | { type: 'claimBlank'; row: number; col: number; myTileId: string }
   | { type: 'pass' }
   | { type: 'redraw' }
   | { type: 'toggleRackVisible'; visible: boolean }
   | { type: 'endGame' }
-  | { type: 'revertLastTurn' };
+  | { type: 'revertLastTurn' }
+  | { type: 'newGame' }
+  | { type: 'drawTile' }
+  | { type: 'previewMove'; placements: Placement[] };
+
+export type MovePreview =
+  | { ok: true; totalScore: number; bingoBonus: boolean; wordsFormed: WordFormed[]; dictionaryWarnings: string[] }
+  | { ok: false; reason: string };
 
 export type ServerMessage =
   | { type: 'lobby'; slots: [LobbySlot, LobbySlot, LobbySlot] }
   | { type: 'state'; state: GameState }
   | { type: 'moveAccepted'; moveRecord: MoveRecord; dictionaryWarnings: string[] }
   | { type: 'moveRejected'; reason: string }
+  | { type: 'movePreview'; preview: MovePreview }
   | { type: 'error'; message: string };

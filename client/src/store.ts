@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { GameState, Letter, LobbySlot, Slot } from '@shared/types';
+import type { DrawState, GameState, Letter, LobbySlot, MovePreview, Slot } from '@shared/types';
 
 type Pending = { tileId: string; row: number; col: number; playedAs: Letter };
 type Identity = { slot: Slot; name: string; password: string };
@@ -27,8 +27,14 @@ type Store = {
   lobby: LobbySlot[] | null;
   identity: Identity | null;
   pendingPlacements: Pending[];
+  pendingHelperSlot: Slot | null;
   lastError: string | null;
   warning: string | null;
+  lastPlacedCells: { row: number; col: number }[];
+  lastPlacedAt: number;
+  drawState: DrawState | null;
+  movePreview: MovePreview | null;
+  setMovePreview: (preview: MovePreview | null) => void;
   setState: (state: GameState) => void;
   setConnected: (connected: boolean) => void;
   setLobby: (slots: LobbySlot[]) => void;
@@ -38,8 +44,10 @@ type Store = {
   removePending: (tileId: string) => void;
   togglePendingSubstitution: (tileId: string, real: Letter, sub: Letter) => void;
   clearPending: () => void;
+  setPendingHelperSlot: (slot: Slot | null) => void;
   setError: (message: string | null) => void;
   setWarning: (message: string | null) => void;
+  setLastPlaced: (cells: { row: number; col: number }[], at: number) => void;
 };
 
 export const useGameStore = create<Store>((set) => ({
@@ -48,9 +56,15 @@ export const useGameStore = create<Store>((set) => ({
   lobby: null,
   identity: loadIdentity(),
   pendingPlacements: [],
+  pendingHelperSlot: null,
   lastError: null,
   warning: null,
-  setState: (state) => set({ state }),
+  lastPlacedCells: [],
+  lastPlacedAt: 0,
+  drawState: null,
+  movePreview: null,
+  setMovePreview: (movePreview) => set({ movePreview }),
+  setState: (state) => set({ state, drawState: state.drawState }),
   setConnected: (connected) => set({ connected }),
   setLobby: (slots) => set({ lobby: slots }),
   setIdentity: (slot, name, password) => {
@@ -88,7 +102,9 @@ export const useGameStore = create<Store>((set) => ({
         p.tileId === tileId ? { ...p, playedAs: p.playedAs === real ? sub : real } : p,
       ),
     })),
-  clearPending: () => set({ pendingPlacements: [], lastError: null }),
+  clearPending: () => set({ pendingPlacements: [], pendingHelperSlot: null, lastError: null, movePreview: null }),
+  setPendingHelperSlot: (pendingHelperSlot) => set({ pendingHelperSlot }),
   setError: (lastError) => set({ lastError }),
   setWarning: (warning) => set({ warning }),
+  setLastPlaced: (cells, at) => set({ lastPlacedCells: cells, lastPlacedAt: at }),
 }));

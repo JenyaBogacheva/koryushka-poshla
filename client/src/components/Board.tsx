@@ -5,9 +5,9 @@ import { Square } from './Square.js';
 const SQUARE_SIZE = 52;
 const GRID = 15;
 
-type Props = { board: BoardT };
+type Props = { board: BoardT; readOnly?: boolean };
 
-export function Board({ board }: Props) {
+export function Board({ board, readOnly = false }: Props) {
   return (
     <div
       className="grid gap-px rounded-md bg-ink/20 p-px shadow-md"
@@ -26,6 +26,7 @@ export function Board({ board }: Props) {
             cell={cell}
             premium={PREMIUMS[r]![c]!}
             size={SQUARE_SIZE}
+            readOnly={readOnly}
           />
         )),
       )}
