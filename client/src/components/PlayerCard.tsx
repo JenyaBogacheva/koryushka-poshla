@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import type { Player } from '@shared/types';
+import type { BadgeKind, Player, Slot } from '@shared/types';
 import { Rack } from './Rack.js';
 import { SubmitConfirmModal } from './SubmitConfirmModal.js';
+import { BadgeStrip } from './BadgeStrip.js';
 import { useGameStore } from '../store.js';
 import { sendSubmitMove } from '../ws.js';
+import { perMoveBadges, endGameBadges } from '@server/badges.js';
 
 type Props = {
   player: Player;
@@ -17,7 +19,26 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   const movePreview = useGameStore((s) => s.movePreview);
   const clearPending = useGameStore((s) => s.clearPending);
   const allPlayers = useGameStore((s) => s.state?.players ?? []);
+  const allEvents = useGameStore((s) => s.state?.events ?? []);
+  const phase = useGameStore((s) => s.state?.phase ?? 'waiting');
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const badges: BadgeKind[] = (() => {
+    const live: BadgeKind[] = [];
+    for (const e of allEvents) {
+      if (e.kind === 'move' && e.slot === player.slot) {
+        live.push(...perMoveBadges(e));
+      }
+    }
+    if (phase !== 'finished') return live;
+    const scores: Record<Slot, number> = {
+      0: allPlayers[0]?.score ?? 0,
+      1: allPlayers[1]?.score ?? 0,
+      2: allPlayers[2]?.score ?? 0,
+    };
+    const end = endGameBadges(allEvents, scores)[player.slot];
+    return [...end, ...live];
+  })();
 
   const isMine = identity?.slot === player.slot;
   const showButtons = isMine && isCurrentTurn && pending.length > 0;
@@ -64,6 +85,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
         </span>
         <span className="text-xl font-bold tabular-nums">{player.score}</span>
       </div>
+      <BadgeStrip badges={badges} />
       <Rack slot={player.slot} tiles={player.rack} />
       {showButtons && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
