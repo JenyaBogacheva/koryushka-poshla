@@ -270,7 +270,9 @@ Three layers, in priority order:
 5. **M5 — Polish.** Split into two slices:
    - **M5a** (see `docs/superpowers/specs/2026-05-01-m5a-snapshots-assist-log-design.md`): live move log, finished-game snapshots + Past Games viewer, "мама помогла" assist credit.
    - **M5b**: disconnect/pause overlay, dictionary advisory warnings, animations, "Новая игра" / play-again flow on the finished-game screen, deploy to Render.
-6. **M6 — Gamification.** Cross-game leaderboard (aggregated from archived snapshots) and badges/achievements (e.g., long-word, game wins, most-helped, most-helping, highest single-move, bingo), game-end celebration. Brainstorm + spec deferred; depends on M5 archive format.
+6. **M6 — Gamification.** Split into two slices:
+   - **M6a** (see `docs/superpowers/specs/2026-05-02-m6a-gamification-design.md`): per-game badges (бинго, длинное слово, крупный ход, помощник, золото/серебро/бронза) + game-end celebration overlay.
+   - **M6b** (deferred): cross-game leaderboard + cumulative achievements aggregated from archived snapshots.
 
 Each milestone is end-to-end playable or testable before moving on.
 
