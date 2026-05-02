@@ -95,7 +95,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
             onClick={() => setConfirmOpen(true)}
             className="rounded bg-sage px-3 py-1.5 text-sm font-semibold text-ink shadow hover:bg-sage-light disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Сходить
+            Походить
             {movePreview?.ok === true && (
               <span className="ml-2 tabular-nums">+{movePreview.totalScore}</span>
             )}

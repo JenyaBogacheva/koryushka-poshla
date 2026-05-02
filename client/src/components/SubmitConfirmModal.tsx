@@ -25,7 +25,7 @@ export function SubmitConfirmModal({ open, otherPlayers, tileCount, onCancel, on
         onClick={(e) => e.stopPropagation()}
       >
         <p className="mb-3 text-base font-semibold text-ink">
-          Сходить? ({tileCount} {pluralRu(tileCount, 'плитка', 'плитки', 'плиток')})
+          Походить? ({tileCount} {pluralRu(tileCount, 'плитка', 'плитки', 'плиток')})
         </p>
         <fieldset className="mb-4">
           <legend className="mb-2 text-sm text-ink/70">Кто помог?</legend>
@@ -63,7 +63,7 @@ export function SubmitConfirmModal({ open, otherPlayers, tileCount, onCancel, on
             onClick={onConfirm}
             className="rounded bg-sage px-3 py-1.5 text-sm font-semibold text-ink shadow hover:bg-sage-light"
           >
-            Сходить
+            Походить
           </button>
         </div>
       </div>
