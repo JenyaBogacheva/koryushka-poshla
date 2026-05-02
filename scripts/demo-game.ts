@@ -1,6 +1,7 @@
 import type { GameState, Placement, Slot } from '@shared/types';
 import { buildScriptedGame, runScriptedGame } from '../server/scripted-game.js';
 import { SIZE } from '../server/board.js';
+import { perMoveBadges, endGameBadges } from '../server/badges.js';
 
 let lastTurn = -1;
 
@@ -153,6 +154,27 @@ async function main(): Promise<void> {
   const sorted = [...final.players].sort((a, b) => b.score - a.score);
   for (const p of sorted) console.log(`  ${p.name.padEnd(8)} ${p.score}`);
   console.log(`Winner: ${sorted[0]!.name}`);
+
+  // Per-game badges
+  console.log('\n=== Badges ===');
+  const scoresMap: Record<Slot, number> = {
+    0: final.players[0]!.score,
+    1: final.players[1]!.score,
+    2: final.players[2]!.score,
+  };
+  const endBadges = endGameBadges(final.events, scoresMap);
+  const perMoveTotals: Record<Slot, Record<string, number>> = { 0: {}, 1: {}, 2: {} };
+  for (const e of final.events) {
+    if (e.kind !== 'move') continue;
+    for (const b of perMoveBadges(e)) {
+      perMoveTotals[e.slot][b] = (perMoveTotals[e.slot][b] ?? 0) + 1;
+    }
+  }
+  for (const slot of [0, 1, 2] as const) {
+    const live = Object.entries(perMoveTotals[slot]).map(([k, v]) => `${k}×${v}`).join(', ');
+    const end = endBadges[slot].join(', ');
+    console.log(`  Slot ${slot} (${final.players[slot]!.name}) badges: end=[${end}] live=[${live}]`);
+  }
 
   // Print events array for verification
   console.log('\n=== Event log (assist + revert records) ===');
