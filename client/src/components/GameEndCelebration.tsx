@@ -78,7 +78,7 @@ export function GameEndCelebration({ state, onDismiss }: Props) {
           const delay = `${Math.floor(Math.random() * 400)}ms`;
           const colors = ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#a855f7'];
           const color = colors[i % colors.length];
-          const style = { ['--cx' as string]: cx, ['--dx' as string]: dx, animationDelay: delay, background: color } as React.CSSProperties;
+          const style = { '--cx': cx, '--dx': dx, animationDelay: delay, background: color } as React.CSSProperties;
           return <span key={i} className="confetti-piece" style={style} />;
         })}
       </div>
