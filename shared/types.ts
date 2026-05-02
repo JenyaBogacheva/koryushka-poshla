@@ -162,6 +162,15 @@ export type GameArchive = {
 
 export type LobbySlot = { slot: Slot; name: string; connected: boolean };
 
+export type BadgeKind =
+  | 'bingo'
+  | 'longWord'
+  | 'bigMove'
+  | 'helper'
+  | 'gold'
+  | 'silver'
+  | 'bronze';
+
 // --- WebSocket protocol (M4a: join+lobby added; non-placement actions stubbed in server; M4b will implement them) ---
 
 export type ClientMessage =
