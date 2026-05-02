@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { GameArchive, GameState, Player } from '@shared/types';
+import type { BadgeKind, GameArchive, GameState, Player, Slot } from '@shared/types';
 import { Board } from './Board.js';
 import { MoveLog } from './MoveLog.js';
+import { BadgeStrip } from './BadgeStrip.js';
+import { perMoveBadges, endGameBadges } from '@server/badges.js';
 
 export function PastGamesDetail({ id }: { id: string }) {
   const [archive, setArchive] = useState<GameArchive | null>(null);
@@ -40,6 +42,22 @@ export function PastGamesDetail({ id }: { id: string }) {
     drawState: null,
   };
 
+  const scoresMap: Record<Slot, number> = {
+    0: archive.players.find((p) => p.slot === 0)?.finalScore ?? 0,
+    1: archive.players.find((p) => p.slot === 1)?.finalScore ?? 0,
+    2: archive.players.find((p) => p.slot === 2)?.finalScore ?? 0,
+  };
+  const endBadges = endGameBadges(archive.events, scoresMap);
+
+  const perPlayerBadges: Record<Slot, BadgeKind[]> = { 0: [], 1: [], 2: [] };
+  for (const slot of [0, 1, 2] as const) {
+    const live: BadgeKind[] = [];
+    for (const e of archive.events) {
+      if (e.kind === 'move' && e.slot === slot) live.push(...perMoveBadges(e));
+    }
+    perPlayerBadges[slot] = [...endBadges[slot], ...live];
+  }
+
   return (
     <main className="grid grid-cols-[auto_18rem] gap-4 p-4">
       <div>
@@ -55,7 +73,8 @@ export function PastGamesDetail({ id }: { id: string }) {
         <ul className="space-y-1 rounded bg-tile p-2 text-sm shadow-sm">
           {archive.players.map((p) => (
             <li key={p.slot} className={archive.winnerSlot === p.slot ? 'font-semibold' : ''}>
-              {p.name} — <span className="tabular-nums">{p.finalScore}</span>
+              <div>{p.name} — <span className="tabular-nums">{p.finalScore}</span></div>
+              <BadgeStrip badges={perPlayerBadges[p.slot]} />
             </li>
           ))}
         </ul>
