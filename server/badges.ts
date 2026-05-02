@@ -15,9 +15,37 @@ export function perMoveBadges(event: GameEvent | MoveRecord): BadgeKind[] {
 }
 
 export function endGameBadges(
-  _events: GameEvent[],
-  _scores: Record<Slot, number>,
+  events: GameEvent[],
+  scores: Record<Slot, number>,
 ): Record<Slot, BadgeKind[]> {
-  // Implemented in Task 5.
-  return { 0: [], 1: [], 2: [] };
+  const slots: Slot[] = [0, 1, 2];
+  const result: Record<Slot, BadgeKind[]> = { 0: [], 1: [], 2: [] };
+
+  // Place badges. Sort distinct scores descending; first three buckets are gold/silver/bronze,
+  // skipping a medal whenever the previous bucket had more than one slot in it.
+  const distinctScoresDesc = [...new Set(slots.map((s) => scores[s]))].sort((a, b) => b - a);
+  const buckets = distinctScoresDesc.map((score) => slots.filter((s) => scores[s] === score));
+
+  const medals: BadgeKind[] = ['gold', 'silver', 'bronze'];
+  let medalIndex = 0;
+  for (const bucket of buckets) {
+    if (medalIndex >= medals.length) break;
+    const medal = medals[medalIndex]!;
+    for (const slot of bucket) result[slot].push(medal);
+    medalIndex += bucket.length;
+  }
+
+  // Helper badge: most assists given (AssistRecord.fromSlot). Ties → all winners. Zero → no one.
+  const assistsBySlot: Record<Slot, number> = { 0: 0, 1: 0, 2: 0 };
+  for (const e of events) {
+    if (e.kind === 'assist') assistsBySlot[e.fromSlot] += 1;
+  }
+  const maxAssists = Math.max(assistsBySlot[0], assistsBySlot[1], assistsBySlot[2]);
+  if (maxAssists > 0) {
+    for (const s of slots) {
+      if (assistsBySlot[s] === maxAssists) result[s].push('helper');
+    }
+  }
+
+  return result;
 }
