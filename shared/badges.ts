@@ -1,16 +1,15 @@
-import type { BadgeKind, GameEvent, MoveRecord, Slot } from './types.js';
+import type { BadgeKind, GameEvent, Slot } from './types.js';
 
 const LONG_WORD_MIN = 7;
 const BIG_MOVE_MIN = 50;
 const RACK_SIZE = 7;
 
-export function perMoveBadges(event: GameEvent | MoveRecord): BadgeKind[] {
+export function perMoveBadges(event: GameEvent): BadgeKind[] {
   if (event.kind !== 'move') return [];
-  const record = event as MoveRecord;
   const badges: BadgeKind[] = [];
-  if (record.placements.length === RACK_SIZE) badges.push('bingo');
-  if (record.wordsFormed.some((w) => [...w.word].length >= LONG_WORD_MIN)) badges.push('longWord');
-  if (record.totalScore >= BIG_MOVE_MIN) badges.push('bigMove');
+  if (event.placements.length === RACK_SIZE) badges.push('bingo');
+  if (event.wordsFormed.some((w) => [...w.word].length >= LONG_WORD_MIN)) badges.push('longWord');
+  if (event.totalScore >= BIG_MOVE_MIN) badges.push('bigMove');
   return badges;
 }
 

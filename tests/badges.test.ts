@@ -67,7 +67,7 @@ describe('perMoveBadges', () => {
 
   it('returns [] for non-move events', () => {
     const pass: PassRecord = { kind: 'pass', slot: 1, timestamp: 0 };
-    expect(perMoveBadges(pass as unknown as MoveRecord)).toEqual([]);
+    expect(perMoveBadges(pass)).toEqual([]);
   });
 });
 
