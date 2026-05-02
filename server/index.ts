@@ -36,7 +36,12 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   });
 
   app.get('/api/history/:id', (req, res) => {
-    const archive = loadArchive(dataDir, req.params['id'] ?? '');
+    const id = req.params['id'] ?? '';
+    if (!/^g-\d+$/.test(id)) {
+      res.status(404).json({ error: 'not found' });
+      return;
+    }
+    const archive = loadArchive(dataDir, id);
     if (archive === null) {
       res.status(404).json({ error: 'not found' });
       return;
@@ -216,6 +221,25 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'drawTile':
           handleEngineAction(ws, () => game!.drawForOrderTile(slot));
           return;
+        case 'previewMove': {
+          if (game === null) return;
+          const preview = game.previewMove(slot, msg.placements);
+          if (preview.ok) {
+            sendMsg(ws, {
+              type: 'movePreview',
+              preview: {
+                ok: true,
+                totalScore: preview.totalScore,
+                bingoBonus: preview.bingoBonus,
+                wordsFormed: preview.wordsFormed,
+                dictionaryWarnings: preview.dictionaryWarnings,
+              },
+            });
+          } else {
+            sendMsg(ws, { type: 'movePreview', preview: { ok: false, reason: humanReadableReason(preview.error) } });
+          }
+          return;
+        }
         case 'toggleRackVisible':
           sendMsg(ws, { type: 'error', message: 'not yet implemented' });
           return;

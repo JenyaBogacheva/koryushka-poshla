@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import type { Letter, Slot, Tile as TileT } from '@shared/types';
 import { useGameStore } from './store.js';
-import { connect, disconnect, sendJoin, sendClaimBlank } from './ws.js';
+import { connect, disconnect, sendJoin, sendClaimBlank, sendPreviewMove } from './ws.js';
 import { Board } from './components/Board.js';
 import { PlayerCard } from './components/PlayerCard.js';
 import { ErrorBanner } from './components/ErrorBanner.js';
@@ -10,7 +10,7 @@ import { SlotPicker } from './components/SlotPicker.js';
 import { LetterPicker } from './components/LetterPicker.js';
 import { WaitingRoom } from './components/WaitingRoom.js';
 import { ActionBar } from './components/ActionBar.js';
-import { MoveLog, formatDrawForOrder } from './components/MoveLog.js';
+import { MoveLog } from './components/MoveLog.js';
 import { BagIndicator } from './components/BagIndicator.js';
 import { CYRILLIC_LETTERS } from './letters.js';
 import { PastGamesList } from './components/PastGamesList.js';
@@ -40,22 +40,23 @@ export function App() {
   const pendingPlacements = useGameStore((s) => s.pendingPlacements);
 
   const [pendingBlank, setPendingBlank] = useState<PendingDrop | null>(null);
-  const [drawBannerDismissed, setDrawBannerDismissed] = useState(false);
 
   useEffect(() => {
     connect();
     return () => disconnect();
   }, []);
 
-  const events = state?.events ?? [];
-  const lastEvent = events[events.length - 1];
-  const onlyDrawEvent = events.length === 1 && lastEvent?.kind === 'drawForOrder';
-  const showDrawBanner = state?.phase === 'playing' && onlyDrawEvent && !drawBannerDismissed;
-
+  const setMovePreview = useGameStore((s) => s.setMovePreview);
   useEffect(() => {
-    if (events.length > 1) setDrawBannerDismissed(true);
-    else setDrawBannerDismissed(false);
-  }, [events.length]);
+    if (pendingPlacements.length === 0) {
+      setMovePreview(null);
+      return;
+    }
+    const t = setTimeout(() => {
+      sendPreviewMove(pendingPlacements.map((p) => ({ tileId: p.tileId, row: p.row, col: p.col, playedAs: p.playedAs })));
+    }, 120);
+    return () => clearTimeout(t);
+  }, [pendingPlacements, setMovePreview]);
 
   function handleJoin(slot: Slot, name: string, password: string) {
     setIdentity(slot, name, password);
@@ -131,20 +132,10 @@ export function App() {
     return <WaitingRoom players={state.players} mySlot={identity.slot} />;
   }
 
-  const drawEvent = (lastEvent?.kind === 'drawForOrder' && onlyDrawEvent) ? lastEvent : null;
-  const nameOf = (slot: number): string => state.players[slot]?.name ?? `Слот ${slot}`;
-  const drawBannerText = drawEvent !== null ? formatDrawForOrder(drawEvent, nameOf) : null;
-
   return (
     <DndContext onDragEnd={onDragEnd}>
       <main className="relative flex h-full items-start justify-center gap-8 p-8">
         <div>
-          {showDrawBanner && drawBannerText !== null && (
-            <div className="mb-2 flex items-center justify-between rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 shadow-sm">
-              <span>{drawBannerText}</span>
-              <button type="button" className="ml-3 text-amber-700 hover:text-amber-900" onClick={() => setDrawBannerDismissed(true)}>✕</button>
-            </div>
-          )}
           <Board board={state.board} />
           <ErrorBanner />
         </div>

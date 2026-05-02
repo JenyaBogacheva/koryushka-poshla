@@ -71,26 +71,50 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
     case 'revert':
       return <span className="ml-4 text-ink/50 line-through">↳ отменено</span>;
     case 'drawForOrder':
-      return <span className="text-ink/70">{formatDrawForOrder(e, nameOf)}</span>;
+      return <DrawForOrderEntry ev={e} nameOf={nameOf} />;
   }
 }
 
-export function formatDrawForOrder(
-  ev: DrawForOrderRecord,
-  nameOf: (slot: number) => string,
-): string {
-  const draws = ev.draws.map((d) => `${nameOf(d.slot)} — ${d.letter ?? '★'}`).join(', ');
-  return `Жребий: ${draws}. Перв${firstAdj(nameOf(ev.firstSlot))} ходит ${nameOf(ev.firstSlot)}.`;
+function DrawForOrderEntry({
+  ev,
+  nameOf,
+}: {
+  ev: DrawForOrderRecord;
+  nameOf: (slot: number) => string;
+}): React.ReactNode {
+  // Turn order: firstSlot, (firstSlot+1)%3, (firstSlot+2)%3 — matches the cycle in submitMove.
+  const ordered = [0, 1, 2].map((i) => {
+    const slot = ((ev.firstSlot + i) % 3) as 0 | 1 | 2;
+    const draw = ev.draws.find((d) => d.slot === slot) ?? null;
+    return { slot, draw, position: i + 1 };
+  });
+  return (
+    <div className="my-1 rounded-md border border-ink/10 bg-bg/40 px-2 py-1.5">
+      <div className="text-[11px] uppercase tracking-wide text-ink/50">Жребий — порядок ходов</div>
+      <div className="mt-1 flex items-center gap-1.5">
+        {ordered.map(({ slot, draw, position }, idx) => (
+          <div key={slot} className="flex items-center gap-1.5">
+            <div className="flex flex-col items-center gap-0.5">
+              <div className="relative flex h-7 w-7 items-center justify-center rounded bg-tile text-base font-semibold text-ink shadow-sm">
+                {draw?.letter ?? '★'}
+                <span className="absolute -left-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-ink text-[9px] font-bold text-bg">
+                  {position}
+                </span>
+              </div>
+              <div className={`text-[10px] ${position === 1 ? 'font-semibold text-ink' : 'text-ink/60'}`}>
+                {nameOf(slot)}
+              </div>
+            </div>
+            {idx < ordered.length - 1 && <span className="text-ink/30">→</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // Best-effort feminine ending for "помог/помогла". Names ending in 'а' or 'я' get the feminine form.
 function femEnding(name: string): string {
   const last = name.trim().slice(-1).toLowerCase();
   return last === 'а' || last === 'я' ? 'ла' : '';
-}
-
-// Russian adjective agreement for "первой/первым ходит". Names ending in 'а' or 'я' → feminine.
-function firstAdj(name: string): string {
-  const last = name.trim().slice(-1).toLowerCase();
-  return last === 'а' || last === 'я' ? 'ой' : 'ым';
 }

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { DrawState, GameState, Letter, LobbySlot, Slot } from '@shared/types';
+import type { DrawState, GameState, Letter, LobbySlot, MovePreview, Slot } from '@shared/types';
 
 type Pending = { tileId: string; row: number; col: number; playedAs: Letter };
 type Identity = { slot: Slot; name: string; password: string };
@@ -33,6 +33,8 @@ type Store = {
   lastPlacedCells: { row: number; col: number }[];
   lastPlacedAt: number;
   drawState: DrawState | null;
+  movePreview: MovePreview | null;
+  setMovePreview: (preview: MovePreview | null) => void;
   setState: (state: GameState) => void;
   setConnected: (connected: boolean) => void;
   setLobby: (slots: LobbySlot[]) => void;
@@ -60,6 +62,8 @@ export const useGameStore = create<Store>((set) => ({
   lastPlacedCells: [],
   lastPlacedAt: 0,
   drawState: null,
+  movePreview: null,
+  setMovePreview: (movePreview) => set({ movePreview }),
   setState: (state) => set({ state, drawState: state.drawState }),
   setConnected: (connected) => set({ connected }),
   setLobby: (slots) => set({ lobby: slots }),
@@ -98,7 +102,7 @@ export const useGameStore = create<Store>((set) => ({
         p.tileId === tileId ? { ...p, playedAs: p.playedAs === real ? sub : real } : p,
       ),
     })),
-  clearPending: () => set({ pendingPlacements: [], pendingHelperSlot: null, lastError: null }),
+  clearPending: () => set({ pendingPlacements: [], pendingHelperSlot: null, lastError: null, movePreview: null }),
   setPendingHelperSlot: (pendingHelperSlot) => set({ pendingHelperSlot }),
   setError: (lastError) => set({ lastError }),
   setWarning: (warning) => set({ warning }),

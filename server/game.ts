@@ -13,6 +13,16 @@ export type SubmitResult =
   | { ok: true; moveRecord: MoveRecord; dictionaryWarnings: string[] }
   | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } | { kind: 'invalid-helper' } };
 
+export type PreviewResult =
+  | {
+      ok: true;
+      totalScore: number;
+      bingoBonus: boolean;
+      wordsFormed: WordFormed[];
+      dictionaryWarnings: string[];
+    }
+  | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } };
+
 export class Game {
   private state: GameState;
   private bag: Bag;
@@ -219,6 +229,33 @@ export class Game {
     const appended = this.state.events.slice(startLen);
     this.armRevert(slot, preStateForRevert, appended);
     return { ok: true, moveRecord, dictionaryWarnings };
+  }
+
+  previewMove(slot: Slot, placements: Placement[]): PreviewResult {
+    if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
+    if (slot !== this.state.turnIndex) return { ok: false, error: { kind: 'not-your-turn' } };
+
+    const player = this.state.players[slot]!;
+    const isFirst = isEmpty(this.state.board);
+    const validation = validateMove(this.state.board, player.rack, placements, isFirst);
+    if (!validation.ok) return { ok: false, error: validation.error };
+
+    const tileIds = placements.map((p) => p.tileId);
+    const previewRack = structuredClone(player.rack);
+    const placedTiles = removeTilesFromRack(previewRack, tileIds);
+    const previewBoard = structuredClone(this.state.board);
+    applyPlacements(previewBoard, placements, placedTiles);
+    const words = extractWordsFormed(previewBoard, placements);
+    const score = scoreMove(previewBoard, words, placements, { centerBonusUsed: this.state.centerBonusUsed });
+    const dictionaryWarnings = checkWords(words.map((w) => w.word));
+
+    return {
+      ok: true,
+      totalScore: score.totalScore,
+      bingoBonus: score.bingoBonus,
+      wordsFormed: score.perWord.map<WordFormed>((w) => ({ word: w.word, cells: w.cells, score: w.score })),
+      dictionaryWarnings,
+    };
   }
 
   snapshot(): GameState {

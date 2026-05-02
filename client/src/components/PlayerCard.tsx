@@ -14,6 +14,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   const identity = useGameStore((s) => s.identity);
   const pending = useGameStore((s) => s.pendingPlacements);
   const helper = useGameStore((s) => s.pendingHelperSlot);
+  const movePreview = useGameStore((s) => s.movePreview);
   const clearPending = useGameStore((s) => s.clearPending);
   const allPlayers = useGameStore((s) => s.state?.players ?? []);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -65,14 +66,24 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
       </div>
       <Rack slot={player.slot} tiles={player.rack} />
       {showButtons && (
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="button"
+            disabled={movePreview !== null && !movePreview.ok}
             onClick={() => setConfirmOpen(true)}
-            className="rounded bg-sage px-3 py-1.5 text-sm font-semibold text-ink shadow hover:bg-sage-light"
+            className="rounded bg-sage px-3 py-1.5 text-sm font-semibold text-ink shadow hover:bg-sage-light disabled:cursor-not-allowed disabled:opacity-50"
           >
             Сходить
+            {movePreview?.ok === true && (
+              <span className="ml-2 tabular-nums">+{movePreview.totalScore}</span>
+            )}
           </button>
+          {movePreview?.ok === true && movePreview.bingoBonus && (
+            <span className="rounded bg-sage px-1.5 py-0.5 text-xs">+10 бинго</span>
+          )}
+          {movePreview?.ok === false && (
+            <span className="text-xs text-rose-700" title={movePreview.reason}>{movePreview.reason}</span>
+          )}
           <button
             type="button"
             onClick={clearPending}

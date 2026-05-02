@@ -174,11 +174,17 @@ export type ClientMessage =
   | { type: 'endGame' }
   | { type: 'revertLastTurn' }
   | { type: 'newGame' }
-  | { type: 'drawTile' };
+  | { type: 'drawTile' }
+  | { type: 'previewMove'; placements: Placement[] };
+
+export type MovePreview =
+  | { ok: true; totalScore: number; bingoBonus: boolean; wordsFormed: WordFormed[]; dictionaryWarnings: string[] }
+  | { ok: false; reason: string };
 
 export type ServerMessage =
   | { type: 'lobby'; slots: [LobbySlot, LobbySlot, LobbySlot] }
   | { type: 'state'; state: GameState }
   | { type: 'moveAccepted'; moveRecord: MoveRecord; dictionaryWarnings: string[] }
   | { type: 'moveRejected'; reason: string }
+  | { type: 'movePreview'; preview: MovePreview }
   | { type: 'error'; message: string };

@@ -106,6 +106,9 @@ export function connect(): void {
       case 'moveRejected':
         store.setError(msg.reason);
         return;
+      case 'movePreview':
+        store.setMovePreview(msg.preview);
+        return;
       case 'error':
         // Any error while still in the join phase (no game state yet) means the join was refused.
         // Bounce back to the picker by clearing identity.
@@ -171,6 +174,9 @@ export function sendEndGame(): void { send({ type: 'endGame' }); }
 export function sendRevertLastTurn(): void { send({ type: 'revertLastTurn' }); }
 export function sendNewGame(): void { send({ type: 'newGame' }); }
 export function sendDrawTile(): void { send({ type: 'drawTile' }); }
+export function sendPreviewMove(placements: Placement[]): void {
+  send({ type: 'previewMove', placements });
+}
 export function sendSubmitMove(placements: Placement[], helperSlot: Slot | null): void {
   const msg: Extract<ClientMessage, { type: 'submitMove' }> =
     helperSlot === null
