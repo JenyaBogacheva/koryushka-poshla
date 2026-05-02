@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { perMoveBadges } from '@server/badges.js';
+import { perMoveBadges } from '@shared/badges.js';
 import type { MoveRecord, PassRecord } from '@shared/types';
 
 function move(overrides: Partial<MoveRecord> = {}): MoveRecord {
@@ -71,7 +71,7 @@ describe('perMoveBadges', () => {
   });
 });
 
-import { endGameBadges } from '@server/badges.js';
+import { endGameBadges } from '@shared/badges.js';
 import type { AssistRecord, Slot } from '@shared/types';
 
 function assist(fromSlot: Slot, toSlot: Slot): AssistRecord {

@@ -1,7 +1,7 @@
 import type { GameState, Placement, Slot } from '@shared/types';
 import { buildScriptedGame, runScriptedGame } from '../server/scripted-game.js';
 import { SIZE } from '../server/board.js';
-import { perMoveBadges, endGameBadges } from '../server/badges.js';
+import { perMoveBadges, endGameBadges } from '../shared/badges.js';
 
 let lastTurn = -1;
 

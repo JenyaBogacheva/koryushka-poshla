@@ -5,7 +5,7 @@ import { SubmitConfirmModal } from './SubmitConfirmModal.js';
 import { BadgeStrip } from './BadgeStrip.js';
 import { useGameStore } from '../store.js';
 import { sendSubmitMove } from '../ws.js';
-import { perMoveBadges, endGameBadges } from '@server/badges.js';
+import { perMoveBadges, endGameBadges } from '@shared/badges.js';
 
 type Props = {
   player: Player;

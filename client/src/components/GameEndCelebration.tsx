@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { GameState, Slot } from '@shared/types';
-import { endGameBadges } from '@server/badges.js';
+import { endGameBadges } from '@shared/badges.js';
 
 type Props = {
   state: GameState;

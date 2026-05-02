@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildScriptedGame, runScriptedGame } from '../server/scripted-game';
 import { saveActiveGame, archiveFinishedGame, loadArchive } from '../server/persistence';
-import { perMoveBadges, endGameBadges } from '../server/badges';
+import { perMoveBadges, endGameBadges } from '../shared/badges';
 import type { MoveRecord, Slot } from '../shared/types';
 
 describe('badges over archive round-trip', () => {

@@ -3,7 +3,7 @@ import type { BadgeKind, GameArchive, GameState, Player, Slot } from '@shared/ty
 import { Board } from './Board.js';
 import { MoveLog } from './MoveLog.js';
 import { BadgeStrip } from './BadgeStrip.js';
-import { perMoveBadges, endGameBadges } from '@server/badges.js';
+import { perMoveBadges, endGameBadges } from '@shared/badges.js';
 
 export function PastGamesDetail({ id }: { id: string }) {
   const [archive, setArchive] = useState<GameArchive | null>(null);

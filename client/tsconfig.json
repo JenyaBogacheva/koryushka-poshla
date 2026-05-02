@@ -12,8 +12,7 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "paths": {
-      "@shared/*": ["../shared/*"],
-      "@server/*": ["../server/*"]
+      "@shared/*": ["../shared/*"]
     }
   },
   "include": ["src/**/*", "vite.config.ts"]

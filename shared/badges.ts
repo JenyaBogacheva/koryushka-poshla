@@ -1,4 +1,4 @@
-import type { BadgeKind, GameEvent, MoveRecord, Slot } from '@shared/types';
+import type { BadgeKind, GameEvent, MoveRecord, Slot } from './types.js';
 
 const LONG_WORD_MIN = 7;
 const BIG_MOVE_MIN = 50;
