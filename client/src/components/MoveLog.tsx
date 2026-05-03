@@ -15,7 +15,7 @@ export function MoveLog({ state }: Props) {
 
   return (
     <div
-      className="flex flex-1 min-h-0 flex-col rounded-2xl p-4 text-sm text-ink"
+      className="flex flex-1 min-h-[120px] flex-col overflow-hidden rounded-2xl p-4 text-sm text-ink"
       style={{
         background: 'var(--color-panel)',
         boxShadow: '0 2px 0 rgba(60,50,35,0.06), 0 6px 18px rgba(60,50,35,0.08)',
