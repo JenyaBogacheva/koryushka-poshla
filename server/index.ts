@@ -64,8 +64,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const loadedFamily = loadFamilyConfig(dataDir);
   if (loadedFamily === null) {
     throw new Error(
-      `[scrabble] missing or invalid ${path.join(dataDir, 'family.json')}. ` +
-      `Copy ${path.join(dataDir, 'family.example.json')} to family.json and edit.`,
+      `[scrabble] no family config. Set FAMILY_PASSWORD + FAMILY_NAME_0/1/2 env vars, ` +
+      `or copy ${path.join(dataDir, 'family.example.json')} to ${path.join(dataDir, 'family.json')} and edit.`,
     );
   }
   const familyConfig: FamilyConfig = loadedFamily;

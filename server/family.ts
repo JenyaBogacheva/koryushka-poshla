@@ -6,6 +6,9 @@ export type FamilyMember = { slot: Slot; name: string };
 export type FamilyConfig = { password: string; players: [FamilyMember, FamilyMember, FamilyMember] };
 
 export function loadFamilyConfig(dataDir: string): FamilyConfig | null {
+  const envCfg = loadFromEnv();
+  if (envCfg !== undefined) return envCfg;
+
   const file = path.join(dataDir, 'family.json');
   let raw: string;
   try {
@@ -54,4 +57,27 @@ export function loadFamilyConfig(dataDir: string): FamilyConfig | null {
 
 export function familyNameForSlot(cfg: FamilyConfig, slot: Slot): string {
   return cfg.players[slot].name;
+}
+
+function loadFromEnv(): FamilyConfig | null | undefined {
+  const password = process.env.FAMILY_PASSWORD;
+  const name0 = process.env.FAMILY_NAME_0;
+  const name1 = process.env.FAMILY_NAME_1;
+  const name2 = process.env.FAMILY_NAME_2;
+  const anySet = password !== undefined || name0 !== undefined || name1 !== undefined || name2 !== undefined;
+  const allSet = password !== undefined && name0 !== undefined && name1 !== undefined && name2 !== undefined;
+  if (!anySet) return undefined;
+  if (!allSet) return undefined;
+  if (password === '' || name0!.trim() === '' || name1!.trim() === '' || name2!.trim() === '') {
+    console.error('[scrabble] FAMILY_PASSWORD and FAMILY_NAME_0/1/2 must all be non-empty');
+    return null;
+  }
+  return {
+    password,
+    players: [
+      { slot: 0, name: name0! },
+      { slot: 1, name: name1! },
+      { slot: 2, name: name2! },
+    ],
+  };
 }
