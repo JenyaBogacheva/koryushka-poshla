@@ -3,10 +3,11 @@ services:
     name: scrabble
     runtime: node
     plan: free
-    nodeVersion: 20
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NODE_VERSION
+        value: 20
     autoDeploy: true
