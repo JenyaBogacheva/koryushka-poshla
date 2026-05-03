@@ -44,6 +44,7 @@ export function App() {
   const pendingPlacements = useGameStore((s) => s.pendingPlacements);
 
   const [pendingBlank, setPendingBlank] = useState<PendingDrop | null>(null);
+  const boardSquareSize = useResponsiveBoardSize();
 
   useEffect(() => {
     connect();
@@ -152,7 +153,6 @@ export function App() {
 
   const activeSlot = (state.turnIndex as Slot);
   const activeFish = fishForSlot(activeSlot);
-  const boardSquareSize = useResponsiveBoardSize();
   return (
     <DndContext onDragEnd={onDragEnd}>
       <main className="relative mx-auto grid h-screen max-w-[1400px] items-start gap-6 overflow-hidden px-6 pb-3 pt-10 lg:gap-8 lg:px-10 lg:pt-14" style={{ gridTemplateColumns: '1fr 360px' }}>
