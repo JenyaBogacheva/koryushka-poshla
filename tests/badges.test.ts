@@ -116,16 +116,18 @@ describe('endGameBadges — places', () => {
 });
 
 describe('endGameBadges — helper', () => {
-  it('awards helper to single max-assist giver', () => {
+  it('awards helper to single max-assist helper (toSlot)', () => {
+    // toSlot counts: 1 → 1, 2 → 2 → slot 2 wins.
     const events = [assist(0, 1), assist(0, 2), assist(1, 2)];
     const out = endGameBadges(events, { 0: 50, 1: 30, 2: 30 });
-    expect(out[0]).toContain('helper');
+    expect(out[2]).toContain('helper');
+    expect(out[0]).not.toContain('helper');
     expect(out[1]).not.toContain('helper');
-    expect(out[2]).not.toContain('helper');
   });
 
-  it('shares helper on tie', () => {
-    const events = [assist(0, 1), assist(2, 1)];
+  it('shares helper on tie (by toSlot)', () => {
+    // toSlot counts: 0 → 1, 2 → 1 → tie between 0 and 2.
+    const events = [assist(1, 0), assist(1, 2)];
     const out = endGameBadges(events, { 0: 50, 1: 50, 2: 50 });
     expect(out[0]).toContain('helper');
     expect(out[2]).toContain('helper');
@@ -140,8 +142,9 @@ describe('endGameBadges — helper', () => {
   });
 
   it('place badge appears before helper in returned array', () => {
+    // assist(0, 1): helper is slot 1. Slot 1 has silver + helper.
     const events = [assist(0, 1)];
     const out = endGameBadges(events, { 0: 100, 1: 80, 2: 60 });
-    expect(out[0]).toEqual(['gold', 'helper']);
+    expect(out[1]).toEqual(['silver', 'helper']);
   });
 });
