@@ -24,7 +24,7 @@ export function MoveLog({ state }: Props) {
     >
       <div className="mb-2 flex shrink-0 items-baseline justify-between">
         <span className="font-heading font-bold leading-none" style={{ fontSize: 28 }}>Ходы</span>
-        <span className="text-xs uppercase tracking-wider text-ink-soft">история</span>
+        <span className="text-sm uppercase tracking-wider text-ink-soft">история</span>
       </div>
       <div ref={ref} className="min-h-0 flex-1 overflow-y-auto pr-1">
         {state.events.length === 0 ? (

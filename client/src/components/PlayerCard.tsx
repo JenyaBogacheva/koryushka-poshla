@@ -67,10 +67,6 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
     prevScoreRef.current = player.score;
   }, [player.score]);
 
-  const others = allPlayers
-    .filter((p) => identity !== null && p.slot !== identity.slot)
-    .map((p) => ({ slot: p.slot, name: p.name || `Слот ${p.slot}` }));
-
   function onConfirm() {
     const placements = pending.map((p) => ({
       tileId: p.tileId,
@@ -126,7 +122,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
               </span>
             )}
             {!player.connected && (
-              <span className="inline-flex items-center gap-1 text-xs text-ink/50">
+              <span className="inline-flex items-center gap-1 text-sm text-ink/50">
                 <span className="h-2 w-2 rounded-full bg-ink/40" />не в сети
               </span>
             )}
@@ -201,7 +197,6 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
       {identity !== null && (
         <SubmitConfirmModal
           open={confirmOpen}
-          otherPlayers={others}
           tileCount={pending.length}
           fishSlot={player.slot}
           onCancel={() => setConfirmOpen(false)}

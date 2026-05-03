@@ -159,7 +159,7 @@ export function App() {
         <nav className="absolute right-6 top-3 z-10 flex items-center gap-2 lg:right-10 lg:top-5">
           <a
             href="#past"
-            className="inline-flex items-center rounded-full px-3 py-1.5 text-xs text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
+            className="inline-flex items-center rounded-full px-3 py-1.5 text-sm text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
             style={{
               background: 'var(--color-panel)',
               boxShadow: '0 1px 0 rgba(60,50,35,0.06), 0 2px 6px rgba(60,50,35,0.08)',
@@ -173,7 +173,7 @@ export function App() {
               useGameStore.getState().clearIdentity();
               window.location.reload();
             }}
-            className="inline-flex items-center rounded-full px-3 py-1.5 text-xs text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
+            className="inline-flex items-center rounded-full px-3 py-1.5 text-sm text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
             style={{
               background: 'var(--color-panel)',
               boxShadow: '0 1px 0 rgba(60,50,35,0.06), 0 2px 6px rgba(60,50,35,0.08)',
@@ -199,7 +199,7 @@ export function App() {
               <h1 className="font-heading font-bold leading-[0.85] tracking-tight" style={{ fontSize: 48 }}>
                 Корюшка пошла
               </h1>
-              <p className="mt-2 text-xs italic leading-[1.35] text-ink-soft">
+              <p className="mt-2 text-sm italic leading-[1.35] text-ink-soft">
                 по первоапрельскому снегу уверенной походкой в светлое будущее.<br />
                 А если пошла корюшка, то и мы за ней!
               </p>
