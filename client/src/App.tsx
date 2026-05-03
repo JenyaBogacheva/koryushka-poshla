@@ -155,7 +155,7 @@ export function App() {
   const activeFish = fishForSlot(activeSlot);
   return (
     <DndContext onDragEnd={onDragEnd}>
-      <main className="relative mx-auto grid h-screen max-w-[1400px] items-start gap-6 overflow-hidden px-6 pb-3 pt-10 lg:gap-8 lg:px-10 lg:pt-14" style={{ gridTemplateColumns: '1fr 360px' }}>
+      <main className="relative mx-auto grid h-screen max-w-[1400px] items-start gap-6 overflow-hidden px-6 pb-3 pt-10 lg:gap-8 lg:px-10 lg:pt-14" style={{ gridTemplateColumns: '1fr clamp(280px, 26vw, 360px)' }}>
         <nav className="absolute right-6 top-3 z-10 flex items-center gap-2 lg:right-10 lg:top-5">
           <a
             href="#past"
@@ -282,9 +282,11 @@ function useResponsiveBoardSize(): number {
 function computeBoardSize(): number {
   if (typeof window === 'undefined') return 42;
   const VERTICAL_CHROME = 230; // header + main paddings + ErrorBanner row + breathing room
-  const HORIZONTAL_RIGHT_COL = 360 + 80; // aside width + main horizontal padding + gap
+  // Mirror the grid-template-columns clamp(280px, 26vw, 360px) used by the aside.
+  const asideWidth = Math.min(360, Math.max(280, window.innerWidth * 0.26));
+  const HORIZONTAL_CHROME = asideWidth + 80; // aside + main horizontal padding + gap
   const availableH = window.innerHeight - VERTICAL_CHROME;
-  const availableW = window.innerWidth - HORIZONTAL_RIGHT_COL;
+  const availableW = window.innerWidth - HORIZONTAL_CHROME;
   const fromHeight = Math.floor(availableH / 15);
   const fromWidth = Math.floor(availableW / 15);
   return Math.max(24, Math.min(42, fromHeight, fromWidth));
