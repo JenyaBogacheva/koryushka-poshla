@@ -56,9 +56,9 @@ The engine has no prior winner/tie-break logic; this spec defines it for the gam
 
 Server-authoritative, consistent with the rest of the codebase. Badges are **derived**, not stored — no schema changes to `GameArchive` or `MoveRecord`.
 
-### 4.1 New module: `server/badges.ts`
+### 4.1 New module: `shared/badges.ts`
 
-Pure module, two exports:
+Pure module, two exports. Lives in `shared/` (not `server/`) so the client can import it directly for live per-move badges and Past Games recomputation.
 
 ```ts
 export type BadgeKind =
@@ -70,7 +70,7 @@ export type BadgeKind =
   | 'silver'
   | 'bronze';
 
-export function perMoveBadges(record: MoveRecord): BadgeKind[];
+export function perMoveBadges(event: GameEvent): BadgeKind[];
 
 export function endGameBadges(
   events: GameEvent[],
@@ -78,7 +78,7 @@ export function endGameBadges(
 ): Record<Slot, BadgeKind[]>;
 ```
 
-- `perMoveBadges` returns the badges earned by a single `MoveRecord` (zero, one, or many).
+- `perMoveBadges` returns the badges earned by a single event. Returns `[]` for any non-`MoveRecord` event (pass, redraw, assist, etc.) so callers can pipe the entire event stream through it without filtering.
 - `endGameBadges` derives `helper` + place badges from the full event log and final scores. Returns badges keyed by slot, in a stable order (place badges first, then `helper`).
 
 Both functions are pure and have no I/O.
