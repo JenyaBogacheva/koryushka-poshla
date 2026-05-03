@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { BadgeKind, Player, Slot } from '@shared/types';
 import { Rack } from './Rack.js';
-import { SubmitConfirmModal } from './SubmitConfirmModal.js';
 import { BadgeStrip } from './BadgeStrip.js';
 import { FishBadge } from './FishBadge.js';
 import { ConfirmModal } from './ConfirmModal.js';
@@ -24,7 +23,6 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   const allEvents = useGameStore((s) => s.state?.events ?? []);
   const phase = useGameStore((s) => s.state?.phase ?? 'waiting');
   const bagLeft = useGameStore((s) => s.state?.bag.length ?? 0);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [passOpen, setPassOpen] = useState(false);
   const [swapAllOpen, setSwapAllOpen] = useState(false);
 
@@ -75,7 +73,6 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
       playedAs: p.playedAs,
     }));
     sendSubmitMove(placements);
-    setConfirmOpen(false);
   }
 
   return (
@@ -144,7 +141,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
           <button
             type="button"
             disabled={movePreview !== null && !movePreview.ok}
-            onClick={() => setConfirmOpen(true)}
+            onClick={onConfirm}
             className="font-heading rounded-full px-4 py-2 text-lg font-semibold text-white shadow disabled:cursor-not-allowed disabled:opacity-50"
             style={{ background: fish.accent }}
           >
@@ -193,15 +190,6 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
             </button>
           )}
         </div>
-      )}
-      {identity !== null && (
-        <SubmitConfirmModal
-          open={confirmOpen}
-          tileCount={pending.length}
-          fishSlot={player.slot}
-          onCancel={() => setConfirmOpen(false)}
-          onConfirm={onConfirm}
-        />
       )}
       <ConfirmModal
         open={passOpen}
