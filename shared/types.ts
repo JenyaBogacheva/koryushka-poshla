@@ -175,7 +175,8 @@ export type BadgeKind =
 
 export type ClientMessage =
   | { type: 'join'; slot: Slot; name: string; password: string }
-  | { type: 'submitMove'; placements: Placement[]; helperSlot?: Slot }
+  | { type: 'submitMove'; placements: Placement[] }
+  | { type: 'attributeHelper'; helperSlot: Slot | null }
   | { type: 'claimBlank'; row: number; col: number; myTileId: string }
   | { type: 'pass' }
   | { type: 'redraw' }

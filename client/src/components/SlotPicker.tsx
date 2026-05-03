@@ -101,7 +101,7 @@ export function SlotPicker({ lobby, onJoin }: Props) {
               </span>
               {taken && (
                 <span
-                  className="relative inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider"
+                  className="relative inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold uppercase tracking-wider"
                   style={{ background: 'rgba(255,255,255,0.45)', color: fish.deep }}
                 >
                   <span

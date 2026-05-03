@@ -98,7 +98,7 @@ export function GameEndCelebration({ state, onDismiss }: Props) {
           initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
-          className="relative text-[11px] uppercase tracking-[0.3em] text-ink-soft"
+          className="relative text-sm uppercase tracking-[0.3em] text-ink-soft"
         >
           корюшка пришла
         </motion.p>
@@ -173,7 +173,7 @@ export function GameEndCelebration({ state, onDismiss }: Props) {
                       animate={{ scale: 1, rotate: 0 }}
                       transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 1.0 + i * 0.16 }}
                       title="Помощник — больше всего подсказок"
-                      className="font-heading rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider"
+                      className="font-heading rounded-full px-2.5 py-0.5 text-sm font-bold uppercase tracking-wider"
                       style={{
                         background: 'var(--color-cell)',
                         color: '#3a6b5e',

@@ -34,10 +34,10 @@ export function endGameBadges(
     medalIndex += bucket.length;
   }
 
-  // Helper badge: most assists given (AssistRecord.fromSlot). Ties → all winners. Zero → no one.
+  // Helper badge: most assists given (AssistRecord.toSlot is the helper). Ties → all winners. Zero → no one.
   const assistsBySlot: Record<Slot, number> = { 0: 0, 1: 0, 2: 0 };
   for (const e of events) {
-    if (e.kind === 'assist') assistsBySlot[e.fromSlot] += 1;
+    if (e.kind === 'assist') assistsBySlot[e.toSlot] += 1;
   }
   const maxAssists = Math.max(assistsBySlot[0], assistsBySlot[1], assistsBySlot[2]);
   if (maxAssists > 0) {

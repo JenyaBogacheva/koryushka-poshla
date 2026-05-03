@@ -1,11 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DrawForOrderRecord, GameEvent, GameState, Slot } from '@shared/types';
 import { fishForSlot } from '../fish.js';
+import { useGameStore } from '../store.js';
+import { sendAttributeHelper } from '../ws.js';
 
 type Props = { state: GameState };
 
 export function MoveLog({ state }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const identity = useGameStore((s) => s.identity);
   useEffect(() => {
     if (ref.current === null) return;
     ref.current.scrollTop = ref.current.scrollHeight;
@@ -13,9 +16,33 @@ export function MoveLog({ state }: Props) {
 
   const nameOf = (slot: number): string => state.players[slot]?.name || `Слот ${slot}`;
 
+  // The latest move is editable iff:
+  //   - it's the last event (no helper yet), or
+  //   - the last event is the assist for it (i.e. helper already attributed)
+  // AND it belongs to the viewer.
+  const editableMoveIndex: number | null = (() => {
+    if (identity === null) return null;
+    const events = state.events;
+    if (events.length === 0) return null;
+    const last = events[events.length - 1]!;
+    if (last.kind === 'move' && last.slot === identity.slot) return events.length - 1;
+    if (last.kind === 'assist' && last.forMoveIndex === events.length - 2) {
+      const prev = events[events.length - 2];
+      if (prev?.kind === 'move' && prev.slot === identity.slot) return events.length - 2;
+    }
+    return null;
+  })();
+
+  const otherPlayers =
+    identity === null
+      ? []
+      : ([0, 1, 2] as Slot[])
+          .filter((s) => s !== identity.slot)
+          .map((s) => ({ slot: s, name: nameOf(s) }));
+
   return (
     <div
-      className="flex flex-1 min-h-0 flex-col rounded-2xl p-4 text-sm text-ink"
+      className="flex flex-1 min-h-[120px] flex-col overflow-hidden rounded-2xl p-4 text-sm text-ink"
       style={{
         background: 'var(--color-panel)',
         boxShadow: '0 2px 0 rgba(60,50,35,0.06), 0 6px 18px rgba(60,50,35,0.08)',
@@ -24,22 +51,130 @@ export function MoveLog({ state }: Props) {
     >
       <div className="mb-2 flex shrink-0 items-baseline justify-between">
         <span className="font-heading font-bold leading-none" style={{ fontSize: 28 }}>Ходы</span>
-        <span className="text-[11px] uppercase tracking-wider text-ink-soft">история</span>
+        <span className="text-sm uppercase tracking-wider text-ink-soft">история</span>
       </div>
       <div ref={ref} className="min-h-0 flex-1 overflow-y-auto pr-1">
         {state.events.length === 0 ? (
           <p className="text-ink/50">Ещё нет ходов</p>
         ) : (
           <ol className="space-y-1">
-            {state.events
-              .filter((e) => e.kind !== 'drawForOrder')
-              .map((e, i) => (
-                <li key={i}>{renderEvent(e, nameOf)}</li>
-              ))}
+            {state.events.map((e, i) => {
+              if (e.kind === 'drawForOrder') return null;
+              // The affordance owns the assist row when it's the editable move's assist.
+              if (
+                editableMoveIndex !== null &&
+                i === editableMoveIndex + 1 &&
+                e.kind === 'assist'
+              ) {
+                return null;
+              }
+              const showAffordance =
+                editableMoveIndex !== null && i === editableMoveIndex && e.kind === 'move';
+              return (
+                <li key={i}>
+                  {renderEvent(e, nameOf)}
+                  {showAffordance && e.kind === 'move' && (
+                    <HelperAffordance
+                      currentHelper={e.helperSlot}
+                      otherPlayers={otherPlayers}
+                    />
+                  )}
+                </li>
+              );
+            })}
           </ol>
         )}
       </div>
     </div>
+  );
+}
+
+type HelperAffordanceProps = {
+  currentHelper: Slot | null;
+  otherPlayers: { slot: Slot; name: string }[];
+};
+
+function HelperAffordance({ currentHelper, otherPlayers }: HelperAffordanceProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (expanded) {
+    return (
+      <div className="ml-7 mt-1 flex flex-col gap-1 text-sm">
+        <span className="text-sm uppercase tracking-wider text-ink-soft">Кто помог?</span>
+        <button
+          type="button"
+          onClick={() => {
+            sendAttributeHelper(null);
+            setExpanded(false);
+          }}
+          className="text-left text-ink-soft hover:text-ink"
+        >
+          никто
+        </button>
+        {otherPlayers.map((p) => {
+          const f = fishForSlot(p.slot);
+          return (
+            <button
+              key={p.slot}
+              type="button"
+              onClick={() => {
+                sendAttributeHelper(p.slot);
+                setExpanded(false);
+              }}
+              className="flex items-center gap-1.5 text-left hover:underline"
+            >
+              <img src={f.src} alt="" aria-hidden style={{ width: 16, height: 'auto' }} />
+              <span style={{ color: f.deep, fontWeight: 600 }}>{p.name}</span>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="self-start text-sm text-ink-soft hover:text-ink"
+        >
+          отмена
+        </button>
+      </div>
+    );
+  }
+
+  if (currentHelper !== null) {
+    const helperPlayer = otherPlayers.find((p) => p.slot === currentHelper);
+    if (helperPlayer === undefined) return null;
+    const f = fishForSlot(helperPlayer.slot);
+    return (
+      <div className="ml-7 mt-0.5 flex items-center gap-1.5 text-ink/60">
+        <span>↳</span>
+        <img src={f.src} alt="" aria-hidden style={{ width: 16, height: 'auto' }} />
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="hover:underline"
+          style={{ color: f.deep, fontWeight: 600 }}
+        >
+          {helperPlayer.name}
+        </button>
+        <span>{isFemName(helperPlayer.name) ? 'помогла' : 'помог'} — +5</span>
+        <button
+          type="button"
+          onClick={() => sendAttributeHelper(null)}
+          className="ml-1 text-sm text-ink/40 hover:text-ink"
+        >
+          убрать
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setExpanded(true)}
+      className="ml-7 mt-0.5 text-sm text-ink-soft hover:text-ink"
+    >
+      + кто помог?
+    </button>
   );
 }
 
@@ -70,9 +205,9 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
           <FishStamp slot={e.slot} />
           <div className="flex-1 min-w-0">
             <PlayerName slot={e.slot} nameOf={nameOf} /> — <span className="font-heading text-base font-semibold">{words || '—'}</span> — <span className="tabular-nums font-bold">{e.totalScore}</span>
-            {e.bingoBonus && <span className="ml-1 rounded bg-prem-tl/40 px-1 text-xs">+10 бинго</span>}
+            {e.bingoBonus && <span className="ml-1 rounded bg-prem-tl/40 px-1 text-sm">+10 бинго</span>}
             {e.dictionaryWarnings.length > 0 && (
-              <div className="text-xs text-ink-soft">не в словаре: {e.dictionaryWarnings.join(', ')}</div>
+              <div className="text-sm text-ink-soft">не в словаре: {e.dictionaryWarnings.join(', ')}</div>
             )}
           </div>
         </div>
@@ -142,7 +277,7 @@ function DrawForOrderEntry({
   });
   return (
     <div className="my-1 rounded-md border border-ink/10 bg-bg/40 px-2 py-1.5">
-      <div className="text-[11px] uppercase tracking-wide text-ink/50">Жребий — порядок ходов</div>
+      <div className="text-sm uppercase tracking-wide text-ink/50">Жребий — порядок ходов</div>
       <div className="mt-1 flex items-center gap-1.5">
         {ordered.map(({ slot, draw, position }, idx) => (
           <div key={slot} className="flex items-center gap-1.5">
@@ -153,7 +288,7 @@ function DrawForOrderEntry({
                   {position}
                 </span>
               </div>
-              <div className={`text-[10px] ${position === 1 ? 'font-semibold text-ink' : 'text-ink/60'}`}>
+              <div className={`text-sm ${position === 1 ? 'font-semibold text-ink' : 'text-ink/60'}`}>
                 {nameOf(slot)}
               </div>
             </div>

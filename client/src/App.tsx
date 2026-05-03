@@ -155,11 +155,11 @@ export function App() {
   const activeFish = fishForSlot(activeSlot);
   return (
     <DndContext onDragEnd={onDragEnd}>
-      <main className="relative mx-auto grid h-screen max-w-[1400px] items-start gap-6 overflow-hidden px-6 pb-3 pt-10 lg:gap-8 lg:px-10 lg:pt-14" style={{ gridTemplateColumns: '1fr 360px' }}>
+      <main className="relative mx-auto grid h-screen max-w-[1400px] items-start gap-6 overflow-hidden px-6 pb-3 pt-12 lg:gap-8 lg:px-10 lg:pt-16" style={{ gridTemplateColumns: '1fr clamp(280px, 26vw, 360px)', gridTemplateRows: 'minmax(0, 1fr)' }}>
         <nav className="absolute right-6 top-3 z-10 flex items-center gap-2 lg:right-10 lg:top-5">
           <a
             href="#past"
-            className="inline-flex items-center rounded-full px-3 py-1.5 text-xs text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
+            className="inline-flex items-center rounded-full px-3 py-1.5 text-sm text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
             style={{
               background: 'var(--color-panel)',
               boxShadow: '0 1px 0 rgba(60,50,35,0.06), 0 2px 6px rgba(60,50,35,0.08)',
@@ -173,7 +173,7 @@ export function App() {
               useGameStore.getState().clearIdentity();
               window.location.reload();
             }}
-            className="inline-flex items-center rounded-full px-3 py-1.5 text-xs text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
+            className="inline-flex items-center rounded-full px-3 py-1.5 text-sm text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
             style={{
               background: 'var(--color-panel)',
               boxShadow: '0 1px 0 rgba(60,50,35,0.06), 0 2px 6px rgba(60,50,35,0.08)',
@@ -182,7 +182,7 @@ export function App() {
             Выйти
           </button>
         </nav>
-        <div className="flex h-full min-h-0 flex-col items-center gap-4">
+        <div className="flex h-full min-h-0 flex-col items-center gap-6">
           {/* Header — walking koryushka in the active player's color + handwritten title */}
           <header className="flex w-full items-center gap-6 self-start" style={{ marginLeft: 6 }}>
             <div className="relative shrink-0" style={{ width: 170, height: 80 }}>
@@ -199,7 +199,7 @@ export function App() {
               <h1 className="font-heading font-bold leading-[0.85] tracking-tight" style={{ fontSize: 48 }}>
                 Корюшка пошла
               </h1>
-              <p className="mt-2 text-xs italic leading-[1.35] text-ink-soft">
+              <p className="mt-2 text-sm italic leading-[1.35] text-ink-soft">
                 по первоапрельскому снегу уверенной походкой в светлое будущее.<br />
                 А если пошла корюшка, то и мы за ней!
               </p>
@@ -268,7 +268,7 @@ function Center({ children }: { children: ReactNode }) {
 }
 
 // Board square size that fits the viewport. Reserves vertical space for header,
-// padding, ErrorBanner, and bottom margin; caps at 42 (the original size).
+// padding, ErrorBanner, and bottom margin.
 function useResponsiveBoardSize(): number {
   const [size, setSize] = useState<number>(() => computeBoardSize());
   useEffect(() => {
@@ -281,11 +281,14 @@ function useResponsiveBoardSize(): number {
 
 function computeBoardSize(): number {
   if (typeof window === 'undefined') return 42;
-  const VERTICAL_CHROME = 230; // header + main paddings + ErrorBanner row + breathing room
-  const HORIZONTAL_RIGHT_COL = 360 + 80; // aside width + main horizontal padding + gap
+  const VERTICAL_CHROME = 200; // header + main paddings + ErrorBanner row + breathing room
+  // Mirror the grid-template-columns clamp(280px, 26vw, 360px) used by the aside.
+  const asideWidth = Math.min(360, Math.max(280, window.innerWidth * 0.26));
+  const HORIZONTAL_CHROME = asideWidth + 80; // aside + main horizontal padding + gap
   const availableH = window.innerHeight - VERTICAL_CHROME;
-  const availableW = window.innerWidth - HORIZONTAL_RIGHT_COL;
+  const availableW = window.innerWidth - HORIZONTAL_CHROME;
   const fromHeight = Math.floor(availableH / 15);
   const fromWidth = Math.floor(availableW / 15);
-  return Math.max(24, Math.min(42, fromHeight, fromWidth));
+  // Floor at 24 (legibility), no upper cap — fill the available viewport.
+  return Math.max(24, Math.min(fromHeight, fromWidth));
 }

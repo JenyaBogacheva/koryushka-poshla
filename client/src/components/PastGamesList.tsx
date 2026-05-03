@@ -67,7 +67,7 @@ export function PastGamesList() {
                       style={{ right: -28, top: -8, width: 130, opacity: 0.18 }}
                     />
                   )}
-                  <div className="relative text-xs uppercase tracking-wider text-ink-soft">
+                  <div className="relative text-sm uppercase tracking-wider text-ink-soft">
                     {new Date(g.finishedAt).toLocaleString('ru-RU')}
                   </div>
                   <div className="relative mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">

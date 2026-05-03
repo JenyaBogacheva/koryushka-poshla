@@ -105,7 +105,7 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
           />
         </div>
       ) : premium ? (
-        <span className="text-[10px] font-medium text-ink/55 tracking-wide">{PREMIUM_LABEL[premium]}</span>
+        <span className="text-sm font-medium text-ink/55 tracking-wide">{PREMIUM_LABEL[premium]}</span>
       ) : null}
     </div>
   );

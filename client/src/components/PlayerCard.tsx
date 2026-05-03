@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import type { BadgeKind, Player, Slot } from '@shared/types';
 import { Rack } from './Rack.js';
-import { SubmitConfirmModal } from './SubmitConfirmModal.js';
 import { BadgeStrip } from './BadgeStrip.js';
 import { FishBadge } from './FishBadge.js';
 import { ConfirmModal } from './ConfirmModal.js';
@@ -18,14 +17,12 @@ type Props = {
 export function PlayerCard({ player, isCurrentTurn }: Props) {
   const identity = useGameStore((s) => s.identity);
   const pending = useGameStore((s) => s.pendingPlacements);
-  const helper = useGameStore((s) => s.pendingHelperSlot);
   const movePreview = useGameStore((s) => s.movePreview);
   const clearPending = useGameStore((s) => s.clearPending);
   const allPlayers = useGameStore((s) => s.state?.players ?? []);
   const allEvents = useGameStore((s) => s.state?.events ?? []);
   const phase = useGameStore((s) => s.state?.phase ?? 'waiting');
   const bagLeft = useGameStore((s) => s.state?.bag.length ?? 0);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [passOpen, setPassOpen] = useState(false);
   const [swapAllOpen, setSwapAllOpen] = useState(false);
 
@@ -68,10 +65,6 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
     prevScoreRef.current = player.score;
   }, [player.score]);
 
-  const others = allPlayers
-    .filter((p) => identity !== null && p.slot !== identity.slot)
-    .map((p) => ({ slot: p.slot, name: p.name || `Слот ${p.slot}` }));
-
   function onConfirm() {
     const placements = pending.map((p) => ({
       tileId: p.tileId,
@@ -79,13 +72,12 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
       col: p.col,
       playedAs: p.playedAs,
     }));
-    sendSubmitMove(placements, helper);
-    setConfirmOpen(false);
+    sendSubmitMove(placements);
   }
 
   return (
     <div
-      className={`relative rounded-2xl px-4 py-3 transition-all ${player.connected ? '' : 'opacity-70'}`}
+      className={`relative shrink-0 rounded-2xl px-4 py-3 transition-all ${player.connected ? '' : 'opacity-70'}`}
       style={cardStyle}
     >
       {/* Watermark fish (clipped behind everything) */}
@@ -120,14 +112,14 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
             </span>
             {isMine && (
               <span
-                className="inline-flex items-center justify-center rounded px-1.5 leading-none text-[10px] font-bold uppercase tracking-wider text-white"
+                className="inline-flex items-center justify-center rounded px-1.5 leading-none text-sm font-bold uppercase tracking-wider text-white"
                 style={{ background: fish.accent, height: 16 }}
               >
                 ты
               </span>
             )}
             {!player.connected && (
-              <span className="inline-flex items-center gap-1 text-xs text-ink/50">
+              <span className="inline-flex items-center gap-1 text-sm text-ink/50">
                 <span className="h-2 w-2 rounded-full bg-ink/40" />не в сети
               </span>
             )}
@@ -149,7 +141,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
           <button
             type="button"
             disabled={movePreview !== null && !movePreview.ok}
-            onClick={() => setConfirmOpen(true)}
+            onClick={onConfirm}
             className="font-heading rounded-full px-4 py-2 text-lg font-semibold text-white shadow disabled:cursor-not-allowed disabled:opacity-50"
             style={{ background: fish.accent }}
           >
@@ -159,7 +151,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
             )}
           </button>
           {movePreview?.ok === true && movePreview.bingoBonus && (
-            <span className="rounded bg-prem-tl/40 px-1.5 py-0.5 text-xs">+10 бинго</span>
+            <span className="rounded bg-prem-tl/40 px-1.5 py-0.5 text-sm">+10 бинго</span>
           )}
           {movePreview?.ok === false && (
             <span
@@ -198,16 +190,6 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
             </button>
           )}
         </div>
-      )}
-      {identity !== null && (
-        <SubmitConfirmModal
-          open={confirmOpen}
-          otherPlayers={others}
-          tileCount={pending.length}
-          fishSlot={player.slot}
-          onCancel={() => setConfirmOpen(false)}
-          onConfirm={onConfirm}
-        />
       )}
       <ConfirmModal
         open={passOpen}

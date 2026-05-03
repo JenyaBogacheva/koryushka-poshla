@@ -158,7 +158,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       sendMsg(ws, { type: 'error', message: 'Game not started' });
       return;
     }
-    const result = game.submitMove(slot, msg.placements, msg.helperSlot);
+    const result = game.submitMove(slot, msg.placements);
     if (!result.ok) {
       sendMsg(ws, { type: 'moveRejected', reason: humanReadableReason(result.error) });
       return;
@@ -206,6 +206,24 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'submitMove':
           handleSubmitMove(slot, msg, ws);
           return;
+        case 'attributeHelper': {
+          if (game === null) {
+            sendMsg(ws, { type: 'error', message: 'Game not started' });
+            return;
+          }
+          const result = game.attributeHelper(slot, msg.helperSlot);
+          if (!result.ok) {
+            sendMsg(ws, { type: 'error', message: humanReadableReason(result.error) });
+            return;
+          }
+          try {
+            saveActiveGame(dataDir, game.snapshot());
+          } catch (err) {
+            console.error('[scrabble] saveActiveGame failed:', err);
+          }
+          broadcastState();
+          return;
+        }
         case 'pass':
           handleEngineAction(ws, () => game!.passTurn(slot));
           return;
@@ -415,6 +433,8 @@ function humanReadableReason(error: { kind: string }): string {
     case 'not-your-turn': return 'Сейчас не ваш ход';
     case 'not-playing': return 'Игра не в процессе';
     case 'invalid-helper': return 'Неверный помощник';
+    case 'no-attributable-move': return 'Нет хода для приписывания помощи';
+    case 'not-your-move': return 'Это не ваш ход';
     case 'no-placements': return 'Нет плиток для хода';
     case 'out-of-range': return 'Плитка вне поля';
     case 'duplicate-target': return 'Две плитки в одну клетку';

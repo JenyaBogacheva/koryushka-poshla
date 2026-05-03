@@ -30,7 +30,7 @@ export function ActionBar() {
   const pillStyle: React.CSSProperties = { background: 'var(--color-panel)' };
 
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2">
+    <div className="mt-2 flex shrink-0 flex-wrap items-center gap-2">
       {canRevertMove && (
         <button
           type="button"
