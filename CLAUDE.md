@@ -40,7 +40,7 @@ Family-style three-player Russian Scrabble (Эрудит) for browser play. Serv
 - **Pure modules + thin orchestrator.** Each server module is a set of pure-ish functions over plain data; `Game` is the only stateful class. New rules go in the relevant pure module, not in `Game`.
 - **No external runtime deps.** Engine and tests run with just Node 20 + TypeScript + Vitest. Don't pull in lodash, immer, etc. for one-off needs.
 - **Deterministic RNG (mulberry32, seeded).** All randomness routes through `makeRng(seed)` so games and tests are reproducible. Don't call `Math.random()` in engine code.
-- **Russian house rules** (see spec §3 for full list): one-way letter substitutions (Ё→Е, Ъ→Ь, Ш→Щ, Й→И), reusable bonus squares (center DW one-time), +10 bingo (not +50), multi-spot placement, all-vowel/consonant free redraw, blank-swap, player-initiated game end. **These are intentional deviations from standard Scrabble.** Don't "fix" them toward standard rules.
+- **Russian house rules** (see spec §3 for full list): one-way letter substitutions (Ё→Е, Ъ→Ь, Щ→Ш, Й→И), reusable bonus squares (center DW one-time), +10 bingo (not +50), multi-spot placement, all-vowel/consonant free redraw, blank-swap, player-initiated game end. **These are intentional deviations from standard Scrabble.** Don't "fix" them toward standard rules.
 
 ## Build & Development
 

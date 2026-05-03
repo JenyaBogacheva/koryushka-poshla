@@ -22,11 +22,11 @@ export function Rack({ slot, tiles }: Props) {
   const slots: (TileT | null)[] = Array.from({ length: RACK_SIZE }, (_, i) => visible[i] ?? null);
 
   return (
-    <div className="flex gap-1 rounded-md bg-ink/10 p-1">
+    <div className="flex gap-1 rounded-md p-1" style={{ background: 'rgba(60,50,30,0.07)' }}>
       {slots.map((t, i) => (
         <div
           key={i}
-          className="flex items-center justify-center rounded bg-bg/50"
+          className="flex items-center justify-center rounded"
           style={{ width: TILE_SIZE, height: TILE_SIZE }}
         >
           {t ? (

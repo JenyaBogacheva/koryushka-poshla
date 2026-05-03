@@ -25,7 +25,7 @@ A real-time, online, three-player Russian Scrabble game ("Эрудит") for a f
 | **Multi-spot placement** | A single turn may place tiles in **multiple disconnected groups** on the board. Each group must (a) form valid words individually and as cross-words, and (b) connect to existing tiles. *Exception:* the very first move of the game is one group and must cross the center star. |
 | **Word form** | Only Russian nouns in **nominative singular** ("кошка" yes, "кошку" no). |
 | **Dictionary check** | **Advisory only.** The server flags unknown words via warnings; never blocks or penalizes. Players decide. |
-| **Letter substitutions (one-way)** | A tile may be played as a "softer" letter, scoring at the substitute's point value: Ё→Е, Ъ→Ь, Ш→Щ, Й→И. Reverse direction not allowed. |
+| **Letter substitutions (one-way)** | A tile may be played as a "softer" letter, scoring at the substitute's point value: Ё→Е, Ъ→Ь, Щ→Ш, Й→И. Reverse direction not allowed. |
 | **Bonus squares (DW/TW/DL/TL)** | **Reusable** — apply every turn a tile sits on them, not only when first covered. **Exception:** the center DW only applies the first time it is covered. |
 | **Word scoring** | Standard — every word formed by your move (the main word plus any perpendicular side words containing a new tile) is scored. |
 | **Rack visibility** | Each player can show or hide their rack to opponents. **Default: visible.** Toggleable any time. |
@@ -207,7 +207,7 @@ On `submitMove`:
 
 ### 9.2 Letter substitutions
 
-Each `Placement` carries `playedAs`. When `tile.letter !== playedAs`, the server validates the pair is one of the four allowed one-way substitutions (Ё→Е, Ъ→Ь, Ш→Щ, Й→И). The cell stores both the physical `tile` and `playedAs`. Scoring uses `playedAs.points`, not `tile.points`. The board UI displays `playedAs`.
+Each `Placement` carries `playedAs`. When `tile.letter !== playedAs`, the server validates the pair is one of the four allowed one-way substitutions (Ё→Е, Ъ→Ь, Щ→Ш, Й→И). The cell stores both the physical `tile` and `playedAs`. Scoring uses `playedAs.points`, not `tile.points`. The board UI displays `playedAs`.
 
 ### 9.3 Reusable bonus squares
 

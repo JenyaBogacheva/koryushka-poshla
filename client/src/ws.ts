@@ -167,6 +167,7 @@ export function sendJoin(slot: Slot, name: string, password: string): void {
 
 export function sendPass(): void { send({ type: 'pass' }); }
 export function sendRedraw(): void { send({ type: 'redraw' }); }
+export function sendSwapAll(): void { send({ type: 'swapAll' }); }
 export function sendClaimBlank(row: number, col: number, tileId: string): void {
   send({ type: 'claimBlank', row, col, myTileId: tileId });
 }

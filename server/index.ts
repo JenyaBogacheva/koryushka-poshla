@@ -209,6 +209,9 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'redraw':
           handleEngineAction(ws, () => game!.redrawRack(slot));
           return;
+        case 'swapAll':
+          handleEngineAction(ws, () => game!.swapAllAndPass(slot));
+          return;
         case 'claimBlank':
           handleEngineAction(ws, () => game!.claimBlank(slot, msg.row, msg.col, msg.myTileId));
           return;

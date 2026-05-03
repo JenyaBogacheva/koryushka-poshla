@@ -1,13 +1,53 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-bg: #f5ebdd;
-  --color-tile: #fdf8f0;
-  --color-sage-light: #c9e4d8;
-  --color-sage: #7eb8a0;
-  --color-peach: #f5d4b8;
-  --color-terracotta: #d97757;
-  --color-ink: #4a3528;
+  /* Sky paper palette */
+  --color-paper: #d8dde2;
+  --color-paper-deep: #bfc6cc;
+  --color-panel: #e9edf0;
+  --color-cell: #f1f4f6;
+
+  /* Premium squares — muted Scrabble */
+  --color-prem-tw: #b56961;
+  --color-prem-dw: #e6cf94;
+  --color-prem-tl: #79a8a6;
+  --color-prem-dl: #c2d6d4;
+
+  /* Tile + ink */
+  --color-tile: #fdfdfb;
+  --color-ink: #2d2419;
+  --color-ink-soft: #6b5d4a;
+  --color-accent: #8b4a3c;
+
+  /* Per-slot fish colors (slot 0 = yellow, 1 = teal, 2 = brown) */
+  --color-fish-yellow: #e8b526;
+  --color-fish-yellow-soft: #fbe9b0;
+  --color-fish-yellow-deep: #a37510;
+
+  --color-fish-teal: #2f8a93;
+  --color-fish-teal-soft: #bfe1e2;
+  --color-fish-teal-deep: #1f5b62;
+
+  --color-fish-brown: #8b4a3c;
+  --color-fish-brown-soft: #e6c8b8;
+  --color-fish-brown-deep: #5a2e22;
+
+  /* Legacy aliases retained so any stragglers still resolve */
+  --color-bg: var(--color-paper);
+  --color-sage: var(--color-prem-tl);
+  --color-sage-light: var(--color-prem-dl);
+  --color-peach: var(--color-prem-dw);
+  --color-terracotta: var(--color-accent);
+
+  --font-heading: 'Neucha', 'Caveat', cursive;
+}
+
+/* Tailwind v4 preflight resets <button> cursor to default; restore pointer for enabled buttons. */
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+summary,
+label[for] {
+  cursor: pointer;
 }
 
 html, body, #root {
@@ -16,18 +56,50 @@ html, body, #root {
 
 body {
   margin: 0;
-  background-color: var(--color-bg);
+  background-color: var(--color-paper);
+  background-image: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27240%27%20height%3D%27240%27%3E%3Cfilter%20id%3D%27n%27%3E%3CfeTurbulence%20type%3D%27fractalNoise%27%20baseFrequency%3D%270.78%27%20numOctaves%3D%273%27%20seed%3D%273%27%2F%3E%3CfeColorMatrix%20values%3D%270%200%200%200%200.20%20%200%200%200%200%200.13%20%200%200%200%200%200.05%20%200%200%200%200.09%200%27%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D%27100%25%27%20height%3D%27100%25%27%20filter%3D%27url(%23n)%27%2F%3E%3C%2Fsvg%3E");
   color: var(--color-ink);
   font-family: Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
-@keyframes tile-flash {
-  0%   { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.0); transform: scale(1); }
-  20%  { box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.9); transform: scale(1.06); }
-  100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.0); transform: scale(1); }
+.font-heading {
+  font-family: var(--font-heading);
 }
-.tile-flash { animation: tile-flash 1.2s ease-out 1; }
 
+/* Tile placement flash */
+@keyframes tile-flash {
+  0%   { box-shadow: 0 0 0 0 rgba(232, 181, 38, 0); transform: scale(1); }
+  25%  { box-shadow: 0 0 0 4px rgba(232, 181, 38, 0.85); transform: scale(1.06); }
+  100% { box-shadow: 0 0 0 0 rgba(232, 181, 38, 0); transform: scale(1); }
+}
+.tile-flash { animation: tile-flash 1.4s ease-out 1; }
+
+/* Fish swimming inside the player avatar circle */
+@keyframes koryushka-swim {
+  0%   { transform: translate(-70%, -30%); }
+  50%  { transform: translate(-48%, -30%); }
+  100% { transform: translate(-70%, -30%); }
+}
+.fish-swim { animation: koryushka-swim 2.6s ease-in-out infinite; }
+
+/* Header walking fish */
+@keyframes koryushka-walk-big {
+  0%   { transform: translateX(-18px) translateY(0); }
+  25%  { transform: translateX(-8px) translateY(-2px); }
+  50%  { transform: translateX(12px) translateY(0); }
+  75%  { transform: translateX(2px) translateY(-2px); }
+  100% { transform: translateX(-18px) translateY(0); }
+}
+.fish-walk-big { animation: koryushka-walk-big 2.2s ease-in-out infinite; }
+
+/* Bag fish bob */
+@keyframes koryushka-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+.fish-bob { animation: koryushka-bob 3s ease-in-out infinite; }
+
+/* Score popup */
 @keyframes score-pop {
   0%   { opacity: 0; transform: translateY(0); }
   10%  { opacity: 1; }
@@ -38,45 +110,5 @@ body {
   pointer-events: none;
   animation: score-pop 1.5s ease-out forwards;
   font-weight: 700;
-  color: rgb(22, 163, 74);
-}
-
-@keyframes badge-pop-kf {
-  0%   { transform: scale(0.5); opacity: 0; }
-  60%  { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(1.0); opacity: 1; }
-}
-.badge-pop {
-  animation: badge-pop-kf 280ms ease-out both;
-}
-
-@keyframes confetti-fall {
-  0%   { transform: translate3d(var(--cx, 0), -20vh, 0) rotate(0deg); opacity: 1; }
-  100% { transform: translate3d(calc(var(--cx, 0) + var(--dx, 0)), 110vh, 0) rotate(540deg); opacity: 0; }
-}
-.confetti-piece {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 8px;
-  height: 12px;
-  border-radius: 2px;
-  animation: confetti-fall 2000ms cubic-bezier(0.2, 0.5, 0.8, 1) forwards;
-  pointer-events: none;
-}
-
-@keyframes celebration-fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-.celebration-backdrop {
-  animation: celebration-fade-in 220ms ease-out both;
-}
-
-@keyframes celebration-name-in {
-  0%   { transform: translateY(20px) scale(0.9); opacity: 0; }
-  100% { transform: translateY(0)    scale(1.0); opacity: 1; }
-}
-.celebration-name {
-  animation: celebration-name-in 500ms ease-out both;
+  color: var(--color-fish-yellow-deep);
 }

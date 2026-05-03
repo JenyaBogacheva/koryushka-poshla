@@ -26,14 +26,14 @@ describe('letters', () => {
   it('allows the four one-way substitutions', () => {
     expect(isSubstitutionAllowed('Ё', 'Е')).toBe(true);
     expect(isSubstitutionAllowed('Ъ', 'Ь')).toBe(true);
-    expect(isSubstitutionAllowed('Ш', 'Щ')).toBe(true);
+    expect(isSubstitutionAllowed('Щ', 'Ш')).toBe(true);
     expect(isSubstitutionAllowed('Й', 'И')).toBe(true);
   });
 
   it('rejects the reverse direction', () => {
     expect(isSubstitutionAllowed('Е', 'Ё')).toBe(false);
     expect(isSubstitutionAllowed('Ь', 'Ъ')).toBe(false);
-    expect(isSubstitutionAllowed('Щ', 'Ш')).toBe(false);
+    expect(isSubstitutionAllowed('Ш', 'Щ')).toBe(false);
     expect(isSubstitutionAllowed('И', 'Й')).toBe(false);
   });
 

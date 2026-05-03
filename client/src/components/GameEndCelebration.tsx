@@ -1,19 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
+import confetti from 'canvas-confetti';
 import type { GameState, Slot } from '@shared/types';
 import { endGameBadges } from '@shared/badges.js';
+import { fishForSlot } from '../fish.js';
 
 type Props = {
   state: GameState;
   onDismiss: () => void;
 };
 
-const CONFETTI_COUNT = 36;
-const AUTO_DISMISS_MS = 6000;
-
 export function GameEndCelebration({ state, onDismiss }: Props) {
-  const [scoreShown, setScoreShown] = useState(0);
   const sorted = [...state.players].sort((a, b) => b.score - a.score);
   const winner = sorted[0]!;
+  const winnerFish = fishForSlot(winner.slot);
 
   const scores: Record<Slot, number> = {
     0: state.players[0].score,
@@ -22,67 +22,192 @@ export function GameEndCelebration({ state, onDismiss }: Props) {
   };
   const badgesBySlot = endGameBadges(state.events, scores);
 
+  const scoreMV = useMotionValue(0);
+  const scoreText = useTransform(scoreMV, (v) => Math.round(v).toString());
+
   useEffect(() => {
-    const start = performance.now();
-    const duration = 800;
-    let raf = 0;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
-      setScoreShown(Math.round(winner.score * t));
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    const dismissTimer = window.setTimeout(onDismiss, AUTO_DISMISS_MS);
+    const controls = animate(scoreMV, winner.score, {
+      duration: 1.4,
+      ease: [0.16, 1, 0.3, 1],
+    });
     return () => {
-      cancelAnimationFrame(raf);
-      window.clearTimeout(dismissTimer);
+      controls.stop();
     };
-  }, [winner.score, onDismiss]);
+  }, [winner.score, scoreMV]);
+
+  useEffect(() => {
+    fireConfetti(winnerFish.accent);
+    const t1 = window.setTimeout(() => fireConfetti(winnerFish.accent), 600);
+    const t2 = window.setTimeout(() => fireConfetti(winnerFish.accent), 1200);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [winnerFish.accent]);
 
   return (
-    <div
+    <motion.div
       role="dialog"
       aria-label="Игра окончена"
       onClick={onDismiss}
-      className="celebration-backdrop fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 text-white"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{
+        background:
+          'radial-gradient(ellipse at top, rgba(45,36,25,0.55) 0%, rgba(45,36,25,0.85) 80%)',
+        backdropFilter: 'blur(4px)',
+      }}
     >
-      <div className="relative flex flex-col items-center">
-        <div className="celebration-name text-5xl font-bold tracking-tight">{winner.name}</div>
-        <div className="mt-2 text-3xl tabular-nums">{scoreShown}</div>
+      <motion.div
+        initial={{ scale: 0.92, y: 24, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 24, delay: 0.05 }}
+        className="relative flex w-[36rem] max-w-[92vw] cursor-pointer flex-col items-center overflow-hidden rounded-3xl px-10 pb-8 pt-12"
+        style={{
+          background: `linear-gradient(160deg, ${winnerFish.soft} 0%, var(--color-panel) 70%)`,
+          boxShadow: `0 30px 80px rgba(40,30,15,0.45), 0 0 0 1px rgba(60,50,35,0.10), 0 0 0 6px ${winnerFish.accent}22`,
+        }}
+      >
+        {/* Drifting watermark fish */}
+        <motion.img
+          src={winnerFish.src}
+          alt=""
+          aria-hidden
+          initial={{ x: -60, y: -20, opacity: 0 }}
+          animate={{ x: 0, y: -10, opacity: 0.2 }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+          className="pointer-events-none absolute"
+          style={{ right: -130, top: -30, width: 300 }}
+        />
+        <motion.img
+          src={winnerFish.src}
+          alt=""
+          aria-hidden
+          initial={{ x: 120, opacity: 0, scaleX: -1 }}
+          animate={{ x: 24, opacity: 0.10, scaleX: -1 }}
+          transition={{ duration: 1.4, ease: 'easeOut', delay: 0.2 }}
+          className="pointer-events-none absolute"
+          style={{ left: -34, bottom: -10, width: 200 }}
+        />
 
-        <ol className="mt-8 w-72 space-y-2">
+        {/* Eyebrow */}
+        <motion.p
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="relative text-[11px] uppercase tracking-[0.3em] text-ink-soft"
+        >
+          корюшка пришла
+        </motion.p>
+
+        {/* Big winner fish, walking */}
+        <motion.div
+          initial={{ scale: 0.4, rotate: -8, opacity: 0 }}
+          animate={{ scale: 1, rotate: 0, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 220, damping: 14, delay: 0.2 }}
+          className="relative mt-3"
+        >
+          <img
+            src={winnerFish.src}
+            alt=""
+            className="fish-walk-big"
+            style={{ width: 200, height: 'auto' }}
+          />
+        </motion.div>
+
+        {/* Name + score */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="font-heading relative mt-2 text-center font-bold leading-[0.9] tracking-tight"
+          style={{ fontSize: 72, color: winnerFish.deep }}
+        >
+          {winner.name}
+        </motion.div>
+        <motion.span
+          className="font-heading relative mt-2 block tabular-nums"
+          style={{ fontSize: 56, color: winnerFish.accent, lineHeight: 1 }}
+        >
+          {scoreText}
+        </motion.span>
+
+        {/* Standings */}
+        <ol className="relative mt-8 w-full space-y-2">
           {sorted.map((p, i) => {
-            const placeBadge = badgesBySlot[p.slot].find((b) => b === 'gold' || b === 'silver' || b === 'bronze');
-            const helper = badgesBySlot[p.slot].includes('helper');
-            const emoji = placeBadge === 'gold' ? '🥇' : placeBadge === 'silver' ? '🥈' : placeBadge === 'bronze' ? '🥉' : '';
+            const fish = fishForSlot(p.slot);
+            const isHelper = badgesBySlot[p.slot].includes('helper');
+            const isWinner = i === 0;
             return (
-              <li
+              <motion.li
                 key={p.slot}
-                className="badge-pop flex items-center justify-between rounded bg-white/10 px-3 py-2"
-                style={{ animationDelay: `${500 + i * 250}ms` }}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ type: 'spring', stiffness: 280, damping: 22, delay: 0.7 + i * 0.16 }}
+                className="flex items-center justify-between rounded-2xl px-4 py-2.5"
+                style={{
+                  background: isWinner ? `${fish.soft}88` : 'rgba(255,255,255,0.5)',
+                  boxShadow: isWinner ? `inset 0 0 0 2px ${fish.accent}` : 'none',
+                }}
               >
-                <span className="flex items-center gap-2">
-                  <span className="text-2xl">{emoji}</span>
-                  <span>{p.name}</span>
-                  {helper && <span title="Помощник — больше всего подсказок">🤝</span>}
+                <span className="flex items-center gap-3">
+                  <span
+                    className="font-heading w-6 text-center font-bold"
+                    style={{ color: 'var(--color-ink-soft)', fontSize: 22 }}
+                  >
+                    {i + 1}
+                  </span>
+                  <img src={fish.src} alt="" aria-hidden style={{ width: 36, height: 'auto' }} />
+                  <span
+                    className="font-heading font-bold leading-none"
+                    style={{ fontSize: 22, color: fish.deep }}
+                  >
+                    {p.name}
+                  </span>
+                  {isHelper && (
+                    <motion.span
+                      initial={{ scale: 0, rotate: -10 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 18, delay: 1.0 + i * 0.16 }}
+                      title="Помощник — больше всего подсказок"
+                      className="font-heading rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider"
+                      style={{
+                        background: 'var(--color-cell)',
+                        color: '#3a6b5e',
+                        boxShadow: 'inset 0 0 0 1.5px rgba(58,107,94,0.55)',
+                      }}
+                    >
+                      помощник
+                    </motion.span>
+                  )}
                 </span>
-                <span className="font-mono tabular-nums">{p.score}</span>
-              </li>
+                <span
+                  className="font-heading font-bold tabular-nums"
+                  style={{ fontSize: 28, color: fish.deep }}
+                >
+                  {p.score}
+                </span>
+              </motion.li>
             );
           })}
         </ol>
 
-        {Array.from({ length: CONFETTI_COUNT }).map((_, i) => {
-          const cx = `${(Math.random() * 60 - 30).toFixed(1)}vw`;
-          const dx = `${(Math.random() * 40 - 20).toFixed(1)}vw`;
-          const delay = `${Math.floor(Math.random() * 400)}ms`;
-          const colors = ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#a855f7'];
-          const color = colors[i % colors.length];
-          const style = { '--cx': cx, '--dx': dx, animationDelay: delay, background: color } as React.CSSProperties;
-          return <span key={i} className="confetti-piece" style={style} />;
-        })}
-      </div>
-      <p className="mt-10 text-sm text-white/70">нажмите, чтобы продолжить</p>
-    </div>
+        <p className="font-heading relative mt-7 text-sm italic text-ink-soft">
+          нажми, чтобы продолжить
+        </p>
+      </motion.div>
+    </motion.div>
   );
+}
+
+function fireConfetti(accent: string) {
+  // Mix the winner's accent with two koryushka palette colors
+  const colors = [accent, '#fbe9b0', '#bfe1e2', '#e6c8b8', '#fdfdfb'];
+  const defaults = { startVelocity: 36, spread: 360, ticks: 90, zIndex: 60, scalar: 1.05, colors };
+  confetti({ ...defaults, particleCount: 60, origin: { x: 0.18, y: 0.4 } });
+  confetti({ ...defaults, particleCount: 60, origin: { x: 0.82, y: 0.4 } });
+  confetti({ ...defaults, particleCount: 90, origin: { x: 0.5, y: 0.3 }, spread: 130 });
 }

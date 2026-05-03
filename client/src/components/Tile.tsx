@@ -16,6 +16,8 @@ type Props = {
   subBadge?: { display: Letter; onClick: () => void };
   /** Override the displayed letter (used for pending placements where playedAs differs). */
   displayOverride?: Letter;
+  /** Override the displayed points (used when playedAs differs from the rack tile). */
+  pointsOverride?: number;
 };
 
 type InnerProps = {
@@ -26,13 +28,13 @@ type InnerProps = {
   subBadge?: { display: Letter; onClick: () => void };
 };
 
-export function Tile({ cell, tile, size = 36, draggableId, ghost = false, subBadge, displayOverride }: Props) {
+export function Tile({ cell, tile, size = 36, draggableId, ghost = false, subBadge, displayOverride, pointsOverride }: Props) {
   const t = cell?.tile ?? tile;
   if (!t) return null;
   const display = cell
     ? cell.playedAs
     : (displayOverride ?? (t.isBlank ? '★' : t.letter));
-  const points = cell ? (cell.fromBlank ? 0 : t.points) : t.points;
+  const points = pointsOverride ?? (cell ? (cell.fromBlank ? 0 : t.points) : t.points);
 
   if (draggableId !== undefined) {
     return <DraggableTile id={draggableId} display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} />;
@@ -43,7 +45,7 @@ export function Tile({ cell, tile, size = 36, draggableId, ghost = false, subBad
 function Badge({ subBadge }: { subBadge: NonNullable<InnerProps['subBadge']> }) {
   return (
     <button
-      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-terracotta text-[9px] font-bold text-white shadow"
+      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-white shadow"
       onPointerDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.stopPropagation();
@@ -56,19 +58,28 @@ function Badge({ subBadge }: { subBadge: NonNullable<InnerProps['subBadge']> }) 
   );
 }
 
+const TILE_BASE =
+  'relative flex items-center justify-center rounded-md bg-tile font-heading font-bold select-none';
+const TILE_SHADOW =
+  'shadow-[0_1px_0_rgba(40,60,75,0.06),0_2px_5px_rgba(40,60,75,0.10),inset_0_0_0_1px_rgba(255,255,255,0.7)]';
+
 function StaticTile({ display, points, size, ghost, subBadge }: InnerProps) {
   return (
     <div
       className={[
-        'relative flex items-center justify-center rounded-md bg-tile shadow-sm font-semibold select-none',
-        ghost ? 'opacity-70 ring-2 ring-terracotta' : '',
+        TILE_BASE,
+        ghost ? 'opacity-85 outline outline-2 outline-accent -outline-offset-2' : TILE_SHADOW,
       ].join(' ')}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.5) }}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.55), color: '#1f2a30' }}
     >
-      <span>{display}</span>
+      <span style={{ lineHeight: 1, marginTop: -2 }}>{display}</span>
       <span
-        className="absolute right-0.5 bottom-0 text-ink/70"
-        style={{ fontSize: Math.round(size * 0.25) }}
+        className="absolute font-sans font-medium opacity-65"
+        style={{
+          right: Math.round(size * 0.10),
+          bottom: Math.round(size * 0.02),
+          fontSize: Math.round(size * 0.26),
+        }}
       >
         {points}
       </span>
@@ -82,7 +93,8 @@ function DraggableTile({ id, display, points, size, ghost, subBadge }: InnerProp
   const style: React.CSSProperties = {
     width: size,
     height: size,
-    fontSize: Math.round(size * 0.5),
+    fontSize: Math.round(size * 0.55),
+    color: '#1f2a30',
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     opacity: isDragging ? 0.4 : 1,
     cursor: 'grab',
@@ -95,14 +107,18 @@ function DraggableTile({ id, display, points, size, ghost, subBadge }: InnerProp
       {...attributes}
       {...listeners}
       className={[
-        'relative flex items-center justify-center rounded-md bg-tile shadow-sm font-semibold select-none',
-        ghost ? 'opacity-70 ring-2 ring-terracotta' : '',
+        TILE_BASE,
+        ghost ? 'outline outline-2 outline-accent -outline-offset-2' : TILE_SHADOW,
       ].join(' ')}
     >
-      <span>{display}</span>
+      <span style={{ lineHeight: 1, marginTop: -2 }}>{display}</span>
       <span
-        className="absolute right-0.5 bottom-0 text-ink/70"
-        style={{ fontSize: Math.round(size * 0.25) }}
+        className="absolute font-sans font-medium opacity-65"
+        style={{
+          right: Math.round(size * 0.10),
+          bottom: Math.round(size * 0.02),
+          fontSize: Math.round(size * 0.26),
+        }}
       >
         {points}
       </span>
