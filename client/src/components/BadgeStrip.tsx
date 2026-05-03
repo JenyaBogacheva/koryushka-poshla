@@ -135,7 +135,7 @@ function BadgeChip({ kind, count }: { kind: BadgeKind; count: number }) {
           <Glyph size={24} weight={meta.weight} color={meta.ink} />
           {count >= 2 && (
             <span
-              className="font-heading absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-bold leading-none tabular-nums text-white"
+              className="font-heading absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-sm font-bold leading-none tabular-nums text-white"
               style={{
                 background: meta.ink,
                 boxShadow: '0 0 0 2px var(--color-panel), 0 1px 2px rgba(60,50,35,0.18)',
@@ -175,14 +175,14 @@ function BadgeChip({ kind, count }: { kind: BadgeKind; count: number }) {
                 </p>
                 {count >= 2 && (
                   <span
-                    className="font-heading rounded-full px-2 py-0.5 text-xs font-bold tabular-nums text-white"
+                    className="font-heading rounded-full px-2 py-0.5 text-sm font-bold tabular-nums text-white"
                     style={{ background: meta.ink }}
                   >
                     ×{count}
                   </span>
                 )}
               </div>
-              <p className="mt-1 text-xs italic leading-snug text-ink-soft">
+              <p className="mt-1 text-sm italic leading-snug text-ink-soft">
                 {meta.description}
               </p>
             </div>

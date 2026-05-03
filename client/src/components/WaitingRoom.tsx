@@ -61,7 +61,7 @@ export function WaitingRoom({ players, mySlot }: Props) {
                 {p.name}
                 {p.slot === mySlot && (
                   <span
-                    className="ml-2 inline-flex items-center rounded px-1.5 leading-none align-middle text-[10px] font-bold uppercase tracking-wider text-white"
+                    className="ml-2 inline-flex items-center rounded px-1.5 leading-none align-middle text-sm font-bold uppercase tracking-wider text-white"
                     style={{ background: fish.accent, height: 16 }}
                   >
                     ты
@@ -69,7 +69,7 @@ export function WaitingRoom({ players, mySlot }: Props) {
                 )}
               </span>
               <span
-                className="relative inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider"
+                className="relative inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold uppercase tracking-wider"
                 style={{
                   background: p.connected ? 'rgba(255,255,255,0.45)' : 'rgba(45,36,25,0.06)',
                   color: p.connected ? fish.deep : 'var(--color-ink-soft)',

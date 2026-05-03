@@ -100,7 +100,7 @@ export function PastGamesDetail({ id }: { id: string }) {
             <h1 className="font-heading font-bold leading-[0.85] tracking-tight" style={{ fontSize: 48 }}>
               Корюшка пошла
             </h1>
-            <p className="mt-2 text-xs italic leading-[1.35] text-ink-soft">
+            <p className="mt-2 text-sm italic leading-[1.35] text-ink-soft">
               {new Date(archive.finishedAt).toLocaleString('ru-RU')}
               {winner !== null && (
                 <>

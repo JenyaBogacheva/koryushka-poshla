@@ -100,7 +100,7 @@ function DrawSlotCard({ slot, name, isCandidate, draw, isMe }: CardProps) {
         </button>
       ) : (
         <div
-          className="flex h-14 w-14 items-center justify-center rounded-md text-xs"
+          className="flex h-14 w-14 items-center justify-center rounded-md text-sm"
           style={{ background: 'rgba(45,36,25,0.06)', color: 'var(--color-ink-soft)' }}
         >
           Ждём…

@@ -51,7 +51,7 @@ export function MoveLog({ state }: Props) {
     >
       <div className="mb-2 flex shrink-0 items-baseline justify-between">
         <span className="font-heading font-bold leading-none" style={{ fontSize: 28 }}>Ходы</span>
-        <span className="text-[11px] uppercase tracking-wider text-ink-soft">история</span>
+        <span className="text-sm uppercase tracking-wider text-ink-soft">история</span>
       </div>
       <div ref={ref} className="min-h-0 flex-1 overflow-y-auto pr-1">
         {state.events.length === 0 ? (
@@ -99,8 +99,8 @@ function HelperAffordance({ currentHelper, otherPlayers }: HelperAffordanceProps
 
   if (expanded) {
     return (
-      <div className="ml-7 mt-1 flex flex-col gap-1 text-xs">
-        <span className="text-[11px] uppercase tracking-wider text-ink-soft">Кто помог?</span>
+      <div className="ml-7 mt-1 flex flex-col gap-1 text-sm">
+        <span className="text-sm uppercase tracking-wider text-ink-soft">Кто помог?</span>
         <button
           type="button"
           onClick={() => {
@@ -131,7 +131,7 @@ function HelperAffordance({ currentHelper, otherPlayers }: HelperAffordanceProps
         <button
           type="button"
           onClick={() => setExpanded(false)}
-          className="self-start text-[11px] text-ink-soft hover:text-ink"
+          className="self-start text-sm text-ink-soft hover:text-ink"
         >
           отмена
         </button>
@@ -172,7 +172,7 @@ function HelperAffordance({ currentHelper, otherPlayers }: HelperAffordanceProps
     <button
       type="button"
       onClick={() => setExpanded(true)}
-      className="ml-7 mt-0.5 text-xs text-ink-soft hover:text-ink"
+      className="ml-7 mt-0.5 text-sm text-ink-soft hover:text-ink"
     >
       + кто помог?
     </button>
@@ -206,9 +206,9 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
           <FishStamp slot={e.slot} />
           <div className="flex-1 min-w-0">
             <PlayerName slot={e.slot} nameOf={nameOf} /> — <span className="font-heading text-base font-semibold">{words || '—'}</span> — <span className="tabular-nums font-bold">{e.totalScore}</span>
-            {e.bingoBonus && <span className="ml-1 rounded bg-prem-tl/40 px-1 text-xs">+10 бинго</span>}
+            {e.bingoBonus && <span className="ml-1 rounded bg-prem-tl/40 px-1 text-sm">+10 бинго</span>}
             {e.dictionaryWarnings.length > 0 && (
-              <div className="text-xs text-ink-soft">не в словаре: {e.dictionaryWarnings.join(', ')}</div>
+              <div className="text-sm text-ink-soft">не в словаре: {e.dictionaryWarnings.join(', ')}</div>
             )}
           </div>
         </div>
@@ -278,7 +278,7 @@ function DrawForOrderEntry({
   });
   return (
     <div className="my-1 rounded-md border border-ink/10 bg-bg/40 px-2 py-1.5">
-      <div className="text-[11px] uppercase tracking-wide text-ink/50">Жребий — порядок ходов</div>
+      <div className="text-sm uppercase tracking-wide text-ink/50">Жребий — порядок ходов</div>
       <div className="mt-1 flex items-center gap-1.5">
         {ordered.map(({ slot, draw, position }, idx) => (
           <div key={slot} className="flex items-center gap-1.5">
@@ -289,7 +289,7 @@ function DrawForOrderEntry({
                   {position}
                 </span>
               </div>
-              <div className={`text-[10px] ${position === 1 ? 'font-semibold text-ink' : 'text-ink/60'}`}>
+              <div className={`text-sm ${position === 1 ? 'font-semibold text-ink' : 'text-ink/60'}`}>
                 {nameOf(slot)}
               </div>
             </div>

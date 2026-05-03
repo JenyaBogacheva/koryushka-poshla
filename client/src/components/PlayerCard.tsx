@@ -115,7 +115,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
             </span>
             {isMine && (
               <span
-                className="inline-flex items-center justify-center rounded px-1.5 leading-none text-[10px] font-bold uppercase tracking-wider text-white"
+                className="inline-flex items-center justify-center rounded px-1.5 leading-none text-sm font-bold uppercase tracking-wider text-white"
                 style={{ background: fish.accent, height: 16 }}
               >
                 ты
@@ -154,7 +154,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
             )}
           </button>
           {movePreview?.ok === true && movePreview.bingoBonus && (
-            <span className="rounded bg-prem-tl/40 px-1.5 py-0.5 text-xs">+10 бинго</span>
+            <span className="rounded bg-prem-tl/40 px-1.5 py-0.5 text-sm">+10 бинго</span>
           )}
           {movePreview?.ok === false && (
             <span

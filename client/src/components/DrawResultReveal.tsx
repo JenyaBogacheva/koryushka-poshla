@@ -51,7 +51,7 @@ export function DrawResultReveal({ ev, nameOf, onDismiss }: Props) {
                 >
                   <div className="relative">
                     <span
-                      className="font-heading absolute -left-2 -top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white"
+                      className="font-heading absolute -left-2 -top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-white"
                       style={{
                         background: fish.accent,
                         boxShadow: '0 2px 4px rgba(60,50,35,0.2), 0 0 0 2px var(--color-panel)',
