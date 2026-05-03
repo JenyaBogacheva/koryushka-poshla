@@ -2,18 +2,18 @@ import type { Board as BoardT } from '@shared/types';
 import { PREMIUMS } from '@shared/premiums';
 import { Square } from './Square.js';
 
-const SQUARE_SIZE = 42;
+const DEFAULT_SQUARE_SIZE = 42;
 const GRID = 15;
 
-type Props = { board: BoardT; readOnly?: boolean };
+type Props = { board: BoardT; readOnly?: boolean; size?: number };
 
-export function Board({ board, readOnly = false }: Props) {
+export function Board({ board, readOnly = false, size = DEFAULT_SQUARE_SIZE }: Props) {
   return (
     <div
       className="grid bg-cell rounded"
       style={{
-        gridTemplateColumns: `repeat(${GRID}, ${SQUARE_SIZE}px)`,
-        gridTemplateRows: `repeat(${GRID}, ${SQUARE_SIZE}px)`,
+        gridTemplateColumns: `repeat(${GRID}, ${size}px)`,
+        gridTemplateRows: `repeat(${GRID}, ${size}px)`,
         padding: 4,
         boxShadow:
           '0 14px 36px rgba(50,40,25,0.28), 0 0 0 6px var(--color-panel), 0 0 0 7px rgba(60,50,35,0.28)',
@@ -27,7 +27,7 @@ export function Board({ board, readOnly = false }: Props) {
             col={c}
             cell={cell}
             premium={PREMIUMS[r]![c]!}
-            size={SQUARE_SIZE}
+            size={size}
             readOnly={readOnly}
           />
         )),

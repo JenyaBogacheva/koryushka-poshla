@@ -152,10 +152,11 @@ export function App() {
 
   const activeSlot = (state.turnIndex as Slot);
   const activeFish = fishForSlot(activeSlot);
+  const boardSquareSize = useResponsiveBoardSize();
   return (
     <DndContext onDragEnd={onDragEnd}>
-      <main className="relative mx-auto grid h-screen max-w-[1400px] items-start gap-10 overflow-hidden px-10 pb-8 pt-16 lg:px-12 lg:pt-20" style={{ gridTemplateColumns: '1fr 360px' }}>
-        <nav className="absolute right-10 top-4 z-10 flex items-center gap-2 lg:right-12 lg:top-6">
+      <main className="relative mx-auto grid h-screen max-w-[1400px] items-start gap-6 overflow-hidden px-6 pb-3 pt-10 lg:gap-8 lg:px-10 lg:pt-14" style={{ gridTemplateColumns: '1fr 360px' }}>
+        <nav className="absolute right-6 top-3 z-10 flex items-center gap-2 lg:right-10 lg:top-5">
           <a
             href="#past"
             className="inline-flex items-center rounded-full px-3 py-1.5 text-xs text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
@@ -181,7 +182,7 @@ export function App() {
             Выйти
           </button>
         </nav>
-        <div className="flex h-full min-h-0 flex-col items-center gap-10">
+        <div className="flex h-full min-h-0 flex-col items-center gap-4">
           {/* Header — walking koryushka in the active player's color + handwritten title */}
           <header className="flex w-full items-center gap-6 self-start" style={{ marginLeft: 6 }}>
             <div className="relative shrink-0" style={{ width: 170, height: 80 }}>
@@ -204,10 +205,10 @@ export function App() {
               </p>
             </div>
           </header>
-          <Board board={state.board} />
+          <Board board={state.board} size={boardSquareSize} />
           <ErrorBanner />
         </div>
-        <aside className="flex h-full min-h-0 min-w-0 flex-col gap-3">
+        <aside className="flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-y-auto pr-1">
           <BagIndicator
             count={state.bag.length}
             nextLetter={(() => {
@@ -264,4 +265,27 @@ export function App() {
 
 function Center({ children }: { children: ReactNode }) {
   return <main className="flex h-full items-center justify-center text-ink">{children}</main>;
+}
+
+// Board square size that fits the viewport. Reserves vertical space for header,
+// padding, ErrorBanner, and bottom margin; caps at 42 (the original size).
+function useResponsiveBoardSize(): number {
+  const [size, setSize] = useState<number>(() => computeBoardSize());
+  useEffect(() => {
+    const onResize = (): void => setSize(computeBoardSize());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return size;
+}
+
+function computeBoardSize(): number {
+  if (typeof window === 'undefined') return 42;
+  const VERTICAL_CHROME = 230; // header + main paddings + ErrorBanner row + breathing room
+  const HORIZONTAL_RIGHT_COL = 360 + 80; // aside width + main horizontal padding + gap
+  const availableH = window.innerHeight - VERTICAL_CHROME;
+  const availableW = window.innerWidth - HORIZONTAL_RIGHT_COL;
+  const fromHeight = Math.floor(availableH / 15);
+  const fromWidth = Math.floor(availableW / 15);
+  return Math.max(24, Math.min(42, fromHeight, fromWidth));
 }
