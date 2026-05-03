@@ -18,7 +18,6 @@ type Props = {
 export function PlayerCard({ player, isCurrentTurn }: Props) {
   const identity = useGameStore((s) => s.identity);
   const pending = useGameStore((s) => s.pendingPlacements);
-  const helper = useGameStore((s) => s.pendingHelperSlot);
   const movePreview = useGameStore((s) => s.movePreview);
   const clearPending = useGameStore((s) => s.clearPending);
   const allPlayers = useGameStore((s) => s.state?.players ?? []);
@@ -79,7 +78,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
       col: p.col,
       playedAs: p.playedAs,
     }));
-    sendSubmitMove(placements, helper);
+    sendSubmitMove(placements);
     setConfirmOpen(false);
   }
 

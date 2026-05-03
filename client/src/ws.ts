@@ -178,10 +178,9 @@ export function sendDrawTile(): void { send({ type: 'drawTile' }); }
 export function sendPreviewMove(placements: Placement[]): void {
   send({ type: 'previewMove', placements });
 }
-export function sendSubmitMove(placements: Placement[], helperSlot: Slot | null): void {
-  const msg: Extract<ClientMessage, { type: 'submitMove' }> =
-    helperSlot === null
-      ? { type: 'submitMove', placements }
-      : { type: 'submitMove', placements, helperSlot };
-  send(msg);
+export function sendSubmitMove(placements: Placement[]): void {
+  send({ type: 'submitMove', placements });
+}
+export function sendAttributeHelper(helperSlot: Slot | null): void {
+  send({ type: 'attributeHelper', helperSlot });
 }

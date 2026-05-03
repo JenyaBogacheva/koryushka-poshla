@@ -38,7 +38,7 @@ export function BagIndicator({ count, nextLetter }: Props) {
           </div>
         </div>
         <div className="flex flex-col">
-          <div className="text-[11px] uppercase tracking-wider text-ink-soft">В мешке</div>
+          <div className="text-xs uppercase tracking-wider text-ink-soft">В мешке</div>
           <div className="font-heading font-bold leading-none" style={{ fontSize: 36 }}>
             {count}
           </div>
