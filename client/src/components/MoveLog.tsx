@@ -159,10 +159,9 @@ function HelperAffordance({ currentHelper, otherPlayers }: HelperAffordanceProps
         <button
           type="button"
           onClick={() => sendAttributeHelper(null)}
-          aria-label="Убрать помощника"
-          className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full hover:bg-black/10"
+          className="ml-1 text-sm text-ink-soft underline hover:text-ink"
         >
-          ×
+          убрать
         </button>
       </div>
     );
