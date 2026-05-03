@@ -85,7 +85,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
 
   return (
     <div
-      className={`relative rounded-2xl px-4 py-3 transition-all ${player.connected ? '' : 'opacity-70'}`}
+      className={`relative shrink-0 rounded-2xl px-4 py-3 transition-all ${player.connected ? '' : 'opacity-70'}`}
       style={cardStyle}
     >
       {/* Watermark fish (clipped behind everything) */}
