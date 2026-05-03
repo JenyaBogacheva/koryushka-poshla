@@ -155,7 +155,7 @@ export function App() {
   const activeFish = fishForSlot(activeSlot);
   return (
     <DndContext onDragEnd={onDragEnd}>
-      <main className="relative mx-auto grid h-screen max-w-[1400px] items-start gap-6 overflow-hidden px-6 pb-3 pt-10 lg:gap-8 lg:px-10 lg:pt-14" style={{ gridTemplateColumns: '1fr clamp(280px, 26vw, 360px)' }}>
+      <main className="relative mx-auto grid h-screen max-w-[1400px] items-start gap-6 overflow-hidden px-6 pb-3 pt-10 lg:gap-8 lg:px-10 lg:pt-14" style={{ gridTemplateColumns: '1fr clamp(280px, 26vw, 360px)', gridTemplateRows: 'minmax(0, 1fr)' }}>
         <nav className="absolute right-6 top-3 z-10 flex items-center gap-2 lg:right-10 lg:top-5">
           <a
             href="#past"
