@@ -11,7 +11,18 @@ export type GameOpts = { seed: number };
 
 export type SubmitResult =
   | { ok: true; moveRecord: MoveRecord; dictionaryWarnings: string[] }
-  | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } | { kind: 'invalid-helper' } };
+  | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } };
+
+export type AttributeHelperResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error:
+        | { kind: 'not-playing' }
+        | { kind: 'no-attributable-move' }
+        | { kind: 'not-your-move' }
+        | { kind: 'invalid-helper' };
+    };
 
 export type PreviewResult =
   | {
@@ -156,18 +167,9 @@ export class Game {
     };
   }
 
-  submitMove(slot: Slot, placements: Placement[], helperSlot?: Slot): SubmitResult {
+  submitMove(slot: Slot, placements: Placement[]): SubmitResult {
     if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
     if (slot !== this.state.turnIndex) return { ok: false, error: { kind: 'not-your-turn' } };
-
-    if (helperSlot !== undefined) {
-      if (helperSlot !== 0 && helperSlot !== 1 && helperSlot !== 2) {
-        return { ok: false, error: { kind: 'invalid-helper' } };
-      }
-      if (helperSlot === slot) {
-        return { ok: false, error: { kind: 'invalid-helper' } };
-      }
-    }
 
     const player = this.state.players[slot]!;
 
@@ -204,17 +206,71 @@ export class Game {
       })),
       totalScore: score.totalScore,
       bingoBonus: score.bingoBonus,
-      helperSlot: helperSlot ?? null,
+      helperSlot: null,
       dictionaryWarnings,
       timestamp: Date.now(),
     };
     const startLen = this.state.events.length;
-    const moveIndex = this.state.events.length;
     this.state.events.push(moveRecord);
 
-    if (helperSlot !== undefined) {
+    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+
+    const appended = this.state.events.slice(startLen);
+    this.armRevert(slot, preStateForRevert, appended);
+    return { ok: true, moveRecord, dictionaryWarnings };
+  }
+
+  attributeHelper(slot: Slot, helperSlot: Slot | null): AttributeHelperResult {
+    if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
+
+    const events = this.state.events;
+    if (events.length === 0) return { ok: false, error: { kind: 'no-attributable-move' } };
+
+    // Latest move is editable iff the last event is either:
+    //   (a) a move, or
+    //   (b) an assist whose forMoveIndex points at the immediately preceding move.
+    let moveIndex: number;
+    let existingAssistIndex: number | null;
+    const last = events[events.length - 1]!;
+    if (last.kind === 'move') {
+      moveIndex = events.length - 1;
+      existingAssistIndex = null;
+    } else if (
+      last.kind === 'assist' &&
+      last.forMoveIndex === events.length - 2 &&
+      events[events.length - 2]?.kind === 'move'
+    ) {
+      moveIndex = events.length - 2;
+      existingAssistIndex = events.length - 1;
+    } else {
+      return { ok: false, error: { kind: 'no-attributable-move' } };
+    }
+
+    const move = events[moveIndex]!;
+    if (move.kind !== 'move') return { ok: false, error: { kind: 'no-attributable-move' } };
+    if (move.slot !== slot) return { ok: false, error: { kind: 'not-your-move' } };
+
+    if (helperSlot !== null) {
+      if (helperSlot !== 0 && helperSlot !== 1 && helperSlot !== 2) {
+        return { ok: false, error: { kind: 'invalid-helper' } };
+      }
+      if (helperSlot === slot) return { ok: false, error: { kind: 'invalid-helper' } };
+    }
+
+    // Undo any prior assist for this move.
+    if (existingAssistIndex !== null) {
+      const oldAssist = events[existingAssistIndex];
+      if (oldAssist?.kind === 'assist') {
+        this.state.players[oldAssist.toSlot]!.score -= oldAssist.points;
+      }
+      events.splice(existingAssistIndex, 1);
+    }
+
+    move.helperSlot = helperSlot;
+
+    if (helperSlot !== null) {
       this.state.players[helperSlot]!.score += 5;
-      this.state.events.push({
+      events.push({
         kind: 'assist',
         fromSlot: slot,
         toSlot: helperSlot,
@@ -224,11 +280,7 @@ export class Game {
       });
     }
 
-    this.state.turnIndex = ((slot + 1) % 3) as Slot;
-
-    const appended = this.state.events.slice(startLen);
-    this.armRevert(slot, preStateForRevert, appended);
-    return { ok: true, moveRecord, dictionaryWarnings };
+    return { ok: true };
   }
 
   previewMove(slot: Slot, placements: Placement[]): PreviewResult {

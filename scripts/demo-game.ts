@@ -90,13 +90,16 @@ async function main(): Promise<void> {
         playedAs: pickPlayedAs(assistorTile),
       };
 
-      // Submit move with helperSlot (slot 0 helps if assistor is not 0, otherwise 1)
+      // Submit move, then attribute helper post-hoc (slot 0 helps if assistor is not 0, otherwise 1)
       const helperSlot: Slot = assistorSlot === 0 ? 1 : 0;
-      console.log(`\n[ASSIST] ${s.players[assistorSlot]!.name} submits with help from ${s.players[helperSlot]!.name}`);
-      const result = g.submitMove(assistorSlot, [placement], helperSlot);
+      console.log(`\n[ASSIST] ${s.players[assistorSlot]!.name} submits, then credits ${s.players[helperSlot]!.name}`);
+      const result = g.submitMove(assistorSlot, [placement]);
       if (!result.ok) {
         console.log(`Assist move failed: ${result.error.kind}`);
         g.passTurn(assistorSlot);
+      } else {
+        const attr = g.attributeHelper(assistorSlot, helperSlot);
+        if (!attr.ok) console.log(`Attribute failed: ${attr.error.kind}`);
       }
 
       printSnapshot(g.snapshot());
