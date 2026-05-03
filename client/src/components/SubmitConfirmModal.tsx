@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { Slot } from '@shared/types';
 import { useGameStore } from '../store.js';
 import { fishForSlot } from '../fish.js';
@@ -15,8 +16,14 @@ type Props = {
 export function SubmitConfirmModal({ open, otherPlayers, tileCount, onCancel, onConfirm, fishSlot }: Props) {
   const helper = useGameStore((s) => s.pendingHelperSlot);
   const setHelper = useGameStore((s) => s.setPendingHelperSlot);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!open) setExpanded(false);
+  }, [open]);
 
   if (!open) return null;
+  const helperPlayer = helper !== null ? otherPlayers.find((p) => p.slot === helper) : undefined;
   const ownFish = fishSlot !== undefined ? fishForSlot(fishSlot) : null;
   const accent = ownFish?.accent ?? 'var(--color-accent)';
   const titleColor = ownFish?.deep ?? 'var(--color-ink)';
@@ -56,31 +63,58 @@ export function SubmitConfirmModal({ open, otherPlayers, tileCount, onCancel, on
           {tileCount} {pluralRu(tileCount, 'плитка', 'плитки', 'плиток')}
         </p>
 
-        <fieldset className="relative mt-4">
-          <legend className="mb-2 text-[11px] uppercase tracking-wider text-ink-soft">Кто помог?</legend>
-          <div className="flex flex-col gap-1">
-            <HelperOption
-              checked={helper === null}
-              onChange={() => setHelper(null)}
-              label="никто"
-              accent={accent}
-            />
-            {otherPlayers.map((p) => {
-              const f = fishForSlot(p.slot);
-              return (
+        <div className="relative mt-4">
+          {expanded ? (
+            <fieldset>
+              <legend className="mb-2 text-[11px] uppercase tracking-wider text-ink-soft">Кто помог?</legend>
+              <div className="flex flex-col gap-1">
                 <HelperOption
-                  key={p.slot}
-                  checked={helper === p.slot}
-                  onChange={() => setHelper(p.slot)}
-                  label={p.name}
+                  checked={helper === null}
+                  onChange={() => setHelper(null)}
+                  label="никто"
                   accent={accent}
-                  fishSrc={f.src}
-                  fishDeep={f.deep}
                 />
-              );
-            })}
-          </div>
-        </fieldset>
+                {otherPlayers.map((p) => {
+                  const f = fishForSlot(p.slot);
+                  return (
+                    <HelperOption
+                      key={p.slot}
+                      checked={helper === p.slot}
+                      onChange={() => setHelper(p.slot)}
+                      label={p.name}
+                      accent={accent}
+                      fishSrc={f.src}
+                      fishDeep={f.deep}
+                    />
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                className="mt-2 text-xs text-ink-soft hover:text-ink"
+              >
+                свернуть
+              </button>
+            </fieldset>
+          ) : helperPlayer ? (
+            <HelperChip
+              name={helperPlayer.name}
+              slot={helperPlayer.slot}
+              accent={accent}
+              onClear={() => setHelper(null)}
+              onEdit={() => setExpanded(true)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="text-xs text-ink-soft hover:text-ink"
+            >
+              + кто-то помог?
+            </button>
+          )}
+        </div>
 
         <div className="relative mt-5 flex justify-end gap-2">
           <button
@@ -136,6 +170,50 @@ function HelperOption({ checked, onChange, label, accent, fishSrc, fishDeep }: H
       <span style={{ color: fishDeep ?? 'inherit', fontWeight: fishDeep ? 600 : 400 }}>{label}</span>
     </label>
   );
+}
+
+type HelperChipProps = {
+  name: string;
+  slot: Slot;
+  accent: string;
+  onClear: () => void;
+  onEdit: () => void;
+};
+
+function HelperChip({ name, slot, accent, onClear, onEdit }: HelperChipProps) {
+  const f = fishForSlot(slot);
+  const verb = isFemName(name) ? 'помогла' : 'помог';
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs"
+      style={{ background: 'rgba(255,255,255,0.5)', boxShadow: `inset 0 0 0 1px ${accent}` }}
+    >
+      <img src={f.src} alt="" aria-hidden style={{ width: 16, height: 'auto' }} />
+      <button type="button" onClick={onEdit} className="hover:underline" style={{ color: f.deep, fontWeight: 600 }}>
+        {name}
+      </button>
+      <span className="text-ink-soft">{verb}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label="Убрать помощника"
+        className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full text-ink-soft hover:bg-black/10 hover:text-ink"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+// Mirrors MoveLog.tsx's gender heuristic. Names ending in а/я are feminine,
+// except family-game names that decline as а-stems but are grammatically masculine.
+const MASC_OVERRIDES = new Set(['папа', 'дядя', 'илья', 'никита']);
+
+function isFemName(name: string): boolean {
+  const trimmed = name.trim().toLowerCase();
+  if (MASC_OVERRIDES.has(trimmed)) return false;
+  const last = trimmed.slice(-1);
+  return last === 'а' || last === 'я';
 }
 
 function pluralRu(n: number, one: string, few: string, many: string): string {
