@@ -208,7 +208,7 @@ export function App() {
           <Board board={state.board} size={boardSquareSize} />
           <ErrorBanner />
         </div>
-        <aside className="flex h-full min-h-0 min-w-0 flex-col gap-3">
+        <aside className="flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-y-auto pr-1">
           <BagIndicator
             count={state.bag.length}
             nextLetter={(() => {
