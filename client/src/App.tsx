@@ -268,7 +268,7 @@ function Center({ children }: { children: ReactNode }) {
 }
 
 // Board square size that fits the viewport. Reserves vertical space for header,
-// padding, ErrorBanner, and bottom margin; caps at 42 (the original size).
+// padding, ErrorBanner, and bottom margin.
 function useResponsiveBoardSize(): number {
   const [size, setSize] = useState<number>(() => computeBoardSize());
   useEffect(() => {
