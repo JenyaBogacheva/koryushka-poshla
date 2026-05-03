@@ -1,44 +1,93 @@
-# Collapsed "Кто помог?" picker in submit modal
+# Post-hoc "Кто помог?" attribution
 
-**Date:** 2026-05-03
-**Scope:** Client-only UI tweak. No server, protocol, or data model changes.
+**Date:** 2026-05-03 (revised)
+**Scope:** Client + server. Helper attribution moves out of the submit flow entirely.
 
 ## Problem
 
-The submit-confirm modal (`SubmitConfirmModal.tsx`) currently shows the "Кто помог?" fieldset with a full radio list (никто / player / player) every time a player confirms a move. Helper attribution happens only *sometimes* in actual play, so the prompt is visually heavy for the common case where nobody helped.
+The submit-confirm modal currently asks "Кто помог?" on every play. In practice helping is occasional, so the prompt is friction in the common case. The user wants the submit flow to be just "Походить?" — no extra windows, no extra questions — and helper attribution to be optional, post-hoc, and out of the main flow.
 
 ## Goal
 
-De-emphasize helper attribution without removing it. Default to a collapsed, low-visual-weight control that expands on demand, while preserving the choice if the user makes one.
+Remove the helper picker from the submit modal. Allow the actor of the latest move to attribute (or change, or clear) a helper after the fact, from the move log, until any subsequent event makes the move no longer "the latest."
 
 ## Behavior
 
-The `<fieldset>` containing the "Кто помог?" legend and radio list is replaced by a single line that has three visual states:
+### Submit modal
+- No helper UI. Layout: title "Походить?", tile count, Отмена / Походить.
 
-1. **Collapsed, no helper chosen (default).** A muted text link/button reading `+ кто-то помог?`. Sits between the tile-count line and the action buttons.
-2. **Expanded.** Clicking the link reveals the existing radio list inline (никто / player A / player B). The link itself disappears while expanded. No animation; instant toggle.
-3. **Collapsed with helper chosen.** If the user expanded the picker, chose a player, and then collapsed it, show a small chip: `помог: <Имя> ✕`. Clicking the `✕` clears the helper back to `null` and returns to state 1.
+### Move log
+The most recent move owned by the local player gets a helper affordance, but only while that move is still the latest event (i.e., no subsequent move, pass, swap, or other state-changing event has occurred).
 
-Selecting "никто" while expanded is equivalent to clearing — collapsing afterward returns to state 1, not state 3.
+- **No helper yet:** small `+ кто помог?` button under the move row.
+- **Helper attributed:** existing `↳ помог<имя> — +5` line, but the name is a button (re-opens picker) and a small `✕` clears.
+- **Picker:** inline expansion in the log row with the same radio list (никто / playerA / playerB). Selecting "никто" clears.
+- **Locked:** once any subsequent event happens, the affordance disappears. The line, if any, becomes static.
 
-## State
+Only the actor of that move sees the affordance. Other players see the existing static rendering.
 
-- A new component-local `useState<boolean>` for `expanded`. Default `false`.
-- Existing `pendingHelperSlot` in the Zustand store is unchanged. It continues to drive the radio list and the submit payload.
-- When the modal closes (confirm or cancel), `pendingHelperSlot` must be reset to `null`. Verify the cancel path also clears it; if not, add the reset (otherwise out of scope).
+## Protocol
 
-## Non-changes
+New client → server message:
 
-- No change to the WebSocket protocol or the submit payload — `helperSlot` is still sent the same way.
-- No change to the move log rendering of `↳ помог<...>`.
-- No change to `pendingHelperSlot` semantics in the store.
-- No new tests. This is a presentational change in a single component with no engine logic.
+```ts
+{ type: 'attributeHelper'; helperSlot: Slot | null }
+```
 
-## Files touched
+No `moveIndex` field — the server always targets the latest move (this is what "most recent" means).
 
-- `client/src/components/SubmitConfirmModal.tsx` — only file modified.
+### Server validation
+The handler must reject with a typed error if:
+- `phase !== 'playing'`.
+- The latest event is not a `move`, or there is a non-assist event after that move.
+- The sender is not the actor of that move.
+- `helperSlot === actorSlot`.
 
-## Russian-language strings
+### Server state changes
+1. If the move already has a helper, find and remove the corresponding `assist` event (`forMoveIndex === moveIndex`) and subtract 5 from that helper's score.
+2. If the new `helperSlot` is non-null, push a new `assist` event and add 5 to the new helper's score.
+3. Set `move.helperSlot` to the new value (`null` if cleared).
+4. Persist; broadcast new state.
 
-- Collapsed link: `+ кто-то помог?`
-- Chip: `помог: <Имя>` with an `✕` clear button (use feminine form `помогла` if `<Имя>` ends in `а`/`я`, matching the helper logic already in `MoveLog.tsx:168` — extract the `femEnding` helper to a shared util only if reuse is trivial; otherwise duplicate the few lines, per the project's "wait for the third use site" rule).
+### `submitMove` cleanup
+- `submitMove` no longer accepts `helperSlot`. Move records still have `helperSlot: Slot | null` (defaults to `null` on submit) — only attribution can set it.
+- The `submit_move` WS message no longer carries `helperSlot`.
+- `pendingHelperSlot` is removed from the client Zustand store.
+- The `'invalid-helper'` error variant is reused by the new attribute handler.
+
+### Revert window
+The existing revert window covers the actor's last move. Helper attribution is treated as part of that window: a revert wipes the move and any associated assist regardless of whether the helper was attributed inline or post-hoc. (Operationally this falls out for free because attribution mutates the same move record + appends/removes the same assist event the move would have produced inline.)
+
+## Files
+
+### Server
+- `server/game.ts` — drop `helperSlot` from `submitMove`; add `attributeHelper(slot, helperSlot)` returning a discriminated result. Reuse `'invalid-helper'` error kind; add new `'no-attributable-move'` and `'not-your-move'` error kinds.
+- `server/index.ts` — handle the new WS message; route errors to existing user-facing string formatter.
+
+### Client
+- `client/src/components/SubmitConfirmModal.tsx` — remove helper UI; restore to plain confirm modal.
+- `client/src/components/MoveLog.tsx` — render the affordance on the latest move when conditions met; expose a callback or use the store directly to send `attributeHelper`.
+- `client/src/store.ts` — drop `pendingHelperSlot` / `setPendingHelperSlot`; expose an `attributeHelper(slot)` action that sends the WS message.
+- `client/src/ws.ts` — wire the new message; existing `state` push handles re-render.
+
+### Shared
+- `shared/types.ts` — add the new `attributeHelper` variant to the client→server union; no change to `MoveRecord` shape.
+
+## Tests
+
+Add `tests/attribute-helper.test.ts` with at least:
+- Set helper on the latest move from `null` → score adjusts, assist event appended.
+- Change helper from A to B → A's +5 reverted, B's +5 applied, assist event replaced.
+- Clear helper → +5 reverted, assist event removed, `move.helperSlot` becomes `null`.
+- Non-actor attempts attribution → rejected.
+- Self-attribution (`helperSlot === actorSlot`) → rejected.
+- Attribution after a subsequent move → rejected.
+- Self-revert preserved: revert after attribute_helper still wipes assist + score.
+
+Existing tests that exercise `submitMove(..., helperSlot)` are migrated: split each into a `submitMove(...)` call + an `attributeHelper(...)` call where the helper is non-null.
+
+## Non-goals
+
+- Editing helper on older moves.
+- UI for non-actor players to claim/dispute helping.
+- Bulk or end-of-game attribution.
