@@ -10,6 +10,8 @@ import { createEmptyBoard } from './board.js';
 import { createSeats, seat, unseat, allSeated, namesInSlotOrder, type Seats } from './connections.js';
 import { saveActiveGame, loadActiveGame, archiveFinishedGame, listGameSummaries, loadArchive } from './persistence.js';
 import { loadFamilyConfig, type FamilyConfig } from './family.js';
+import { createIpThrottle } from './rateLimit.js';
+import type { IncomingMessage } from 'node:http';
 
 export type ServerOptions = {
   port?: number;
@@ -58,6 +60,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
 
   const httpServer = createServer(app);
   const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  const joinThrottle = createIpThrottle({ maxFailures: 5, windowMs: 60_000 });
 
   const seats: Seats = createSeats();
   let game: Game | null = null;
@@ -278,7 +281,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     });
   }
 
-  function handleJoin(ws: WebSocket, msg: Extract<ClientMessage, { type: 'join' }>): void {
+  function handleJoin(ws: WebSocket, msg: Extract<ClientMessage, { type: 'join' }>, ip: string): void {
     const slot = msg.slot;
     const name = msg.name?.trim();
     if (slot !== 0 && slot !== 1 && slot !== 2) {
@@ -294,11 +297,13 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
 
     const expectedName = familyConfig.players[slot].name;
     if (name !== expectedName) {
+      joinThrottle.recordFailure(ip);
       sendMsg(ws, { type: 'error', message: 'Wrong name for this slot' });
       ws.close(1008, 'Wrong name for this slot');
       return;
     }
     if (msg.password !== familyConfig.password) {
+      joinThrottle.recordFailure(ip);
       sendMsg(ws, { type: 'error', message: 'Wrong password' });
       ws.close(1008, 'Wrong password');
       return;
@@ -344,12 +349,19 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       }
     }
 
+    joinThrottle.recordSuccess(ip);
     attachInGameHandler(ws, slot);
     broadcastState();
     broadcastLobby();
   }
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req: IncomingMessage) => {
+    const ip = clientIp(req);
+    if (joinThrottle.isBlocked(ip)) {
+      sendMsg(ws, { type: 'error', message: 'Too many failed attempts, try again later' });
+      ws.close(1008, 'rate limited');
+      return;
+    }
     sendMsg(ws, lobbyMessage());
 
     const preJoinHandler = (raw: RawData): void => {
@@ -365,7 +377,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         return;
       }
       ws.off('message', preJoinHandler);
-      handleJoin(ws, msg);
+      handleJoin(ws, msg, ip);
     };
     ws.on('message', preJoinHandler);
 
@@ -387,6 +399,15 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   };
 
   return { httpServer, wss, port: actualPort, close };
+}
+
+function clientIp(req: IncomingMessage): string {
+  const xff = req.headers['x-forwarded-for'];
+  if (typeof xff === 'string' && xff.length > 0) {
+    const first = xff.split(',')[0]?.trim();
+    if (first) return first;
+  }
+  return req.socket.remoteAddress ?? 'unknown';
 }
 
 function humanReadableReason(error: { kind: string }): string {
