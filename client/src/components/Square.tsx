@@ -2,24 +2,24 @@ import { useDroppable } from '@dnd-kit/core';
 import type { Cell, Premium, Tile as TileT } from '@shared/types';
 import { Tile } from './Tile.js';
 import { useGameStore } from '../store.js';
-import { SUBSTITUTIONS, canSubstitute } from '../letters.js';
+import { SUBSTITUTIONS, SUBSTITUTION_POINTS, canSubstitute } from '../letters.js';
 
 // Must match @keyframes tile-flash duration in styles/index.css.
-const TILE_FLASH_MS = 1200;
+const TILE_FLASH_MS = 1400;
 
 const PREMIUM_BG: Record<Exclude<Premium, null>, string> = {
-  TW: 'bg-terracotta/70',
-  DW: 'bg-peach',
-  TL: 'bg-sage',
-  DL: 'bg-sage-light',
-  CENTER: 'bg-peach',
+  TW: 'bg-prem-tw',
+  DW: 'bg-prem-dw',
+  TL: 'bg-prem-tl',
+  DL: 'bg-prem-dl',
+  CENTER: 'bg-prem-dw',
 };
 
 const PREMIUM_LABEL: Record<Exclude<Premium, null>, string> = {
-  TW: '3W',
-  DW: '2W',
-  TL: '3L',
-  DL: '2L',
+  TW: 'С×3',
+  DW: 'С×2',
+  TL: 'Б×3',
+  DL: 'Б×2',
   CENTER: '★',
 };
 
@@ -53,9 +53,9 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
     lastPlacedCells.some((c) => c.row === row && c.col === col);
 
   const base = 'relative flex items-center justify-center border border-ink/10';
-  const bg = cell ? 'bg-bg' : (premium ? PREMIUM_BG[premium] : 'bg-bg');
+  const bg = cell ? 'bg-cell' : (premium ? PREMIUM_BG[premium] : 'bg-cell');
   const overRing = isOver
-    ? (isClaimBlankTarget ? 'outline outline-2 outline-emerald-500' : 'outline outline-2 outline-sage')
+    ? (isClaimBlankTarget ? 'outline outline-2 outline-emerald-500' : 'outline outline-2 outline-prem-tl')
     : '';
 
   let pendingTile: TileT | null = null;
@@ -96,11 +96,16 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
             ghost
             draggableId={isMyTurn ? pendingTile.id : undefined}
             displayOverride={pendingHere.playedAs}
+            pointsOverride={
+              pendingHere.playedAs !== pendingTile.letter
+                ? (SUBSTITUTION_POINTS[pendingHere.playedAs] ?? pendingTile.points)
+                : undefined
+            }
             subBadge={subBadge}
           />
         </div>
       ) : premium ? (
-        <span className="text-[10px] font-medium text-ink/60">{PREMIUM_LABEL[premium]}</span>
+        <span className="text-[10px] font-medium text-ink/55 tracking-wide">{PREMIUM_LABEL[premium]}</span>
       ) : null}
     </div>
   );

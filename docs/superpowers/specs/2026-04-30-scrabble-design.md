@@ -25,7 +25,7 @@ A real-time, online, three-player Russian Scrabble game ("Эрудит") for a f
 | **Multi-spot placement** | A single turn may place tiles in **multiple disconnected groups** on the board. Each group must (a) form valid words individually and as cross-words, and (b) connect to existing tiles. *Exception:* the very first move of the game is one group and must cross the center star. |
 | **Word form** | Only Russian nouns in **nominative singular** ("кошка" yes, "кошку" no). |
 | **Dictionary check** | **Advisory only.** The server flags unknown words via warnings; never blocks or penalizes. Players decide. |
-| **Letter substitutions (one-way)** | A tile may be played as a "softer" letter, scoring at the substitute's point value: Ё→Е, Ъ→Ь, Ш→Щ, Й→И. Reverse direction not allowed. |
+| **Letter substitutions (one-way)** | A tile may be played as a "softer" letter, scoring at the substitute's point value: Ё→Е, Ъ→Ь, Щ→Ш, Й→И. Reverse direction not allowed. |
 | **Bonus squares (DW/TW/DL/TL)** | **Reusable** — apply every turn a tile sits on them, not only when first covered. **Exception:** the center DW only applies the first time it is covered. |
 | **Word scoring** | Standard — every word formed by your move (the main word plus any perpendicular side words containing a new tile) is scored. |
 | **Rack visibility** | Each player can show or hide their rack to opponents. **Default: visible.** Toggleable any time. |
@@ -207,7 +207,7 @@ On `submitMove`:
 
 ### 9.2 Letter substitutions
 
-Each `Placement` carries `playedAs`. When `tile.letter !== playedAs`, the server validates the pair is one of the four allowed one-way substitutions (Ё→Е, Ъ→Ь, Ш→Щ, Й→И). The cell stores both the physical `tile` and `playedAs`. Scoring uses `playedAs.points`, not `tile.points`. The board UI displays `playedAs`.
+Each `Placement` carries `playedAs`. When `tile.letter !== playedAs`, the server validates the pair is one of the four allowed one-way substitutions (Ё→Е, Ъ→Ь, Щ→Ш, Й→И). The cell stores both the physical `tile` and `playedAs`. Scoring uses `playedAs.points`, not `tile.points`. The board UI displays `playedAs`.
 
 ### 9.3 Reusable bonus squares
 
@@ -270,7 +270,9 @@ Three layers, in priority order:
 5. **M5 — Polish.** Split into two slices:
    - **M5a** (see `docs/superpowers/specs/2026-05-01-m5a-snapshots-assist-log-design.md`): live move log, finished-game snapshots + Past Games viewer, "мама помогла" assist credit.
    - **M5b**: disconnect/pause overlay, dictionary advisory warnings, animations, "Новая игра" / play-again flow on the finished-game screen, deploy to Render.
-6. **M6 — Gamification.** Cross-game leaderboard (aggregated from archived snapshots) and badges/achievements (e.g., long-word, game wins, most-helped, most-helping, highest single-move, bingo), game-end celebration. Brainstorm + spec deferred; depends on M5 archive format.
+6. **M6 — Gamification.** Split into two slices:
+   - **M6a** (see `docs/superpowers/specs/2026-05-02-m6a-gamification-design.md`): per-game badges (бинго, длинное слово, крупный ход, помощник, золото/серебро/бронза) + game-end celebration overlay.
+   - **M6b** (deferred): cross-game leaderboard + cumulative achievements aggregated from archived snapshots.
 
 Each milestone is end-to-end playable or testable before moving on.
 

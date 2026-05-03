@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { DndContext, type DragEndEvent } from '@dnd-kit/core';
 import type { Letter, Slot, Tile as TileT } from '@shared/types';
 import { useGameStore } from './store.js';
@@ -17,6 +17,10 @@ import { PastGamesList } from './components/PastGamesList.js';
 import { PastGamesDetail } from './components/PastGamesDetail.js';
 import { FinishedScreen } from './components/FinishedScreen.js';
 import { DrawForOrderScreen } from './components/DrawForOrderScreen.js';
+import { GameEndCelebration } from './components/GameEndCelebration.js';
+import { DrawResultReveal } from './components/DrawResultReveal.js';
+import { AnimatePresence } from 'framer-motion';
+import { fishForSlot } from './fish.js';
 
 type PendingDrop = { tile: TileT; row: number; col: number };
 
@@ -57,6 +61,20 @@ export function App() {
     }, 120);
     return () => clearTimeout(t);
   }, [pendingPlacements, setMovePreview]);
+
+  const phase = state?.phase;
+  const [celebrationOpen, setCelebrationOpen] = useState(false);
+  const [drawRevealOpen, setDrawRevealOpen] = useState(false);
+  const prevPhase = useRef(phase);
+  useEffect(() => {
+    if (prevPhase.current !== 'finished' && phase === 'finished') {
+      setCelebrationOpen(true);
+    }
+    if (prevPhase.current === 'drawing' && phase === 'playing') {
+      setDrawRevealOpen(true);
+    }
+    prevPhase.current = phase;
+  }, [phase]);
 
   function handleJoin(slot: Slot, name: string, password: string) {
     setIdentity(slot, name, password);
@@ -132,32 +150,110 @@ export function App() {
     return <WaitingRoom players={state.players} mySlot={identity.slot} />;
   }
 
+  const activeSlot = (state.turnIndex as Slot);
+  const activeFish = fishForSlot(activeSlot);
   return (
     <DndContext onDragEnd={onDragEnd}>
-      <main className="relative flex h-full items-start justify-center gap-8 p-8">
-        <div>
+      <main className="relative mx-auto grid h-screen max-w-[1400px] items-start gap-10 overflow-hidden px-10 pb-8 pt-16 lg:px-12 lg:pt-20" style={{ gridTemplateColumns: '1fr 360px' }}>
+        <nav className="absolute right-10 top-4 z-10 flex items-center gap-2 lg:right-12 lg:top-6">
+          <a
+            href="#past"
+            className="inline-flex items-center rounded-full px-3 py-1.5 text-xs text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
+            style={{
+              background: 'var(--color-panel)',
+              boxShadow: '0 1px 0 rgba(60,50,35,0.06), 0 2px 6px rgba(60,50,35,0.08)',
+            }}
+          >
+            Прошлые игры
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              useGameStore.getState().clearIdentity();
+              window.location.reload();
+            }}
+            className="inline-flex items-center rounded-full px-3 py-1.5 text-xs text-ink-soft transition-transform hover:-translate-y-0.5 hover:text-ink"
+            style={{
+              background: 'var(--color-panel)',
+              boxShadow: '0 1px 0 rgba(60,50,35,0.06), 0 2px 6px rgba(60,50,35,0.08)',
+            }}
+          >
+            Выйти
+          </button>
+        </nav>
+        <div className="flex h-full min-h-0 flex-col items-center gap-10">
+          {/* Header — walking koryushka in the active player's color + handwritten title */}
+          <header className="flex w-full items-center gap-6 self-start" style={{ marginLeft: 6 }}>
+            <div className="relative shrink-0" style={{ width: 170, height: 80 }}>
+              <img
+                key={activeFish.color}
+                src={activeFish.src}
+                alt=""
+                aria-hidden
+                className="fish-walk-big absolute"
+                style={{ width: 180, left: -8, top: -10 }}
+              />
+            </div>
+            <div className="flex-1">
+              <h1 className="font-heading font-bold leading-[0.85] tracking-tight" style={{ fontSize: 48 }}>
+                Корюшка пошла
+              </h1>
+              <p className="mt-2 text-xs italic leading-[1.35] text-ink-soft">
+                по первоапрельскому снегу уверенной походкой в светлое будущее.<br />
+                А если пошла корюшка, то и мы за ней!
+              </p>
+            </div>
+          </header>
           <Board board={state.board} />
           <ErrorBanner />
         </div>
-        <aside className="flex h-full w-72 flex-col gap-3">
-          <header className="flex items-baseline justify-between text-sm uppercase tracking-wide text-ink/60">
-            <span>{state.phase === 'finished' ? 'Игра окончена' : `Ход: ${state.players[state.turnIndex]?.name ?? '—'}`}</span>
-            <a href="#past" className="normal-case text-xs text-ink/50 hover:underline">Прошлые игры</a>
-          </header>
-          <BagIndicator count={state.bag.length} />
+        <aside className="flex h-full min-h-0 min-w-0 flex-col gap-3">
+          <BagIndicator
+            count={state.bag.length}
+            nextLetter={(() => {
+              const nextTile = state.bag[state.bag.length - 1];
+              if (nextTile === undefined) return undefined;
+              return nextTile.isBlank ? '★' : nextTile.letter;
+            })()}
+          />
           {state.players.map((p) => (
             <PlayerCard key={p.slot} player={p} isCurrentTurn={p.slot === state.turnIndex && state.phase === 'playing'} />
           ))}
           <ActionBar />
           <MoveLog state={state} />
         </aside>
-        {state.phase === 'finished' && <FinishedScreen state={state} />}
+        {state.phase === 'finished' && (
+          <>
+            <FinishedScreen state={state} />
+            <AnimatePresence>
+              {celebrationOpen && (
+                <GameEndCelebration state={state} onDismiss={() => setCelebrationOpen(false)} />
+              )}
+            </AnimatePresence>
+          </>
+        )}
         {state.phase === 'drawing' && <DrawForOrderScreen state={state} mySlot={identity.slot} />}
+        <AnimatePresence>
+          {drawRevealOpen && (() => {
+            const lastDraw = [...state.events].reverse().find((e) => e.kind === 'drawForOrder');
+            if (lastDraw === undefined || lastDraw.kind !== 'drawForOrder') return null;
+            const nameOf = (slot: 0 | 1 | 2): string =>
+              state.players[slot]?.name || `Слот ${slot}`;
+            return (
+              <DrawResultReveal
+                ev={lastDraw}
+                nameOf={nameOf}
+                onDismiss={() => setDrawRevealOpen(false)}
+              />
+            );
+          })()}
+        </AnimatePresence>
       </main>
       {pendingBlank !== null && (
         <LetterPicker
-          title="Выбери букву для бланка"
+          title="Выбери букву"
           letters={CYRILLIC_LETTERS}
+          fishSlot={identity.slot}
           onPick={commitBlank}
           onCancel={() => setPendingBlank(null)}
         />

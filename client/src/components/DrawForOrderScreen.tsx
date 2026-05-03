@@ -1,5 +1,6 @@
 import type { GameState, Slot } from '@shared/types';
 import { sendDrawTile } from '../ws.js';
+import { fishForSlot } from '../fish.js';
 
 type Props = { state: GameState; mySlot: Slot };
 
@@ -10,17 +11,33 @@ export function DrawForOrderScreen({ state, mySlot }: Props) {
   const heading = ds.round === 1 ? 'Жребий' : `Перетягивание — раунд ${ds.round}`;
   const subtitle =
     ds.round === 1
-      ? 'Каждый игрок тянет по букве. Кто ближе к началу алфавита — ходит первым.'
+      ? 'Каждый тянет по букве. Кто ближе к началу алфавита — ходит первым.'
       : 'Между игроками с одинаковой буквой — ещё один раунд.';
 
   const slots: Slot[] = [0, 1, 2];
+  const myFish = fishForSlot(mySlot);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-[32rem] max-w-[90vw] rounded-xl bg-white p-6 text-center shadow-2xl">
-        <div className="mb-1 text-2xl font-bold">{heading}</div>
-        <div className="mb-5 text-sm text-ink/70">{subtitle}</div>
-        <div className="flex justify-center gap-6">
+      <div
+        className="relative w-[34rem] max-w-[90vw] overflow-hidden rounded-2xl p-7 text-center"
+        style={{
+          background: 'var(--color-panel)',
+          boxShadow: '0 20px 60px rgba(40,30,15,0.35), 0 0 0 1px rgba(60,50,35,0.08)',
+        }}
+      >
+        <img
+          src={myFish.src}
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute"
+          style={{ right: -40, top: -12, width: 170, opacity: 0.16 }}
+        />
+        <h2 className="font-heading relative font-bold leading-none" style={{ fontSize: 38 }}>
+          {heading}
+        </h2>
+        <p className="relative mt-2 text-sm italic text-ink-soft">{subtitle}</p>
+        <div className="relative mt-6 flex justify-center gap-6">
           {slots.map((slot) => (
             <DrawSlotCard
               key={slot}
@@ -45,28 +62,47 @@ type CardProps = {
   isMe: boolean;
 };
 
-function DrawSlotCard({ name, isCandidate, draw, isMe }: CardProps) {
+function DrawSlotCard({ slot, name, isCandidate, draw, isMe }: CardProps) {
+  const fish = fishForSlot(slot);
   return (
     <div className="flex w-28 flex-col items-center gap-2">
-      <div className="text-sm font-semibold">{name}</div>
+      <img src={fish.src} alt="" aria-hidden style={{ width: 48, height: 'auto' }} />
+      <div className="font-heading font-bold leading-none" style={{ fontSize: 22, color: fish.deep }}>
+        {name}
+      </div>
       {!isCandidate ? (
-        <div className="flex h-14 w-14 items-center justify-center rounded-md bg-ink/5 text-2xl text-ink/30">
+        <div
+          className="font-heading flex h-14 w-14 items-center justify-center rounded-md text-2xl"
+          style={{ background: 'rgba(45,36,25,0.06)', color: 'rgba(45,36,25,0.3)' }}
+        >
           —
         </div>
       ) : draw !== null ? (
-        <div className="flex h-14 w-14 items-center justify-center rounded-md bg-tile text-2xl font-semibold shadow-sm">
+        <div
+          className="font-heading flex h-14 w-14 items-center justify-center rounded-md bg-tile font-bold"
+          style={{
+            fontSize: 28,
+            color: '#1f2a30',
+            boxShadow:
+              '0 1px 0 rgba(40,60,75,0.06), 0 2px 5px rgba(40,60,75,0.10), inset 0 0 0 1px rgba(255,255,255,0.7)',
+          }}
+        >
           {draw.letter ?? '★'}
         </div>
       ) : isMe ? (
         <button
           type="button"
-          className="h-14 w-28 rounded-md bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+          className="font-heading h-14 w-28 rounded-full text-lg font-semibold tracking-wide text-white shadow"
+          style={{ background: fish.accent }}
           onClick={() => sendDrawTile()}
         >
           Тяни!
         </button>
       ) : (
-        <div className="flex h-14 w-14 items-center justify-center rounded-md border border-ink/20 bg-ink/5 text-xs text-ink/50">
+        <div
+          className="flex h-14 w-14 items-center justify-center rounded-md text-xs"
+          style={{ background: 'rgba(45,36,25,0.06)', color: 'var(--color-ink-soft)' }}
+        >
           Ждём…
         </div>
       )}

@@ -278,6 +278,33 @@ export class Game {
     this.armRevert(slot, pre, appended);
   }
 
+  /**
+   * Trade in all 7 tiles for new ones from the bag and pass the turn.
+   * Unlike redrawRack (free swap on all-vowel / all-consonant racks), this
+   * always advances the turn — the player gives up their move to refresh.
+   */
+  swapAllAndPass(slot: Slot): void {
+    this.assertTurn(slot);
+    const player = this.state.players[slot]!;
+    if (this.bag.tiles.length === 0) {
+      throw new Error('Bag is empty — cannot swap');
+    }
+    const tileCount = player.rack.length;
+    this.maybeClearRevertOnActionBy(slot);
+    const pre = structuredClone(this.state);
+    const startLen = this.state.events.length;
+    const allIds = player.rack.map((t) => t.id);
+    const removed = removeTilesFromRack(player.rack, allIds);
+    returnTiles(this.bag, removed);
+    const drawn = drawTiles(this.bag, tileCount);
+    addTilesToRack(player.rack, drawn);
+    this.state.bag = this.bag.tiles;
+    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+    this.state.events.push({ kind: 'redraw', slot, reason: 'swapAll', tileCount, timestamp: Date.now() });
+    const appended = this.state.events.slice(startLen);
+    this.armRevert(slot, pre, appended);
+  }
+
   redrawRack(slot: Slot): void {
     this.assertTurn(slot);
     const player = this.state.players[slot]!;

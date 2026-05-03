@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import type { DrawForOrderRecord, GameEvent, GameState } from '@shared/types';
+import type { DrawForOrderRecord, GameEvent, GameState, Slot } from '@shared/types';
+import { fishForSlot } from '../fish.js';
 
 type Props = { state: GameState };
 
@@ -14,21 +15,50 @@ export function MoveLog({ state }: Props) {
 
   return (
     <div
-      ref={ref}
-      className="flex-1 min-h-0 overflow-y-auto rounded-md bg-tile p-2 text-sm text-ink shadow-sm"
+      className="flex flex-1 min-h-0 flex-col rounded-2xl p-4 text-sm text-ink"
+      style={{
+        background: 'var(--color-panel)',
+        boxShadow: '0 2px 0 rgba(60,50,35,0.06), 0 6px 18px rgba(60,50,35,0.08)',
+      }}
       data-testid="move-log"
     >
-      {state.events.length === 0 ? (
-        <p className="text-ink/50">Ещё нет ходов</p>
-      ) : (
-        <ol className="space-y-0.5">
-          {state.events.map((e, i) => (
-            <li key={i}>{renderEvent(e, nameOf)}</li>
-          ))}
-        </ol>
-      )}
+      <div className="mb-2 flex shrink-0 items-baseline justify-between">
+        <span className="font-heading font-bold leading-none" style={{ fontSize: 28 }}>Ходы</span>
+        <span className="text-[11px] uppercase tracking-wider text-ink-soft">история</span>
+      </div>
+      <div ref={ref} className="min-h-0 flex-1 overflow-y-auto pr-1">
+        {state.events.length === 0 ? (
+          <p className="text-ink/50">Ещё нет ходов</p>
+        ) : (
+          <ol className="space-y-1">
+            {state.events
+              .filter((e) => e.kind !== 'drawForOrder')
+              .map((e, i) => (
+                <li key={i}>{renderEvent(e, nameOf)}</li>
+              ))}
+          </ol>
+        )}
+      </div>
     </div>
   );
+}
+
+export function FishStamp({ slot }: { slot: Slot }) {
+  const fish = fishForSlot(slot);
+  return (
+    <img
+      src={fish.src}
+      alt=""
+      aria-hidden
+      className="mt-0.5 shrink-0"
+      style={{ width: 22, height: 'auto' }}
+    />
+  );
+}
+
+function PlayerName({ slot, nameOf }: { slot: Slot; nameOf: (s: number) => string }) {
+  const fish = fishForSlot(slot);
+  return <strong style={{ color: fish.deep }}>{nameOf(slot)}</strong>;
 }
 
 function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNode {
@@ -36,37 +66,59 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
     case 'move': {
       const words = e.wordsFormed.map((w) => w.word).join(', ');
       return (
-        <span>
-          <strong>{nameOf(e.slot)}</strong> • {words || '—'} — <span className="tabular-nums">{e.totalScore}</span>
-          {e.bingoBonus && <span className="ml-1 rounded bg-sage px-1 text-xs">+10 бинго</span>}
-          {e.dictionaryWarnings.length > 0 && (
-            <span className="ml-2 text-xs text-amber-700/80">
-              (не в словаре: {e.dictionaryWarnings.join(', ')})
-            </span>
-          )}
-        </span>
+        <div className="flex items-start gap-2">
+          <FishStamp slot={e.slot} />
+          <div className="flex-1 min-w-0">
+            <PlayerName slot={e.slot} nameOf={nameOf} /> — <span className="font-heading text-base font-semibold">{words || '—'}</span> — <span className="tabular-nums font-bold">{e.totalScore}</span>
+            {e.bingoBonus && <span className="ml-1 rounded bg-prem-tl/40 px-1 text-xs">+10 бинго</span>}
+            {e.dictionaryWarnings.length > 0 && (
+              <div className="text-xs text-ink-soft">не в словаре: {e.dictionaryWarnings.join(', ')}</div>
+            )}
+          </div>
+        </div>
       );
     }
     case 'assist':
       return (
-        <span className="ml-4 text-ink/60">↳ помог{femEnding(nameOf(e.toSlot))} {nameOf(e.toSlot)} — +{e.points}</span>
+        <span className="ml-7 text-ink/60">
+          ↳ помог{femEnding(nameOf(e.fromSlot))} {toDative(nameOf(e.toSlot))} — +{e.points}
+        </span>
       );
     case 'pass':
-      return <span><strong>{nameOf(e.slot)}</strong> • пас</span>;
+      return (
+        <div className="flex items-start gap-2">
+          <FishStamp slot={e.slot} />
+          <div><PlayerName slot={e.slot} nameOf={nameOf} /> — пас</div>
+        </div>
+      );
     case 'redraw': {
-      const reason = e.reason === 'allVowels' ? 'все гласные' : 'все согласные';
-      return <span><strong>{nameOf(e.slot)}</strong> • обмен ({reason}, {e.tileCount})</span>;
+      const fem = isFemName(nameOf(e.slot));
+      const text =
+        e.reason === 'swapAll'
+          ? `поменя${fem ? 'ла' : 'л'} буквы`
+          : `обмен (${e.reason === 'allVowels' ? 'все гласные' : 'все согласные'}, ${e.tileCount})`;
+      return (
+        <div className="flex items-start gap-2">
+          <FishStamp slot={e.slot} />
+          <div><PlayerName slot={e.slot} nameOf={nameOf} /> — {text}</div>
+        </div>
+      );
     }
     case 'claimBlank': {
       const cell = `${'abcdefghijklmno'[e.col]}${e.row + 1}`;
-      return <span><strong>{nameOf(e.slot)}</strong> • ★→{e.letterAs} на {cell}</span>;
+      return (
+        <div className="flex items-start gap-2">
+          <FishStamp slot={e.slot} />
+          <div><PlayerName slot={e.slot} nameOf={nameOf} /> — ★→{e.letterAs} на {cell}</div>
+        </div>
+      );
     }
     case 'endGame': {
       const cause =
-        e.cause === 'playerEnded' ? `${nameOf(e.slot)} завершил`
+        e.cause === 'playerEnded' ? `${nameOf(e.slot)} завершил${isFemName(nameOf(e.slot)) ? 'а' : ''}`
         : e.cause === 'bagEmptyAndRackEmpty' ? 'закончились буквы'
         : 'шесть пасов';
-      return <em className="text-ink/70">Игра окончена ({cause})</em>;
+      return <em className="text-ink/70">Корюшка пришла! ({cause})</em>;
     }
     case 'revert':
       return <span className="ml-4 text-ink/50 line-through">↳ отменено</span>;
@@ -115,6 +167,27 @@ function DrawForOrderEntry({
 
 // Best-effort feminine ending for "помог/помогла". Names ending in 'а' or 'я' get the feminine form.
 function femEnding(name: string): string {
-  const last = name.trim().slice(-1).toLowerCase();
-  return last === 'а' || last === 'я' ? 'ла' : '';
+  return isFemName(name) ? 'ла' : '';
+}
+
+// Russian-style gender heuristic: names ending in а/я are feminine — except
+// for these family-game names, which decline like а-stem feminines but are
+// grammatically masculine (Папа, Дядя, Илья, Никита, …).
+const MASC_OVERRIDES = new Set(['папа', 'дядя', 'илья', 'никита']);
+
+function isFemName(name: string): boolean {
+  const trimmed = name.trim().toLowerCase();
+  if (MASC_OVERRIDES.has(trimmed)) return false;
+  const last = trimmed.slice(-1);
+  return last === 'а' || last === 'я';
+}
+
+// Approximate Russian dative case for the family-game names
+// (Мама → Маме, Папа → Папе, Женя → Жене). For other names, return as-is.
+function toDative(name: string): string {
+  const trimmed = name.trim();
+  const last = trimmed.slice(-1).toLowerCase();
+  if (last === 'а') return trimmed.slice(0, -1) + 'е';
+  if (last === 'я') return trimmed.slice(0, -1) + 'е';
+  return trimmed;
 }

@@ -9,9 +9,18 @@ export const CYRILLIC_LETTERS: Letter[] = [
 export const SUBSTITUTIONS: Record<string, Letter> = {
   'Ё': 'Е',
   'Ъ': 'Ь',
-  'Ш': 'Щ',
+  'Щ': 'Ш',
   'Й': 'И',
 };
+
+// Points of the substituted letters — used by clients to preview the score
+// before submission. The server is still the source of truth at scoring time.
+export const SUBSTITUTION_POINTS: Record<Letter, number> = {
+  'Е': 1,
+  'Ь': 3,
+  'Ш': 8,
+  'И': 1,
+} as Record<Letter, number>;
 
 export function canSubstitute(letter: Letter): boolean {
   return Object.prototype.hasOwnProperty.call(SUBSTITUTIONS, letter);

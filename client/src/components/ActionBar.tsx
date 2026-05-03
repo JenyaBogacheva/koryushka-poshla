@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useGameStore } from '../store.js';
-import { sendPass, sendRedraw, sendEndGame, sendRevertLastTurn } from '../ws.js';
+import { sendEndGame, sendRevertLastTurn } from '../ws.js';
 import { ConfirmModal } from './ConfirmModal.js';
 
-type Confirm = null | 'pass' | 'endGame' | 'revert';
+type Confirm = null | 'endGame' | 'revert';
 
 export function ActionBar() {
   const state = useGameStore((s) => s.state);
@@ -14,55 +14,41 @@ export function ActionBar() {
   if (state.phase !== 'playing') return null;
 
   const me = state.players[identity.slot]!;
-  const isMyTurn = state.turnIndex === identity.slot;
+  // Only the player who placed the last word can revert — not after pass / redraw / blank-claim.
+  const lastEvent = state.events[state.events.length - 1];
+  const canRevertMove =
+    me.canRevert && lastEvent !== undefined && lastEvent.kind === 'move' && lastEvent.slot === identity.slot;
 
   function fire() {
-    if (confirm === 'pass') sendPass();
     if (confirm === 'endGame') sendEndGame();
     if (confirm === 'revert') sendRevertLastTurn();
     setConfirm(null);
   }
 
+  const pillCls =
+    'rounded-full px-4 py-2 text-sm font-medium text-ink shadow-[0_1px_0_rgba(60,50,35,0.06),0_2px_6px_rgba(60,50,35,0.08)] disabled:opacity-40 hover:brightness-95';
+  const pillStyle: React.CSSProperties = { background: 'var(--color-panel)' };
+
   return (
-    <div className="flex flex-wrap gap-2 items-center mt-3">
-      <button
-        type="button"
-        disabled={!isMyTurn}
-        className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-40 hover:bg-gray-100"
-        onClick={() => setConfirm('pass')}
-      >Пропустить</button>
-
-      {me.redrawEligible && isMyTurn && (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      {canRevertMove && (
         <button
           type="button"
-          className="px-3 py-1.5 rounded border border-amber-400 bg-amber-50 hover:bg-amber-100"
-          onClick={() => sendRedraw()}
-        >Замена (всё гласные/согласные)</button>
-      )}
-
-      {me.canRevert && (
-        <button
-          type="button"
-          className="px-3 py-1.5 rounded border border-sky-400 bg-sky-50 hover:bg-sky-100"
+          className={pillCls}
+          style={pillStyle}
           onClick={() => setConfirm('revert')}
         >Отменить ход</button>
       )}
 
-      <div className="flex-1" />
+      <div className="basis-full" />
 
       <button
         type="button"
-        className="px-3 py-1.5 rounded border border-rose-300 text-rose-700 hover:bg-rose-50"
+        className="font-heading w-full rounded-full px-4 py-3 text-xl font-semibold tracking-wide text-white shadow-[0_2px_0_rgba(60,50,35,0.06),0_6px_18px_rgba(60,50,35,0.10)]"
+        style={{ background: 'var(--color-accent)' }}
         onClick={() => setConfirm('endGame')}
       >Завершить игру</button>
 
-      <ConfirmModal
-        open={confirm === 'pass'}
-        title="Пропустить ход?"
-        message="Ваш ход будет передан следующему игроку."
-        onConfirm={fire}
-        onCancel={() => setConfirm(null)}
-      />
       <ConfirmModal
         open={confirm === 'endGame'}
         title="Завершить игру?"
@@ -74,7 +60,7 @@ export function ActionBar() {
       <ConfirmModal
         open={confirm === 'revert'}
         title="Отменить последний ход?"
-        message="Состояние вернётся к моменту перед вашим действием."
+        message="Состояние вернётся к моменту перед твоим действием."
         confirmLabel="Отменить ход"
         onConfirm={fire}
         onCancel={() => setConfirm(null)}
