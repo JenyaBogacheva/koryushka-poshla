@@ -281,7 +281,7 @@ function useResponsiveBoardSize(): number {
 
 function computeBoardSize(): number {
   if (typeof window === 'undefined') return 42;
-  const VERTICAL_CHROME = 230; // header + main paddings + ErrorBanner row + breathing room
+  const VERTICAL_CHROME = 200; // header + main paddings + ErrorBanner row + breathing room
   // Mirror the grid-template-columns clamp(280px, 26vw, 360px) used by the aside.
   const asideWidth = Math.min(360, Math.max(280, window.innerWidth * 0.26));
   const HORIZONTAL_CHROME = asideWidth + 80; // aside + main horizontal padding + gap
@@ -289,5 +289,6 @@ function computeBoardSize(): number {
   const availableW = window.innerWidth - HORIZONTAL_CHROME;
   const fromHeight = Math.floor(availableH / 15);
   const fromWidth = Math.floor(availableW / 15);
-  return Math.max(24, Math.min(42, fromHeight, fromWidth));
+  // Floor at 24 (legibility), no upper cap — fill the available viewport.
+  return Math.max(24, Math.min(fromHeight, fromWidth));
 }
