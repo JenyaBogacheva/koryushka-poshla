@@ -159,7 +159,7 @@ function HelperAffordance({ currentHelper, otherPlayers }: HelperAffordanceProps
         <button
           type="button"
           onClick={() => sendAttributeHelper(null)}
-          className="ml-1 text-sm text-ink-soft underline hover:text-ink"
+          className="ml-1 text-sm text-ink/40 hover:text-ink"
         >
           убрать
         </button>
