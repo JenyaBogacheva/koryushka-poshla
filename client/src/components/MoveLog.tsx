@@ -255,8 +255,6 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
         : 'шесть пасов';
       return <em className="text-ink/70">Корюшка пришла! ({cause})</em>;
     }
-    case 'revert':
-      return <span className="ml-4 text-ink/50 line-through">↳ отменено</span>;
     case 'drawForOrder':
       return <DrawForOrderEntry ev={e} nameOf={nameOf} />;
   }
