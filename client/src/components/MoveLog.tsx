@@ -216,7 +216,7 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
     case 'assist':
       return (
         <span className="ml-7 text-ink/60">
-          ↳ помог{femEnding(nameOf(e.fromSlot))} {toDative(nameOf(e.toSlot))} — +{e.points}
+          ↳ помог{femEnding(nameOf(e.toSlot))} {toDative(nameOf(e.fromSlot))} — +{e.points}
         </span>
       );
     case 'pass':
