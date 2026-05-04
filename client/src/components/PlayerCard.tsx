@@ -5,7 +5,7 @@ import { BadgeStrip } from './BadgeStrip.js';
 import { FishBadge } from './FishBadge.js';
 import { ConfirmModal } from './ConfirmModal.js';
 import { useGameStore } from '../store.js';
-import { sendSubmitMove, sendPass, sendSwapAll } from '../ws.js';
+import { sendSubmitMove, sendPass, sendSwapAll, sendRedraw } from '../ws.js';
 import { perMoveBadges, endGameBadges } from '@shared/badges.js';
 import { fishForSlot } from '../fish.js';
 
@@ -186,7 +186,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
               onClick={() => setSwapAllOpen(true)}
               className="rounded-full bg-ink/10 px-4 py-2 text-sm hover:bg-ink/20"
             >
-              Поменять буквы · бесплатно
+              Поменять буквы{player.redrawEligible ? ' · бесплатно' : ''}
             </button>
           )}
         </div>
@@ -203,10 +203,18 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
       <ConfirmModal
         open={swapAllOpen}
         title="Поменять буквы?"
-        message="Все 7 букв вернутся в мешок, ты возьмёшь новые и пропустишь ход."
+        message={
+          player.redrawEligible
+            ? 'Все буквы вернутся в мешок, ты возьмёшь новые и продолжишь ход — бесплатно.'
+            : 'Все 7 букв вернутся в мешок, ты возьмёшь новые и пропустишь ход.'
+        }
         confirmLabel="Поменять"
         fishSlot={player.slot}
-        onConfirm={() => { sendSwapAll(); setSwapAllOpen(false); }}
+        onConfirm={() => {
+          if (player.redrawEligible) sendRedraw();
+          else sendSwapAll();
+          setSwapAllOpen(false);
+        }}
         onCancel={() => setSwapAllOpen(false)}
       />
     </div>
