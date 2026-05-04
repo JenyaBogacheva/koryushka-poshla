@@ -213,12 +213,18 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
         </div>
       );
     }
-    case 'assist':
+    case 'assist': {
+      const helperName = nameOf(e.toSlot);
+      const f = fishForSlot(e.toSlot);
       return (
-        <span className="ml-7 text-ink/60">
-          ↳ помог{femEnding(nameOf(e.toSlot))} {toDative(nameOf(e.fromSlot))} — +{e.points}
+        <span className="ml-7 inline-flex items-center gap-1.5 text-ink/60">
+          <span>↳</span>
+          <img src={f.src} alt="" aria-hidden style={{ width: 16, height: 'auto' }} />
+          <strong style={{ color: f.deep }}>{helperName}</strong>
+          <span>{isFemName(helperName) ? 'помогла' : 'помог'} — +{e.points}</span>
         </span>
       );
+    }
     case 'pass':
       return (
         <div className="flex items-start gap-2">
@@ -298,11 +304,6 @@ function DrawForOrderEntry({
   );
 }
 
-// Best-effort feminine ending for "помог/помогла". Names ending in 'а' or 'я' get the feminine form.
-function femEnding(name: string): string {
-  return isFemName(name) ? 'ла' : '';
-}
-
 // Russian-style gender heuristic: names ending in а/я are feminine — except
 // for these family-game names, which decline like а-stem feminines but are
 // grammatically masculine (Папа, Дядя, Илья, Никита, …).
@@ -313,14 +314,4 @@ function isFemName(name: string): boolean {
   if (MASC_OVERRIDES.has(trimmed)) return false;
   const last = trimmed.slice(-1);
   return last === 'а' || last === 'я';
-}
-
-// Approximate Russian dative case for the family-game names
-// (Мама → Маме, Папа → Папе, Женя → Жене). For other names, return as-is.
-function toDative(name: string): string {
-  const trimmed = name.trim();
-  const last = trimmed.slice(-1).toLowerCase();
-  if (last === 'а') return trimmed.slice(0, -1) + 'е';
-  if (last === 'я') return trimmed.slice(0, -1) + 'е';
-  return trimmed;
 }
