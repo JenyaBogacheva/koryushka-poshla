@@ -23,18 +23,15 @@ describe('letters', () => {
     }
   });
 
-  it('allows the four one-way substitutions', () => {
+  it('allows the four substitution pairs in both directions', () => {
     expect(isSubstitutionAllowed('Ё', 'Е')).toBe(true);
     expect(isSubstitutionAllowed('Ъ', 'Ь')).toBe(true);
     expect(isSubstitutionAllowed('Щ', 'Ш')).toBe(true);
     expect(isSubstitutionAllowed('Й', 'И')).toBe(true);
-  });
-
-  it('rejects the reverse direction', () => {
-    expect(isSubstitutionAllowed('Е', 'Ё')).toBe(false);
-    expect(isSubstitutionAllowed('Ь', 'Ъ')).toBe(false);
-    expect(isSubstitutionAllowed('Ш', 'Щ')).toBe(false);
-    expect(isSubstitutionAllowed('И', 'Й')).toBe(false);
+    expect(isSubstitutionAllowed('Е', 'Ё')).toBe(true);
+    expect(isSubstitutionAllowed('Ь', 'Ъ')).toBe(true);
+    expect(isSubstitutionAllowed('Ш', 'Щ')).toBe(true);
+    expect(isSubstitutionAllowed('И', 'Й')).toBe(true);
   });
 
   it('treats identity as allowed (no substitution)', () => {

@@ -26,20 +26,47 @@ type InnerProps = {
   size: number;
   ghost: boolean;
   subBadge?: { display: Letter; onClick: () => void };
+  /** When set, render ★ as the main glyph and this letter as a small top-right mark. */
+  blankLetterMark?: Letter;
 };
 
 export function Tile({ cell, tile, size = 36, draggableId, ghost = false, subBadge, displayOverride, pointsOverride }: Props) {
   const t = cell?.tile ?? tile;
   if (!t) return null;
-  const display = cell
-    ? cell.playedAs
-    : (displayOverride ?? (t.isBlank ? '★' : t.letter));
+  // A blank shown as a letter — on the board (committed), or pending with a chosen letter.
+  // Render ★ as the main glyph; the chosen letter goes in the corner.
+  const isBlankAsLetter = cell ? cell.fromBlank : (t.isBlank && displayOverride !== undefined);
+  const chosenLetter = cell ? cell.playedAs : displayOverride;
+  const display = isBlankAsLetter
+    ? '★'
+    : (cell ? cell.playedAs : (displayOverride ?? (t.isBlank ? '★' : t.letter)));
   const points = pointsOverride ?? (cell ? (cell.fromBlank ? 0 : t.points) : t.points);
+  const blankLetterMark = isBlankAsLetter ? chosenLetter : undefined;
 
   if (draggableId !== undefined) {
-    return <DraggableTile id={draggableId} display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} />;
+    return <DraggableTile id={draggableId} display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} blankLetterMark={blankLetterMark} />;
   }
-  return <StaticTile display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} />;
+  return <StaticTile display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} blankLetterMark={blankLetterMark} />;
+}
+
+function BlankLetterMark({ letter, size }: { letter: Letter; size: number }) {
+  // Sits in the bottom-right corner where points usually live — for blanks the
+  // chosen letter is more useful info than the always-zero score.
+  return (
+    <span
+      aria-label={`бланк как ${letter}`}
+      className="absolute font-sans font-medium"
+      style={{
+        right: Math.round(size * 0.10),
+        bottom: Math.round(size * 0.02),
+        fontSize: Math.round(size * 0.26),
+        color: 'var(--color-fish-yellow-deep)',
+        pointerEvents: 'none',
+      }}
+    >
+      {letter}
+    </span>
+  );
 }
 
 function Badge({ subBadge }: { subBadge: NonNullable<InnerProps['subBadge']> }) {
@@ -63,7 +90,7 @@ const TILE_BASE =
 const TILE_SHADOW =
   'shadow-[0_1px_0_rgba(40,60,75,0.06),0_2px_5px_rgba(40,60,75,0.10),inset_0_0_0_1px_rgba(255,255,255,0.7)]';
 
-function StaticTile({ display, points, size, ghost, subBadge }: InnerProps) {
+function StaticTile({ display, points, size, ghost, subBadge, blankLetterMark }: InnerProps) {
   return (
     <div
       className={[
@@ -72,23 +99,36 @@ function StaticTile({ display, points, size, ghost, subBadge }: InnerProps) {
       ].join(' ')}
       style={{ width: size, height: size, fontSize: Math.round(size * 0.55), color: '#1f2a30' }}
     >
-      <span style={{ lineHeight: 1, marginTop: -2 }}>{display}</span>
       <span
-        className="absolute font-sans font-medium opacity-65"
         style={{
-          right: Math.round(size * 0.10),
-          bottom: Math.round(size * 0.02),
-          fontSize: Math.round(size * 0.26),
+          lineHeight: 1,
+          marginTop: -2,
+          fontSize: blankLetterMark ? Math.round(size * 0.42) : undefined,
+          color: blankLetterMark ? 'var(--color-fish-yellow-deep)' : undefined,
         }}
       >
-        {points}
+        {display}
       </span>
+      {blankLetterMark ? (
+        <BlankLetterMark letter={blankLetterMark} size={size} />
+      ) : (
+        <span
+          className="absolute font-sans font-medium opacity-65"
+          style={{
+            right: Math.round(size * 0.10),
+            bottom: Math.round(size * 0.02),
+            fontSize: Math.round(size * 0.26),
+          }}
+        >
+          {points}
+        </span>
+      )}
       {subBadge && <Badge subBadge={subBadge} />}
     </div>
   );
 }
 
-function DraggableTile({ id, display, points, size, ghost, subBadge }: InnerProps & { id: string }) {
+function DraggableTile({ id, display, points, size, ghost, subBadge, blankLetterMark }: InnerProps & { id: string }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
   const style: React.CSSProperties = {
     width: size,
@@ -111,17 +151,30 @@ function DraggableTile({ id, display, points, size, ghost, subBadge }: InnerProp
         ghost ? 'outline outline-2 outline-accent -outline-offset-2' : TILE_SHADOW,
       ].join(' ')}
     >
-      <span style={{ lineHeight: 1, marginTop: -2 }}>{display}</span>
       <span
-        className="absolute font-sans font-medium opacity-65"
         style={{
-          right: Math.round(size * 0.10),
-          bottom: Math.round(size * 0.02),
-          fontSize: Math.round(size * 0.26),
+          lineHeight: 1,
+          marginTop: -2,
+          fontSize: blankLetterMark ? Math.round(size * 0.42) : undefined,
+          color: blankLetterMark ? 'var(--color-fish-yellow-deep)' : undefined,
         }}
       >
-        {points}
+        {display}
       </span>
+      {blankLetterMark ? (
+        <BlankLetterMark letter={blankLetterMark} size={size} />
+      ) : (
+        <span
+          className="absolute font-sans font-medium opacity-65"
+          style={{
+            right: Math.round(size * 0.10),
+            bottom: Math.round(size * 0.02),
+            fontSize: Math.round(size * 0.26),
+          }}
+        >
+          {points}
+        </span>
+      )}
       {subBadge && <Badge subBadge={subBadge} />}
     </div>
   );

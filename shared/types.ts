@@ -48,8 +48,8 @@ export type MoveRecord = {
 
 export type AssistRecord = {
   kind: 'assist';
-  fromSlot: Slot;
-  toSlot: Slot;
+  helpedSlot: Slot;
+  helperSlot: Slot;
   points: 5;
   forMoveIndex: number;
   timestamp: number;
@@ -85,13 +85,6 @@ export type EndGameRecord = {
   timestamp: number;
 };
 
-export type RevertRecord = {
-  kind: 'revert';
-  slot: Slot;
-  revertedKind: GameEventKind;
-  timestamp: number;
-};
-
 export type DrawState = {
   round: number;            // 1 = initial three-way; 2+ = tiebreak rounds
   candidates: Slot[];       // slots still in contention this round (subset of [0,1,2])
@@ -112,7 +105,6 @@ export type GameEvent =
   | RedrawRecord
   | ClaimBlankRecord
   | EndGameRecord
-  | RevertRecord
   | DrawForOrderRecord;
 
 export type GameEventKind = GameEvent['kind'];

@@ -25,7 +25,7 @@ A real-time, online, three-player Russian Scrabble game ("Эрудит") for a f
 | **Multi-spot placement** | A single turn may place tiles in **multiple disconnected groups** on the board. Each group must (a) form valid words individually and as cross-words, and (b) connect to existing tiles. *Exception:* the very first move of the game is one group and must cross the center star. |
 | **Word form** | Only Russian nouns in **nominative singular** ("кошка" yes, "кошку" no). |
 | **Dictionary check** | **Advisory only.** The server flags unknown words via warnings; never blocks or penalizes. Players decide. |
-| **Letter substitutions (one-way)** | A tile may be played as a "softer" letter, scoring at the substitute's point value: Ё→Е, Ъ→Ь, Щ→Ш, Й→И. Reverse direction not allowed. |
+| **Letter substitutions (bidirectional)** | A tile may be played as its partner letter in any of the four pairs Ё↔Е, Ъ↔Ь, Щ↔Ш, Й↔И. Scoring uses the played-as letter's point value (so Е played as Ё scores 3, Ё played as Е scores 1). |
 | **Bonus squares (DW/TW/DL/TL)** | **Reusable** — apply every turn a tile sits on them, not only when first covered. **Exception:** the center DW only applies the first time it is covered. |
 | **Word scoring** | Standard — every word formed by your move (the main word plus any perpendicular side words containing a new tile) is scored. |
 | **Rack visibility** | Each player can show or hide their rack to opponents. **Default: visible.** Toggleable any time. |
@@ -97,7 +97,7 @@ scrabble/
 │   │   ├── PlayerCard.tsx          # Right-column card: name, score, rack (visible/hidden), turn highlight
 │   │   ├── ActionBar.tsx           # Submit / Swap / Pass / Redraw / Toggle visibility / End game
 │   │   ├── BlankPicker.tsx         # Dialog when placing a blank
-│   │   ├── SubstitutionPicker.tsx  # Dialog when placing Ё/Ъ/Ш/Й (pick: itself or substitute)
+│   │   ├── SubstitutionPicker.tsx  # Dialog when placing any letter in a substitution pair (Ё↔Е, Ъ↔Ь, Щ↔Ш, Й↔И): pick itself or partner
 │   │   ├── HistoryPanel.tsx        # List of past games (date, scores, winner)
 │   │   ├── SlotPicker.tsx          # First-visit slot + name entry
 │   │   └── DisconnectOverlay.tsx   # "Waiting for {name}…" pause screen
@@ -207,7 +207,7 @@ On `submitMove`:
 
 ### 9.2 Letter substitutions
 
-Each `Placement` carries `playedAs`. When `tile.letter !== playedAs`, the server validates the pair is one of the four allowed one-way substitutions (Ё→Е, Ъ→Ь, Щ→Ш, Й→И). The cell stores both the physical `tile` and `playedAs`. Scoring uses `playedAs.points`, not `tile.points`. The board UI displays `playedAs`.
+Each `Placement` carries `playedAs`. When `tile.letter !== playedAs`, the server validates the pair is one of the four allowed bidirectional substitutions (Ё↔Е, Ъ↔Ь, Щ↔Ш, Й↔И). The cell stores both the physical `tile` and `playedAs`. Scoring uses `playedAs.points`, not `tile.points`. The board UI displays `playedAs`.
 
 ### 9.3 Reusable bonus squares
 

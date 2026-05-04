@@ -5,21 +5,24 @@ export const CYRILLIC_LETTERS: Letter[] = [
   'Р','С','Т','У','Ф','Х','Ц','Ч','Ш','Щ','Ъ','Ы','Ь','Э','Ю','Я',
 ];
 
-// One-way house-rule substitutions: tile letter → allowed playedAs.
+// Bidirectional house-rule substitutions: tile letter → its allowed partner.
+// Any letter in this map may be played as its partner (and vice versa);
+// scoring uses the played-as letter's canonical points.
 export const SUBSTITUTIONS: Record<string, Letter> = {
-  'Ё': 'Е',
-  'Ъ': 'Ь',
-  'Щ': 'Ш',
-  'Й': 'И',
+  'Ё': 'Е', 'Е': 'Ё',
+  'Ъ': 'Ь', 'Ь': 'Ъ',
+  'Щ': 'Ш', 'Ш': 'Щ',
+  'Й': 'И', 'И': 'Й',
 };
 
-// Points of the substituted letters — used by clients to preview the score
-// before submission. The server is still the source of truth at scoring time.
+// Points of every letter that participates in a substitution pair — used by
+// clients to preview the score before submission. Server is the source of
+// truth at scoring time.
 export const SUBSTITUTION_POINTS: Record<Letter, number> = {
-  'Е': 1,
-  'Ь': 3,
-  'Ш': 8,
-  'И': 1,
+  'Е': 1, 'Ё': 3,
+  'Ь': 3, 'Ъ': 10,
+  'Ш': 8, 'Щ': 10,
+  'И': 1, 'Й': 4,
 } as Record<Letter, number>;
 
 export function canSubstitute(letter: Letter): boolean {
