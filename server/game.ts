@@ -254,7 +254,7 @@ export class Game {
     if (existingAssistIndex !== null) {
       const oldAssist = events[existingAssistIndex];
       if (oldAssist?.kind === 'assist') {
-        this.state.players[oldAssist.toSlot]!.score -= oldAssist.points;
+        this.state.players[oldAssist.helperSlot]!.score -= oldAssist.points;
       }
       events.splice(existingAssistIndex, 1);
     }
@@ -265,8 +265,8 @@ export class Game {
       this.state.players[helperSlot]!.score += 5;
       events.push({
         kind: 'assist',
-        fromSlot: slot,
-        toSlot: helperSlot,
+        helpedSlot: slot,
+        helperSlot,
         points: 5,
         forMoveIndex: moveIndex,
         timestamp: Date.now(),

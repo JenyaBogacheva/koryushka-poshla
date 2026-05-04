@@ -185,7 +185,7 @@ async function main(): Promise<void> {
     if (evt.kind === 'move') {
       console.log(`move: slot=${evt.slot}, score=${evt.totalScore}, words=${evt.wordsFormed.map((w) => w.word).join(',')}`);
     } else if (evt.kind === 'assist') {
-      console.log(`assist: from=${evt.fromSlot}, to=${evt.toSlot}, points=${evt.points}, forMove=${evt.forMoveIndex}`);
+      console.log(`assist: helped=${evt.helpedSlot}, helper=${evt.helperSlot}, points=${evt.points}, forMove=${evt.forMoveIndex}`);
     } else if (evt.kind === 'pass') {
       console.log(`pass: slot=${evt.slot}`);
     } else if (evt.kind === 'endGame') {

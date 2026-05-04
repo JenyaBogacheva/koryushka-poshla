@@ -214,8 +214,8 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
       );
     }
     case 'assist': {
-      const helperName = nameOf(e.toSlot);
-      const f = fishForSlot(e.toSlot);
+      const helperName = nameOf(e.helperSlot);
+      const f = fishForSlot(e.helperSlot);
       return (
         <span className="ml-7 inline-flex items-center gap-1.5 text-ink/60">
           <span>↳</span>

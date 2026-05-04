@@ -507,8 +507,8 @@ describe('Game — attributeHelper (post-hoc assist credit)', () => {
     if (move.kind === 'move') expect(move.helperSlot).toBe(helper);
     expect(assist.kind).toBe('assist');
     if (assist.kind === 'assist') {
-      expect(assist.fromSlot).toBe(first);
-      expect(assist.toSlot).toBe(helper);
+      expect(assist.helpedSlot).toBe(first);
+      expect(assist.helperSlot).toBe(helper);
       expect(assist.points).toBe(5);
       expect(assist.forMoveIndex).toBe(snap.events.length - 2);
     }
@@ -529,7 +529,7 @@ describe('Game — attributeHelper (post-hoc assist credit)', () => {
     // Exactly one assist event should remain (and point to slot b).
     const assists = snap.events.filter((e) => e.kind === 'assist');
     expect(assists).toHaveLength(1);
-    if (assists[0]!.kind === 'assist') expect(assists[0]!.toSlot).toBe(b);
+    if (assists[0]!.kind === 'assist') expect(assists[0]!.helperSlot).toBe(b);
   });
 
   it('attributeHelper(null) clears prior helper, removes assist, refunds +5', () => {

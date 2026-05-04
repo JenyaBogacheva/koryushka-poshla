@@ -48,8 +48,8 @@ export type MoveRecord = {
 
 export type AssistRecord = {
   kind: 'assist';
-  fromSlot: Slot;
-  toSlot: Slot;
+  helpedSlot: Slot;
+  helperSlot: Slot;
   points: 5;
   forMoveIndex: number;
   timestamp: number;
