@@ -77,6 +77,9 @@ export class Game {
     if ((cloned as { turnOrder?: unknown }).turnOrder === undefined) {
       cloned.turnOrder = [0, 1, 2];
     }
+    if ((cloned as { pendingSwap?: unknown }).pendingSwap === undefined) {
+      cloned.pendingSwap = null;
+    }
     const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
     cloned.bag = bag.tiles;
     type Mutable = {

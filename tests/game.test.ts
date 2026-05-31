@@ -909,3 +909,23 @@ describe('Game — cancelSwap and stale-offer clearing', () => {
     expect(g.snapshot().pendingSwap).toBeNull();
   });
 });
+
+describe('Game — fromState back-fill', () => {
+  it('defaults a missing pendingSwap to null', () => {
+    const g = makeReadyGame(7);
+    const s = g.snapshot() as Record<string, unknown>;
+    delete s['pendingSwap'];
+    const restored = Game.fromState(s as unknown as import('@shared/types').GameState);
+    expect(restored.snapshot().pendingSwap).toBeNull();
+  });
+
+  it('preserves a non-null pendingSwap through a round-trip', () => {
+    const g = makeReadyGame(7);
+    const st = g.snapshot();
+    const from = st.turnIndex;
+    const to = nextInTurnOrder(st.turnOrder, from);
+    g.offerSwap(from, to, st.players[from]!.rack[0]!.id, st.players[to]!.rack[0]!.id, 'КОРЮШКА');
+    const restored = Game.fromState(g.snapshot());
+    expect(restored.snapshot().pendingSwap?.word).toBe('КОРЮШКА');
+  });
+});

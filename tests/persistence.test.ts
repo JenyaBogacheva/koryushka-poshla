@@ -135,6 +135,16 @@ describe('persistence', () => {
     expect(loaded!.events.length).toBe(archive.events.length);
   });
 
+  it('roundtrips a non-null pendingSwap', () => {
+    const s = sampleState();
+    s.pendingSwap = {
+      fromSlot: 0, toSlot: 1, giveTileId: 't-1', takeTileId: 't-2',
+      word: 'КОРЮШКА', phrase: 'Какое крутое слово!', createdAt: 1_700_000_000_000,
+    };
+    saveActiveGame(dataDir, s);
+    expect(loadActiveGame(dataDir)?.pendingSwap?.word).toBe('КОРЮШКА');
+  });
+
   it('listGameSummaries returns just the summary slice from a flat GameArchive on disk', () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'scrabble-summaries-'));
     const histDir = path.join(dir, 'history');
