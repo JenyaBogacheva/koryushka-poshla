@@ -225,6 +225,15 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'swapAll':
           handleEngineAction(ws, () => game!.swapAllAndPass(slot));
           return;
+        case 'offerSwap':
+          handleEngineAction(ws, () => game!.offerSwap(slot, msg.toSlot, msg.giveTileId, msg.takeTileId, msg.word));
+          return;
+        case 'respondSwap':
+          handleEngineAction(ws, () => game!.respondSwap(slot, msg.accept));
+          return;
+        case 'cancelSwap':
+          handleEngineAction(ws, () => game!.cancelSwap(slot));
+          return;
         case 'claimBlank':
           handleEngineAction(ws, () => game!.claimBlank(slot, msg.row, msg.col, msg.myTileId));
           return;
