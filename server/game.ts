@@ -321,6 +321,7 @@ export class Game {
   }
 
   cancelSwap(slot: Slot): void {
+    if (this.state.phase !== 'playing') throw new Error('Игра не в процессе');
     const offer = this.state.pendingSwap;
     if (offer === null) throw new Error('Нет предложенного обмена');
     if (slot !== offer.fromSlot) throw new Error('Отменить может только предложивший');

@@ -902,4 +902,10 @@ describe('Game — cancelSwap and stale-offer clearing', () => {
     g.endGame(from);
     expect(g.snapshot().pendingSwap).toBeNull();
   });
+
+  it('swapping all letters clears a pending offer', () => {
+    const { g, from } = offer();
+    g.swapAllAndPass(from);
+    expect(g.snapshot().pendingSwap).toBeNull();
+  });
 });
