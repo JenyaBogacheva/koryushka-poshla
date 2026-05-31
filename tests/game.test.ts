@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { Game } from '../server/game';
 import type { Placement, DrawForOrderRecord, Slot } from '@shared/types';
 import { isAllVowels, isAllConsonants } from '../server/rack';
+import { compareLetterOrder } from '../server/letters';
+
+/** Next slot in the draw-decided play order — mirrors Game.nextSlot. */
+function nextInTurnOrder(turnOrder: readonly Slot[], slot: Slot): Slot {
+  return turnOrder[(turnOrder.indexOf(slot) + 1) % turnOrder.length]!;
+}
 
 /**
  * Drive the interactive draw-for-order to completion. Calls drawForOrderTile
@@ -117,7 +123,7 @@ describe('Game — submitMove', () => {
       expect(after.players[first]!.score).toBe(result.moveRecord.totalScore);
       expect(after.events.length).toBe(2); // drawForOrder + move
     }
-    expect(after.turnIndex).toBe(((first + 1) % 3) as import('@shared/types').Slot);
+    expect(after.turnIndex).toBe(nextInTurnOrder(after.turnOrder, first));
     expect(after.players[first]!.rack.length).toBe(7); // refilled
     expect(after.bag.length).toBe(105 - 21 - 1); // one tile drawn from bag for refill
     expect(after.centerBonusUsed).toBe(true);
@@ -138,7 +144,7 @@ describe('Game — passTurn', () => {
     const g = makeReadyGame(1);
     const first = g.snapshot().turnIndex;
     g.passTurn(first);
-    expect(g.snapshot().turnIndex).toBe(((first + 1) % 3) as import('@shared/types').Slot);
+    expect(g.snapshot().turnIndex).toBe(nextInTurnOrder(g.snapshot().turnOrder, first));
   });
   it('rejects pass by non-current', () => {
     const g = makeReadyGame(1);
@@ -384,7 +390,7 @@ describe('Game.revertLastTurn after submitMove', () => {
     if (result.ok) {
       const after = g.snapshot();
       expect(after.players[first]!.canRevert).toBe(true);
-      expect(after.turnIndex).toBe(((first + 1) % 3) as import('@shared/types').Slot);
+      expect(after.turnIndex).toBe(nextInTurnOrder(after.turnOrder, first));
       g.revertLastTurn(first);
       const reverted = g.snapshot();
       expect(reverted.turnIndex).toBe(first);
@@ -423,7 +429,7 @@ describe('revert across action types', () => {
   it('arms revert after pass and restores turnIndex', () => {
     const g = setup();
     const first = g.snapshot().turnIndex;
-    const next = ((first + 1) % 3) as import('@shared/types').Slot;
+    const next = nextInTurnOrder(g.snapshot().turnOrder, first);
     g.passTurn(first);
     expect(g.snapshot().turnIndex).toBe(next);
     expect(g.snapshot().players[first]!.canRevert).toBe(true);
@@ -435,7 +441,7 @@ describe('revert across action types', () => {
   it('clears revert window when another player acts', () => {
     const g = setup();
     const first = g.snapshot().turnIndex;
-    const next = ((first + 1) % 3) as import('@shared/types').Slot;
+    const next = nextInTurnOrder(g.snapshot().turnOrder, first);
     g.passTurn(first);
     expect(g.snapshot().players[first]!.canRevert).toBe(true);
     g.passTurn(next);
@@ -467,7 +473,7 @@ describe('revert across action types', () => {
   });
 });
 
-describe('Game — giveAssist / revertAssist', () => {
+describe('Game — giveAssist', () => {
   function setup() {
     const g = new Game({ seed: 1 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
@@ -515,28 +521,6 @@ describe('Game — giveAssist / revertAssist', () => {
     expect(assists).toHaveLength(2);
   });
 
-  it('revertAssist removes the most recent award and subtracts 5', () => {
-    const g = setup();
-    playFirstMove(g);
-    const target: Slot = 1;
-    const before = g.snapshot().players[target]!.score;
-    g.giveAssist(target);
-    g.giveAssist(target);
-    const res = g.revertAssist(target);
-    expect(res).toEqual({ ok: true });
-    const snap = g.snapshot();
-    expect(snap.players[target]!.score).toBe(before + 5);
-    const assists = snap.events.filter((e) => e.kind === 'assist' && e.helperSlot === target);
-    expect(assists).toHaveLength(1);
-  });
-
-  it('revertAssist with no awards returns nothing-to-revert', () => {
-    const g = setup();
-    playFirstMove(g);
-    const res = g.revertAssist(1);
-    expect(res).toEqual({ ok: false, error: { kind: 'nothing-to-revert' } });
-  });
-
   it('giveAssist when not in playing phase returns not-playing', () => {
     const g = new Game({ seed: 1 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
@@ -552,13 +536,15 @@ describe('startGame draw-for-order', () => {
     const events = g.snapshot().events;
     expect(events[0]?.kind).toEqual('drawForOrder');
   });
-  it('sets turnIndex to firstSlot', () => {
+  it('sets turnIndex and turnOrder from the draw order', () => {
     const g = new Game({ seed: 12345 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
     startAndDraw(g);
     const snap = g.snapshot();
-    const first = (snap.events[0] as DrawForOrderRecord).firstSlot;
-    expect(snap.turnIndex).toEqual(first);
+    const ev = snap.events[0] as DrawForOrderRecord;
+    expect([...ev.order].sort()).toEqual([0, 1, 2]); // a permutation of all slots
+    expect(snap.turnOrder).toEqual(ev.order);
+    expect(snap.turnIndex).toEqual(ev.order[0]);
   });
   it('returns drawn tiles to bag — full racks dealt', () => {
     const g = new Game({ seed: 12345 });
@@ -590,8 +576,9 @@ describe('startGame draw-for-order', () => {
     expect(maxCount).toBeGreaterThanOrEqual(2);
     // Game state remains consistent — no tile leaked through the redraw loop.
     expect(snap.bag.length).toEqual(105 - 21);
-    // firstSlot resolves to a single slot (deterministic, even after tie-break).
-    expect([0, 1, 2]).toContain(ev.firstSlot);
+    // Order resolves to a full permutation (deterministic, even after tie-break).
+    expect([...ev.order].sort()).toEqual([0, 1, 2]);
+    expect(snap.turnOrder).toEqual(ev.order);
   });
 });
 
@@ -609,7 +596,7 @@ describe('interactive draw-for-order', () => {
     g.startGame();
     const s = g.snapshot();
     expect(s.phase).toBe('drawing');
-    expect(s.drawState).toEqual({ round: 1, candidates: [0, 1, 2], draws: [] });
+    expect(s.drawState).toEqual({ round: 1, candidates: [0, 1, 2], draws: [], rankedTop: [], rankedBottom: [] });
     for (const p of s.players) expect(p.rack).toEqual([]);
     expect(s.events.filter((e) => e.kind === 'drawForOrder')).toEqual([]);
   });
@@ -661,7 +648,13 @@ describe('interactive draw-for-order', () => {
     expect(ev).toBeDefined();
     if (ev?.kind === 'drawForOrder') {
       expect(ev.draws.length).toBe(3);
-      expect([0, 1, 2]).toContain(ev.firstSlot);
+      expect([...ev.order].sort()).toEqual([0, 1, 2]); // full permutation
+      // Turn order follows letter rank: each player's drawn letter ≤ the next's.
+      const letterOf = (slot: Slot) => ev.draws.find((d) => d.slot === slot)!.letter;
+      for (let i = 1; i < ev.order.length; i++) {
+        expect(compareLetterOrder(letterOf(ev.order[i - 1]!), letterOf(ev.order[i]!))).toBeLessThanOrEqual(0);
+      }
+      expect(s.turnOrder).toEqual(ev.order);
     }
   });
 

@@ -184,7 +184,3 @@ export function sendSubmitMove(placements: Placement[]): void {
 export function sendGiveAssist(toSlot: Slot): void {
   send({ type: 'giveAssist', toSlot });
 }
-
-export function sendRevertAssist(toSlot: Slot): void {
-  send({ type: 'revertAssist', toSlot });
-}

@@ -110,9 +110,8 @@ async function threeJoined() {
     waitFor(c, isStateWithPhase('playing')),
   ]);
   const bs = [a, b, c] as const;
-  const first = snapA.state.turnIndex;
-  const second = ((first + 1) % 3) as Slot;
-  const third = ((first + 2) % 3) as Slot;
+  // Turn order is decided by the draw, not seat order.
+  const [first, second, third] = snapA.state.turnOrder;
   return { ...ctx, a, b, c, bs, first, second, third };
 }
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { DrawForOrderRecord, GameEvent, GameState, Slot } from '@shared/types';
 import { fishForSlot } from '../fish.js';
+import { isFemName } from '../gender.js';
+import { drawTurnOrder } from '../drawOrder.js';
 
 type Props = { state: GameState };
 
@@ -137,9 +139,8 @@ function DrawForOrderEntry({
   ev: DrawForOrderRecord;
   nameOf: (slot: number) => string;
 }): React.ReactNode {
-  // Turn order: firstSlot, (firstSlot+1)%3, (firstSlot+2)%3 — matches the cycle in submitMove.
-  const ordered = [0, 1, 2].map((i) => {
-    const slot = ((ev.firstSlot + i) % 3) as 0 | 1 | 2;
+  // Turn order is decided by the draw: rank 1 → 3, sorted by drawn letter.
+  const ordered = drawTurnOrder(ev).map((slot, i) => {
     const draw = ev.draws.find((d) => d.slot === slot) ?? null;
     return { slot, draw, position: i + 1 };
   });
@@ -166,16 +167,4 @@ function DrawForOrderEntry({
       </div>
     </div>
   );
-}
-
-// Russian-style gender heuristic: names ending in а/я are feminine — except
-// for these family-game names, which decline like а-stem feminines but are
-// grammatically masculine (Папа, Дядя, Илья, Никита, …).
-const MASC_OVERRIDES = new Set(['папа', 'дядя', 'илья', 'никита']);
-
-function isFemName(name: string): boolean {
-  const trimmed = name.trim().toLowerCase();
-  if (MASC_OVERRIDES.has(trimmed)) return false;
-  const last = trimmed.slice(-1);
-  return last === 'а' || last === 'я';
 }

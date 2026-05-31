@@ -49,6 +49,7 @@ export function PastGamesDetail({ id }: { id: string }) {
     phase: 'finished',
     players,
     turnIndex: 0,
+    turnOrder: [0, 1, 2],
     board: archive.finalBoard,
     bag: [],
     centerBonusUsed: false,

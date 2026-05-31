@@ -85,14 +85,16 @@ export type EndGameRecord = {
 
 export type DrawState = {
   round: number;            // 1 = initial three-way; 2+ = tiebreak rounds
-  candidates: Slot[];       // slots still in contention this round (subset of [0,1,2])
+  candidates: Slot[];       // slots being ordered among themselves this round (subset of [0,1,2])
   draws: { slot: Slot; letter: Letter | null }[]; // already-revealed draws this round (null = blank)
+  rankedTop: Slot[];        // slots whose ranks are already fixed, best rank first (precede the candidates)
+  rankedBottom: Slot[];     // slots whose ranks are already fixed, best rank first (follow the candidates)
 };
 
 export type DrawForOrderRecord = {
   kind: 'drawForOrder';
-  draws: { slot: Slot; letter: Letter | null }[]; // null = blank; one entry per player in slot order
-  firstSlot: Slot;
+  draws: { slot: Slot; letter: Letter | null }[]; // initial three-way draw; null = blank
+  order: [Slot, Slot, Slot]; // full turn order (rank 1 → 3) decided by the draw, ties broken by redraw
   timestamp: number;
 };
 
@@ -124,6 +126,7 @@ export type GameState = {
   phase: GamePhase;
   players: [Player, Player, Player];
   turnIndex: Slot;
+  turnOrder: [Slot, Slot, Slot]; // play order for the whole game, decided by the жребий draw
   board: Board;
   bag: Tile[];
   centerBonusUsed: boolean;
@@ -167,7 +170,6 @@ export type ClientMessage =
   | { type: 'join'; slot: Slot; name: string; password: string }
   | { type: 'submitMove'; placements: Placement[] }
   | { type: 'giveAssist'; toSlot: Slot }
-  | { type: 'revertAssist'; toSlot: Slot }
   | { type: 'claimBlank'; row: number; col: number; myTileId: string }
   | { type: 'pass' }
   | { type: 'redraw' }

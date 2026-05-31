@@ -26,6 +26,7 @@ const sampleState = (): GameState => ({
     canRevert: false,
   })) as unknown as GameState['players'],
   turnIndex: 0,
+  turnOrder: [0, 1, 2],
   board: Array.from({ length: 15 }, () => Array(15).fill(null)),
   bag: [],
   centerBonusUsed: false,

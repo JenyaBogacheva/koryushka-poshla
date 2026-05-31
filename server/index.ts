@@ -97,6 +97,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         canRevert: false,
       })) as unknown as GameState['players'],
       turnIndex: 0,
+      turnOrder: [0, 1, 2],
       board: createEmptyBoard(),
       bag: [],
       centerBonusUsed: false,
@@ -209,14 +210,6 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'giveAssist': {
           if (game === null) { sendMsg(ws, { type: 'error', message: 'Game not started' }); return; }
           const result = game.giveAssist(msg.toSlot);
-          if (!result.ok) { sendMsg(ws, { type: 'error', message: humanReadableReason(result.error) }); return; }
-          try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
-          broadcastState();
-          return;
-        }
-        case 'revertAssist': {
-          if (game === null) { sendMsg(ws, { type: 'error', message: 'Game not started' }); return; }
-          const result = game.revertAssist(msg.toSlot);
           if (!result.ok) { sendMsg(ws, { type: 'error', message: humanReadableReason(result.error) }); return; }
           try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
           broadcastState();
@@ -431,7 +424,6 @@ function humanReadableReason(error: { kind: string }): string {
     case 'not-your-turn': return 'Сейчас не ваш ход';
     case 'not-playing': return 'Игра не в процессе';
     case 'invalid-helper': return 'Неверный помощник';
-    case 'nothing-to-revert': return 'Нечего отменять';
     case 'no-placements': return 'Нет плиток для хода';
     case 'out-of-range': return 'Плитка вне поля';
     case 'duplicate-target': return 'Две плитки в одну клетку';

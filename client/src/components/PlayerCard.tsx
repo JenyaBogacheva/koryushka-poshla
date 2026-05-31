@@ -5,9 +5,10 @@ import { BadgeStrip } from './BadgeStrip.js';
 import { FishBadge } from './FishBadge.js';
 import { ConfirmModal } from './ConfirmModal.js';
 import { useGameStore } from '../store.js';
-import { sendSubmitMove, sendPass, sendSwapAll, sendRedraw, sendGiveAssist, sendRevertAssist } from '../ws.js';
+import { sendSubmitMove, sendPass, sendSwapAll, sendRedraw, sendGiveAssist } from '../ws.js';
 import { perMoveBadges, endGameBadges } from '@shared/badges.js';
 import { fishForSlot } from '../fish.js';
+import { isFemName } from '../gender.js';
 
 type Props = {
   player: Player;
@@ -45,9 +46,6 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
 
   const isMine = identity?.slot === player.slot;
   const showButtons = isMine && isCurrentTurn && pending.length > 0;
-  const assistCount = allEvents.filter(
-    (e) => e.kind === 'assist' && e.helperSlot === player.slot,
-  ).length;
   const fish = fishForSlot(player.slot);
   const cardStyle: React.CSSProperties = isCurrentTurn
     ? {
@@ -144,23 +142,11 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
           <button
             type="button"
             onClick={() => sendGiveAssist(player.slot)}
-            className="font-heading inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-base font-semibold text-white shadow"
+            className="font-heading rounded-full px-4 py-2 text-base font-semibold text-white shadow"
             style={{ background: fish.accent }}
           >
-            <img src={fish.src} alt="" aria-hidden style={{ width: 18, height: 'auto' }} />
-            помог +5
+            помог{isFemName(player.name) ? 'ла' : ''} +5
           </button>
-          <button
-            type="button"
-            onClick={() => sendRevertAssist(player.slot)}
-            disabled={assistCount === 0}
-            className="rounded-full bg-ink/10 px-3 py-2 text-sm hover:bg-ink/20 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            −5
-          </button>
-          {assistCount > 0 && (
-            <span className="text-sm text-ink-soft tabular-nums">+{assistCount * 5} за помощь</span>
-          )}
         </div>
       )}
       {showButtons && (

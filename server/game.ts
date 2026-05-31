@@ -50,6 +50,7 @@ export class Game {
       phase: 'waiting',
       players,
       turnIndex: 0,
+      turnOrder: [0, 1, 2],
       board: createEmptyBoard(),
       bag: this.bag.tiles,
       centerBonusUsed: false,
@@ -62,6 +63,10 @@ export class Game {
   static fromState(state: GameState): Game {
     const g = Object.create(Game.prototype) as Game;
     const cloned = structuredClone(state);
+    // Games persisted before turn-order-by-draw lack turnOrder; default to seat order.
+    if ((cloned as { turnOrder?: unknown }).turnOrder === undefined) {
+      cloned.turnOrder = [0, 1, 2];
+    }
     const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
     cloned.bag = bag.tiles;
     type Mutable = {
@@ -88,7 +93,7 @@ export class Game {
       throw new Error('Cannot start until all three slots are connected');
     }
     this.state.phase = 'drawing';
-    this.state.drawState = { round: 1, candidates: [0, 1, 2], draws: [] };
+    this.state.drawState = { round: 1, candidates: [0, 1, 2], draws: [], rankedTop: [], rankedBottom: [] };
     this.initialDrawSnapshot = null;
   }
 
@@ -120,35 +125,64 @@ export class Game {
   private resolveDrawRound(): void {
     const ds = this.state.drawState!;
     const sorted = [...ds.draws].sort((a, b) => compareLetterOrder(a.letter, b.letter));
-    const best = sorted[0]!;
-    const tied = sorted.filter((d) => compareLetterOrder(d.letter, best.letter) === 0);
 
-    if (tied.length === 1) {
-      const firstSlot = best.slot;
-      for (const p of this.state.players) {
-        const drawn = drawTiles(this.bag, 7);
-        addTilesToRack(p.rack, drawn);
-      }
-      this.state.events.push({
-        kind: 'drawForOrder',
-        draws: this.initialDrawSnapshot ?? ds.draws.map((d) => ({ slot: d.slot, letter: d.letter })),
-        firstSlot,
-        timestamp: Date.now(),
-      });
-      this.state.turnIndex = firstSlot;
-      this.state.phase = 'playing';
-      this.state.bag = this.bag.tiles;
-      this.state.startedAt = Date.now();
-      this.state.drawState = null;
-      this.initialDrawSnapshot = null;
+    // Group the candidates' draws into maximal equal-letter tiers, in rank order.
+    const tiers: { slot: Slot; letter: Letter | null }[][] = [];
+    for (const d of sorted) {
+      const last = tiers[tiers.length - 1];
+      if (last && compareLetterOrder(last[0]!.letter, d.letter) === 0) last.push(d);
+      else tiers.push([d]);
+    }
+
+    // Singleton tiers are settled. With ≤3 players at most one tier can hold a tie.
+    const tieIndex = tiers.findIndex((t) => t.length > 1);
+
+    if (tieIndex === -1) {
+      const order = [
+        ...ds.rankedTop,
+        ...sorted.map((d) => d.slot),
+        ...ds.rankedBottom,
+      ] as [Slot, Slot, Slot];
+      this.finalizeDraw(order);
       return;
     }
 
+    // Fix the tiers above/below the tie; only the tied slots draw again next round.
+    const above = tiers.slice(0, tieIndex).flat().map((d) => d.slot);
+    const below = tiers.slice(tieIndex + 1).flat().map((d) => d.slot);
     this.state.drawState = {
       round: ds.round + 1,
-      candidates: tied.map((d) => d.slot),
+      candidates: tiers[tieIndex]!.map((d) => d.slot),
       draws: [],
+      rankedTop: [...ds.rankedTop, ...above],
+      rankedBottom: [...below, ...ds.rankedBottom],
     };
+  }
+
+  private finalizeDraw(order: [Slot, Slot, Slot]): void {
+    for (const p of this.state.players) {
+      const drawn = drawTiles(this.bag, 7);
+      addTilesToRack(p.rack, drawn);
+    }
+    this.state.events.push({
+      kind: 'drawForOrder',
+      draws: this.initialDrawSnapshot ?? [],
+      order,
+      timestamp: Date.now(),
+    });
+    this.state.turnOrder = order;
+    this.state.turnIndex = order[0];
+    this.state.phase = 'playing';
+    this.state.bag = this.bag.tiles;
+    this.state.startedAt = Date.now();
+    this.state.drawState = null;
+    this.initialDrawSnapshot = null;
+  }
+
+  /** Next slot in the draw-decided play order (wraps around). */
+  private nextSlot(slot: Slot): Slot {
+    const order = this.state.turnOrder;
+    return order[(order.indexOf(slot) + 1) % order.length]!;
   }
 
   submitMove(slot: Slot, placements: Placement[]): SubmitResult {
@@ -196,7 +230,7 @@ export class Game {
     };
     this.state.events.push(moveRecord);
 
-    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+    this.state.turnIndex = this.nextSlot(slot);
 
     this.armRevert(slot, preStateForRevert);
     return { ok: true, moveRecord, dictionaryWarnings };
@@ -208,20 +242,6 @@ export class Game {
     this.state.players[toSlot]!.score += 5;
     this.state.events.push({ kind: 'assist', helperSlot: toSlot, points: 5, timestamp: Date.now() });
     return { ok: true };
-  }
-
-  revertAssist(toSlot: Slot): { ok: true } | { ok: false; error: { kind: 'not-playing' } | { kind: 'nothing-to-revert' } } {
-    if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
-    const events = this.state.events;
-    for (let i = events.length - 1; i >= 0; i--) {
-      const e = events[i]!;
-      if (e.kind === 'assist' && e.helperSlot === toSlot) {
-        events.splice(i, 1);
-        this.state.players[toSlot]!.score -= 5;
-        return { ok: true };
-      }
-    }
-    return { ok: false, error: { kind: 'nothing-to-revert' } };
   }
 
   previewMove(slot: Slot, placements: Placement[]): PreviewResult {
@@ -264,7 +284,7 @@ export class Game {
     this.assertTurn(slot);
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
-    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+    this.state.turnIndex = this.nextSlot(slot);
     this.state.events.push({ kind: 'pass', slot, timestamp: Date.now() });
     this.armRevert(slot, pre);
   }
@@ -289,7 +309,7 @@ export class Game {
     const drawn = drawTiles(this.bag, tileCount);
     addTilesToRack(player.rack, drawn);
     this.state.bag = this.bag.tiles;
-    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+    this.state.turnIndex = this.nextSlot(slot);
     this.state.events.push({ kind: 'redraw', slot, reason: 'swapAll', tileCount, timestamp: Date.now() });
     this.armRevert(slot, pre);
   }
