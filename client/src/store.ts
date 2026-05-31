@@ -27,6 +27,9 @@ type Store = {
   lobby: LobbySlot[] | null;
   identity: Identity | null;
   pendingPlacements: Pending[];
+  // Uncommitted placements of the *other* players (the one whose turn it is),
+  // mirrored from the server so everyone watches tiles land. Keyed by slot.
+  othersDraft: Record<Slot, Pending[]>;
   lastError: string | null;
   warning: string | null;
   lastPlacedCells: { row: number; col: number }[];
@@ -39,6 +42,7 @@ type Store = {
   setLobby: (slots: LobbySlot[]) => void;
   setIdentity: (slot: Slot, name: string, password: string) => void;
   clearIdentity: () => void;
+  setLiveDraft: (slot: Slot, placements: Pending[]) => void;
   addPending: (p: Pending) => void;
   removePending: (tileId: string) => void;
   togglePendingSubstitution: (tileId: string, real: Letter, sub: Letter) => void;
@@ -54,6 +58,7 @@ export const useGameStore = create<Store>((set) => ({
   lobby: null,
   identity: loadIdentity(),
   pendingPlacements: [],
+  othersDraft: { 0: [], 1: [], 2: [] },
   lastError: null,
   warning: null,
   lastPlacedCells: [],
@@ -61,7 +66,9 @@ export const useGameStore = create<Store>((set) => ({
   drawState: null,
   movePreview: null,
   setMovePreview: (movePreview) => set({ movePreview }),
-  setState: (state) => set({ state, drawState: state.drawState }),
+  // A fresh authoritative snapshot supersedes any in-flight drafts (move committed,
+  // turn passed, player joined/left) — clear the mirror so stale tiles don't linger.
+  setState: (state) => set({ state, drawState: state.drawState, othersDraft: { 0: [], 1: [], 2: [] } }),
   setConnected: (connected) => set({ connected }),
   setLobby: (slots) => set({ lobby: slots }),
   setIdentity: (slot, name, password) => {
@@ -77,6 +84,8 @@ export const useGameStore = create<Store>((set) => ({
     }
     set({ identity: null });
   },
+  setLiveDraft: (slot, placements) =>
+    set((s) => ({ othersDraft: { ...s.othersDraft, [slot]: placements } })),
   addPending: (p) =>
     set((s) => {
       const i = s.pendingPlacements.findIndex((x) => x.tileId === p.tileId);

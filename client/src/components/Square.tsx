@@ -1,5 +1,5 @@
 import { useDroppable } from '@dnd-kit/core';
-import type { Cell, Premium, Tile as TileT } from '@shared/types';
+import type { Cell, Letter, Premium, Slot, Tile as TileT } from '@shared/types';
 import { Tile } from './Tile.js';
 import { useGameStore } from '../store.js';
 import { SUBSTITUTIONS, SUBSTITUTION_POINTS, canSubstitute } from '../letters.js';
@@ -37,6 +37,7 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
   const state = useGameStore((s) => s.state);
   const pending = useGameStore((s) => s.pendingPlacements);
   const removePending = useGameStore((s) => s.removePending);
+  const othersDraft = useGameStore((s) => s.othersDraft);
   const togglePendingSubstitution = useGameStore((s) => s.togglePendingSubstitution);
   const lastPlacedCells = useGameStore((s) => s.lastPlacedCells);
   const lastPlacedAt = useGameStore((s) => s.lastPlacedAt);
@@ -61,6 +62,23 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
   let pendingTile: TileT | null = null;
   if (pendingHere !== null && state !== null && mySlot !== null) {
     pendingTile = state.players[mySlot]!.rack.find((t) => t.id === pendingHere.tileId) ?? null;
+  }
+
+  // Another player's tentative tile on this square (only the active player drafts,
+  // so at most one). Its tile still sits in that player's rack server-side until the
+  // move commits, so we resolve the glyph from the broadcast state.
+  let otherTile: TileT | null = null;
+  let otherDraftHere: { row: number; col: number; tileId: string; playedAs: Letter } | null = null;
+  if (!readOnly && cell === null && pendingHere === null && state !== null) {
+    for (const s of [0, 1, 2] as Slot[]) {
+      if (s === mySlot) continue;
+      const p = othersDraft[s].find((x) => x.row === row && x.col === col);
+      if (p !== undefined) {
+        otherDraftHere = p;
+        otherTile = state.players[s]!.rack.find((t) => t.id === p.tileId) ?? null;
+        break;
+      }
+    }
   }
 
   const subBadge =
@@ -102,6 +120,23 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
                 : undefined
             }
             subBadge={subBadge}
+          />
+        </div>
+      ) : otherTile !== null && otherDraftHere !== null ? (
+        <div
+          className="rounded-md"
+          style={{ opacity: 0.6, outline: '2px dashed rgba(60,50,35,0.55)', outlineOffset: -2 }}
+          title="Соперник ставит плитку"
+        >
+          <Tile
+            tile={otherTile}
+            size={size - 4}
+            displayOverride={otherDraftHere.playedAs}
+            pointsOverride={
+              otherDraftHere.playedAs !== otherTile.letter
+                ? (SUBSTITUTION_POINTS[otherDraftHere.playedAs] ?? otherTile.points)
+                : undefined
+            }
           />
         </div>
       ) : premium ? (

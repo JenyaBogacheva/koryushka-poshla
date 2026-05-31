@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import type { ClientMessage, ServerMessage, GameState, LobbySlot, Slot } from '@shared/types';
+import type { ClientMessage, ServerMessage, GameState, LobbySlot, Placement, Slot } from '@shared/types';
 import { Game } from './game.js';
 import { createEmptyBoard } from './board.js';
 import { createSeats, seat, unseat, allSeated, namesInSlotOrder, type Seats } from './connections.js';
@@ -119,6 +119,17 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     const data = JSON.stringify(payload);
     for (const client of wss.clients) {
       if (client.readyState === WebSocket.OPEN) client.send(data);
+    }
+  }
+
+  // Mirror a player's uncommitted placements to the *other* clients so everyone
+  // watches tiles land as the move is built. Ephemeral — never persisted. The
+  // acting player drives their own board from local state, so skip the sender.
+  function broadcastLiveDraft(slot: Slot, sender: WebSocket, placements: Placement[]): void {
+    const payload: ServerMessage = { type: 'liveDraft', slot, placements };
+    const data = JSON.stringify(payload);
+    for (const client of wss.clients) {
+      if (client !== sender && client.readyState === WebSocket.OPEN) client.send(data);
     }
   }
 
@@ -247,6 +258,11 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
           return;
         case 'previewMove': {
           if (game === null) return;
+          // Mirror tentative tiles to the others while it's this player's turn — even
+          // when the placement isn't a legal word yet, so the tiles still show.
+          if (game.snapshot().turnIndex === slot) {
+            broadcastLiveDraft(slot, ws, msg.placements);
+          }
           const preview = game.previewMove(slot, msg.placements);
           if (preview.ok) {
             sendMsg(ws, {

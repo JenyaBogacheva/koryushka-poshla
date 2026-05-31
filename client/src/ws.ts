@@ -109,6 +109,13 @@ export function connect(): void {
       case 'movePreview':
         store.setMovePreview(msg.preview);
         return;
+      case 'liveDraft':
+        // The server only mirrors the acting player's draft to the others, but guard
+        // our own slot anyway — we render our own pending placements from local state.
+        if (store.identity === null || store.identity.slot !== msg.slot) {
+          store.setLiveDraft(msg.slot, msg.placements);
+        }
+        return;
       case 'error':
         // Any error while still in the join phase (no game state yet) means the join was refused.
         // Bounce back to the picker by clearing identity.

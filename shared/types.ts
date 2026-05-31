@@ -190,4 +190,8 @@ export type ServerMessage =
   | { type: 'moveAccepted'; moveRecord: MoveRecord; dictionaryWarnings: string[] }
   | { type: 'moveRejected'; reason: string }
   | { type: 'movePreview'; preview: MovePreview }
+  // Live, uncommitted placements of the player whose turn it is, mirrored to the
+  // other two clients so everyone watches tiles land as the move is built. Ephemeral
+  // (never persisted); an empty `placements` clears the mirror.
+  | { type: 'liveDraft'; slot: Slot; placements: Placement[] }
   | { type: 'error'; message: string };
