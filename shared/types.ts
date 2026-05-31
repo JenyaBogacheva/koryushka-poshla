@@ -48,10 +48,8 @@ export type MoveRecord = {
 
 export type AssistRecord = {
   kind: 'assist';
-  helpedSlot: Slot;
-  helperSlot: Slot;
+  helperSlot: Slot; // player awarded +5 for helping
   points: 5;
-  forMoveIndex: number;
   timestamp: number;
 };
 
@@ -168,7 +166,8 @@ export type BadgeKind =
 export type ClientMessage =
   | { type: 'join'; slot: Slot; name: string; password: string }
   | { type: 'submitMove'; placements: Placement[] }
-  | { type: 'attributeHelper'; helperSlot: Slot | null }
+  | { type: 'giveAssist'; toSlot: Slot }
+  | { type: 'revertAssist'; toSlot: Slot }
   | { type: 'claimBlank'; row: number; col: number; myTileId: string }
   | { type: 'pass' }
   | { type: 'redraw' }

@@ -34,7 +34,7 @@ export function endGameBadges(
     medalIndex += bucket.length;
   }
 
-  // Helper badge: most assists given. Ties → all winners. Zero → no one.
+  // Helper badge: most +5 help awards received. Ties → all winners. Zero → no one.
   const assistsBySlot: Record<Slot, number> = { 0: 0, 1: 0, 2: 0 };
   for (const e of events) {
     if (e.kind === 'assist') assistsBySlot[e.helperSlot] += 1;

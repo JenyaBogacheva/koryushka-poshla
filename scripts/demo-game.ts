@@ -90,7 +90,7 @@ async function main(): Promise<void> {
         playedAs: pickPlayedAs(assistorTile),
       };
 
-      // Submit move, then attribute helper post-hoc (slot 0 helps if assistor is not 0, otherwise 1)
+      // Submit move, then award +5 to a helper (slot 0 helps if assistor is not 0, otherwise 1)
       const helperSlot: Slot = assistorSlot === 0 ? 1 : 0;
       console.log(`\n[ASSIST] ${s.players[assistorSlot]!.name} submits, then credits ${s.players[helperSlot]!.name}`);
       const result = g.submitMove(assistorSlot, [placement]);
@@ -98,8 +98,8 @@ async function main(): Promise<void> {
         console.log(`Assist move failed: ${result.error.kind}`);
         g.passTurn(assistorSlot);
       } else {
-        const attr = g.attributeHelper(assistorSlot, helperSlot);
-        if (!attr.ok) console.log(`Attribute failed: ${attr.error.kind}`);
+        const attr = g.giveAssist(helperSlot);
+        if (!attr.ok) console.log(`Assist failed: ${attr.error.kind}`);
       }
 
       printSnapshot(g.snapshot());
@@ -185,7 +185,7 @@ async function main(): Promise<void> {
     if (evt.kind === 'move') {
       console.log(`move: slot=${evt.slot}, score=${evt.totalScore}, words=${evt.wordsFormed.map((w) => w.word).join(',')}`);
     } else if (evt.kind === 'assist') {
-      console.log(`assist: helped=${evt.helpedSlot}, helper=${evt.helperSlot}, points=${evt.points}, forMove=${evt.forMoveIndex}`);
+      console.log(`assist: helper=${evt.helperSlot}, points=${evt.points}`);
     } else if (evt.kind === 'pass') {
       console.log(`pass: slot=${evt.slot}`);
     } else if (evt.kind === 'endGame') {

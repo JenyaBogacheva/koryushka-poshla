@@ -181,6 +181,10 @@ export function sendPreviewMove(placements: Placement[]): void {
 export function sendSubmitMove(placements: Placement[]): void {
   send({ type: 'submitMove', placements });
 }
-export function sendAttributeHelper(helperSlot: Slot | null): void {
-  send({ type: 'attributeHelper', helperSlot });
+export function sendGiveAssist(toSlot: Slot): void {
+  send({ type: 'giveAssist', toSlot });
+}
+
+export function sendRevertAssist(toSlot: Slot): void {
+  send({ type: 'revertAssist', toSlot });
 }

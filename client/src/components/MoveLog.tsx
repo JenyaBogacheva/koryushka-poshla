@@ -1,44 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { DrawForOrderRecord, GameEvent, GameState, Slot } from '@shared/types';
 import { fishForSlot } from '../fish.js';
-import { useGameStore } from '../store.js';
-import { sendAttributeHelper } from '../ws.js';
 
 type Props = { state: GameState };
 
 export function MoveLog({ state }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const identity = useGameStore((s) => s.identity);
   useEffect(() => {
     if (ref.current === null) return;
     ref.current.scrollTop = ref.current.scrollHeight;
   }, [state.events.length]);
 
   const nameOf = (slot: number): string => state.players[slot]?.name || `Слот ${slot}`;
-
-  // The latest move is editable iff:
-  //   - it's the last event (no helper yet), or
-  //   - the last event is the assist for it (i.e. helper already attributed)
-  // AND it belongs to the viewer.
-  const editableMoveIndex: number | null = (() => {
-    if (identity === null) return null;
-    const events = state.events;
-    if (events.length === 0) return null;
-    const last = events[events.length - 1]!;
-    if (last.kind === 'move' && last.slot === identity.slot) return events.length - 1;
-    if (last.kind === 'assist' && last.forMoveIndex === events.length - 2) {
-      const prev = events[events.length - 2];
-      if (prev?.kind === 'move' && prev.slot === identity.slot) return events.length - 2;
-    }
-    return null;
-  })();
-
-  const otherPlayers =
-    identity === null
-      ? []
-      : ([0, 1, 2] as Slot[])
-          .filter((s) => s !== identity.slot)
-          .map((s) => ({ slot: s, name: nameOf(s) }));
 
   return (
     <div
@@ -60,121 +33,12 @@ export function MoveLog({ state }: Props) {
           <ol className="space-y-1">
             {state.events.map((e, i) => {
               if (e.kind === 'drawForOrder') return null;
-              // The affordance owns the assist row when it's the editable move's assist.
-              if (
-                editableMoveIndex !== null &&
-                i === editableMoveIndex + 1 &&
-                e.kind === 'assist'
-              ) {
-                return null;
-              }
-              const showAffordance =
-                editableMoveIndex !== null && i === editableMoveIndex && e.kind === 'move';
-              return (
-                <li key={i}>
-                  {renderEvent(e, nameOf)}
-                  {showAffordance && e.kind === 'move' && (
-                    <HelperAffordance
-                      currentHelper={e.helperSlot}
-                      otherPlayers={otherPlayers}
-                    />
-                  )}
-                </li>
-              );
+              return <li key={i}>{renderEvent(e, nameOf)}</li>;
             })}
           </ol>
         )}
       </div>
     </div>
-  );
-}
-
-type HelperAffordanceProps = {
-  currentHelper: Slot | null;
-  otherPlayers: { slot: Slot; name: string }[];
-};
-
-function HelperAffordance({ currentHelper, otherPlayers }: HelperAffordanceProps) {
-  const [expanded, setExpanded] = useState(false);
-
-  if (expanded) {
-    return (
-      <div className="ml-7 mt-1 flex flex-col gap-1 text-sm">
-        <span className="text-sm uppercase tracking-wider text-ink-soft">Кто помог?</span>
-        <button
-          type="button"
-          onClick={() => {
-            sendAttributeHelper(null);
-            setExpanded(false);
-          }}
-          className="text-left text-ink-soft hover:text-ink"
-        >
-          никто
-        </button>
-        {otherPlayers.map((p) => {
-          const f = fishForSlot(p.slot);
-          return (
-            <button
-              key={p.slot}
-              type="button"
-              onClick={() => {
-                sendAttributeHelper(p.slot);
-                setExpanded(false);
-              }}
-              className="flex items-center gap-1.5 text-left hover:underline"
-            >
-              <img src={f.src} alt="" aria-hidden style={{ width: 16, height: 'auto' }} />
-              <span style={{ color: f.deep, fontWeight: 600 }}>{p.name}</span>
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={() => setExpanded(false)}
-          className="self-start text-sm text-ink-soft hover:text-ink"
-        >
-          отмена
-        </button>
-      </div>
-    );
-  }
-
-  if (currentHelper !== null) {
-    const helperPlayer = otherPlayers.find((p) => p.slot === currentHelper);
-    if (helperPlayer === undefined) return null;
-    const f = fishForSlot(helperPlayer.slot);
-    return (
-      <div className="ml-7 mt-0.5 flex items-center gap-1.5 text-ink/60">
-        <span>↳</span>
-        <img src={f.src} alt="" aria-hidden style={{ width: 16, height: 'auto' }} />
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          className="hover:underline"
-          style={{ color: f.deep, fontWeight: 600 }}
-        >
-          {helperPlayer.name}
-        </button>
-        <span>{isFemName(helperPlayer.name) ? 'помогла' : 'помог'} — +5</span>
-        <button
-          type="button"
-          onClick={() => sendAttributeHelper(null)}
-          className="ml-1 text-sm text-ink/40 hover:text-ink"
-        >
-          убрать
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => setExpanded(true)}
-      className="ml-7 mt-0.5 text-sm text-ink-soft hover:text-ink"
-    >
-      + кто помог?
-    </button>
   );
 }
 
@@ -214,15 +78,15 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
       );
     }
     case 'assist': {
-      const helperName = nameOf(e.helperSlot);
+      const name = nameOf(e.helperSlot);
       const f = fishForSlot(e.helperSlot);
       return (
-        <span className="ml-7 inline-flex items-center gap-1.5 text-ink/60">
-          <span>↳</span>
-          <img src={f.src} alt="" aria-hidden style={{ width: 16, height: 'auto' }} />
-          <strong style={{ color: f.deep }}>{helperName}</strong>
-          <span>{isFemName(helperName) ? 'помогла' : 'помог'} — +{e.points}</span>
-        </span>
+        <div className="flex items-start gap-2">
+          <FishStamp slot={e.helperSlot} />
+          <div>
+            <strong style={{ color: f.deep }}>{name}</strong> {isFemName(name) ? 'помогла' : 'помог'} — <span className="tabular-nums font-bold">+{e.points}</span>
+          </div>
+        </div>
       );
     }
     case 'pass':

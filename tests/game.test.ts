@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Game } from '../server/game';
-import type { Placement, DrawForOrderRecord } from '@shared/types';
+import type { Placement, DrawForOrderRecord, Slot } from '@shared/types';
 import { isAllVowels, isAllConsonants } from '../server/rack';
 
 /**
@@ -34,7 +34,7 @@ describe('Game — init', () => {
       expect(p.rackVisible).toBe(true);
       expect(p.score).toBe(0);
     }
-    expect(s.bag.length).toBe(104);
+    expect(s.bag.length).toBe(105);
     expect(s.turnIndex).toBe(0);
     expect(s.centerBonusUsed).toBe(false);
     expect(s.events).toEqual([]);
@@ -54,7 +54,7 @@ describe('Game — init', () => {
     startAndDraw(g);
     const s = g.snapshot();
     expect(s.phase).toBe('playing');
-    expect(s.bag.length).toBe(104 - 21);
+    expect(s.bag.length).toBe(105 - 21);
     for (const p of s.players) expect(p.rack.length).toBe(7);
   });
 
@@ -119,7 +119,7 @@ describe('Game — submitMove', () => {
     }
     expect(after.turnIndex).toBe(((first + 1) % 3) as import('@shared/types').Slot);
     expect(after.players[first]!.rack.length).toBe(7); // refilled
-    expect(after.bag.length).toBe(104 - 21 - 1); // one tile drawn from bag for refill
+    expect(after.bag.length).toBe(105 - 21 - 1); // one tile drawn from bag for refill
     expect(after.centerBonusUsed).toBe(true);
   });
 
@@ -467,7 +467,7 @@ describe('revert across action types', () => {
   });
 });
 
-describe('Game — attributeHelper (post-hoc assist credit)', () => {
+describe('Game — giveAssist / revertAssist', () => {
   function setup() {
     const g = new Game({ seed: 1 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
@@ -475,124 +475,75 @@ describe('Game — attributeHelper (post-hoc assist credit)', () => {
     return g;
   }
 
-  function makeFirstMovePlacements(g: Game): import('@shared/types').Placement[] {
+  function makeFirstMovePlacements(g: Game): Placement[] {
     const first = g.snapshot().turnIndex;
     const t = g.snapshot().players[first]!.rack[0]!;
     return [{ tileId: t.id, row: 7, col: 7, playedAs: t.isBlank ? 'А' : t.letter }];
   }
 
-  it('submitMove records helperSlot=null and appends no assist', () => {
-    const g = setup();
-    const first = g.snapshot().turnIndex;
-    const r = g.submitMove(first, makeFirstMovePlacements(g));
-    expect(r.ok).toBe(true);
-    const events = g.snapshot().events;
-    const last = events.at(-1)!;
-    expect(last.kind).toBe('move');
-    if (last.kind === 'move') expect(last.helperSlot).toBe(null);
-  });
+  function playFirstMove(g: Game): Slot {
+    const slot = g.snapshot().turnIndex;
+    const res = g.submitMove(slot, makeFirstMovePlacements(g));
+    expect(res.ok).toBe(true);
+    return slot;
+  }
 
-  it('attributeHelper sets helper, awards +5, and appends an assist event', () => {
+  it('awards +5 to a slot and appends an assist event', () => {
     const g = setup();
-    const first = g.snapshot().turnIndex;
-    const helper = ((first + 1) % 3) as import('@shared/types').Slot;
-    g.submitMove(first, makeFirstMovePlacements(g));
-    const r = g.attributeHelper(first, helper);
-    expect(r.ok).toBe(true);
+    playFirstMove(g);
+    const target: Slot = 1;
+    const before = g.snapshot().players[target]!.score;
+    const res = g.giveAssist(target);
+    expect(res).toEqual({ ok: true });
     const snap = g.snapshot();
-    expect(snap.players[helper]!.score).toBe(5);
-    const move = snap.events.at(-2)!;
-    const assist = snap.events.at(-1)!;
-    expect(move.kind).toBe('move');
-    if (move.kind === 'move') expect(move.helperSlot).toBe(helper);
-    expect(assist.kind).toBe('assist');
-    if (assist.kind === 'assist') {
-      expect(assist.helpedSlot).toBe(first);
-      expect(assist.helperSlot).toBe(helper);
-      expect(assist.points).toBe(5);
-      expect(assist.forMoveIndex).toBe(snap.events.length - 2);
-    }
-  });
-
-  it('attributeHelper changes helper from A to B: A loses +5, B gets +5', () => {
-    const g = setup();
-    const first = g.snapshot().turnIndex;
-    const a = ((first + 1) % 3) as import('@shared/types').Slot;
-    const b = ((first + 2) % 3) as import('@shared/types').Slot;
-    g.submitMove(first, makeFirstMovePlacements(g));
-    g.attributeHelper(first, a);
-    expect(g.snapshot().players[a]!.score).toBe(5);
-    g.attributeHelper(first, b);
-    const snap = g.snapshot();
-    expect(snap.players[a]!.score).toBe(0);
-    expect(snap.players[b]!.score).toBe(5);
-    // Exactly one assist event should remain (and point to slot b).
+    expect(snap.players[target]!.score).toBe(before + 5);
     const assists = snap.events.filter((e) => e.kind === 'assist');
     expect(assists).toHaveLength(1);
-    if (assists[0]!.kind === 'assist') expect(assists[0]!.helperSlot).toBe(b);
+    expect(assists[0]).toMatchObject({ kind: 'assist', helperSlot: target, points: 5 });
   });
 
-  it('attributeHelper(null) clears prior helper, removes assist, refunds +5', () => {
+  it('stacks repeated awards to the same slot', () => {
     const g = setup();
-    const first = g.snapshot().turnIndex;
-    const helper = ((first + 1) % 3) as import('@shared/types').Slot;
-    g.submitMove(first, makeFirstMovePlacements(g));
-    g.attributeHelper(first, helper);
-    expect(g.snapshot().players[helper]!.score).toBe(5);
-    const r = g.attributeHelper(first, null);
-    expect(r.ok).toBe(true);
+    playFirstMove(g);
+    const target: Slot = 2;
+    const before = g.snapshot().players[target]!.score;
+    g.giveAssist(target);
+    g.giveAssist(target);
     const snap = g.snapshot();
-    expect(snap.players[helper]!.score).toBe(0);
-    expect(snap.events.filter((e) => e.kind === 'assist')).toHaveLength(0);
-    const move = snap.events.at(-1)!;
-    if (move.kind === 'move') expect(move.helperSlot).toBe(null);
+    expect(snap.players[target]!.score).toBe(before + 10);
+    const assists = snap.events.filter((e) => e.kind === 'assist' && e.helperSlot === target);
+    expect(assists).toHaveLength(2);
   });
 
-  it('attributeHelper rejects when sender is not the actor of the latest move', () => {
+  it('revertAssist removes the most recent award and subtracts 5', () => {
     const g = setup();
-    const first = g.snapshot().turnIndex;
-    const other = ((first + 1) % 3) as import('@shared/types').Slot;
-    g.submitMove(first, makeFirstMovePlacements(g));
-    const r = g.attributeHelper(other, first);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe('not-your-move');
-  });
-
-  it('attributeHelper rejects helperSlot equal to actor (self-attribution)', () => {
-    const g = setup();
-    const first = g.snapshot().turnIndex;
-    g.submitMove(first, makeFirstMovePlacements(g));
-    const r = g.attributeHelper(first, first);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe('invalid-helper');
-  });
-
-  it('attributeHelper rejects after a subsequent action by another player', () => {
-    const g = setup();
-    const first = g.snapshot().turnIndex;
-    const next = ((first + 1) % 3) as import('@shared/types').Slot;
-    g.submitMove(first, makeFirstMovePlacements(g));
-    g.passTurn(next);
-    const r = g.attributeHelper(first, next);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error.kind).toBe('no-attributable-move');
-  });
-
-  it('revert after attributeHelper restores state and wipes the assist', () => {
-    const g = setup();
-    const first = g.snapshot().turnIndex;
-    const helper = ((first + 1) % 3) as import('@shared/types').Slot;
-    g.submitMove(first, makeFirstMovePlacements(g));
-    g.attributeHelper(first, helper);
-    expect(g.snapshot().players[helper]!.score).toBe(5);
-    g.revertLastTurn(first);
+    playFirstMove(g);
+    const target: Slot = 1;
+    const before = g.snapshot().players[target]!.score;
+    g.giveAssist(target);
+    g.giveAssist(target);
+    const res = g.revertAssist(target);
+    expect(res).toEqual({ ok: true });
     const snap = g.snapshot();
-    expect(snap.players[helper]!.score).toBe(0);
-    expect(snap.players[first]!.score).toBe(0);
-    expect(snap.events.filter((e) => e.kind === 'assist')).toHaveLength(0);
+    expect(snap.players[target]!.score).toBe(before + 5);
+    const assists = snap.events.filter((e) => e.kind === 'assist' && e.helperSlot === target);
+    expect(assists).toHaveLength(1);
+  });
+
+  it('revertAssist with no awards returns nothing-to-revert', () => {
+    const g = setup();
+    playFirstMove(g);
+    const res = g.revertAssist(1);
+    expect(res).toEqual({ ok: false, error: { kind: 'nothing-to-revert' } });
+  });
+
+  it('giveAssist when not in playing phase returns not-playing', () => {
+    const g = new Game({ seed: 1 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    const res = g.giveAssist(1);
+    expect(res).toEqual({ ok: false, error: { kind: 'not-playing' } });
   });
 });
-
 describe('startGame draw-for-order', () => {
   it('emits a DrawForOrderRecord as the first event', () => {
     const g = new Game({ seed: 12345 });
@@ -616,7 +567,7 @@ describe('startGame draw-for-order', () => {
     const snap = g.snapshot();
     const totalRacks = snap.players.reduce((s, p) => s + p.rack.length, 0);
     expect(totalRacks).toEqual(21);
-    expect(snap.bag.length).toEqual(104 - 21);
+    expect(snap.bag.length).toEqual(105 - 21);
   });
   it('records draws in slot order', () => {
     const g = new Game({ seed: 12345 });
@@ -626,7 +577,7 @@ describe('startGame draw-for-order', () => {
     expect(ev.draws.map((d) => d.slot)).toEqual([0, 1, 2]);
   });
   it('handles a tie via redraw without leaking tiles', () => {
-    const g = new Game({ seed: 7 });
+    const g = new Game({ seed: 2 });
     g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
     startAndDraw(g);
     const snap = g.snapshot();
@@ -638,7 +589,7 @@ describe('startGame draw-for-order', () => {
     const maxCount = Math.max(...counts.values());
     expect(maxCount).toBeGreaterThanOrEqual(2);
     // Game state remains consistent — no tile leaked through the redraw loop.
-    expect(snap.bag.length).toEqual(104 - 21);
+    expect(snap.bag.length).toEqual(105 - 21);
     // firstSlot resolves to a single slot (deterministic, even after tie-break).
     expect([0, 1, 2]).toContain(ev.firstSlot);
   });
