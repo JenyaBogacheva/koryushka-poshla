@@ -143,6 +143,16 @@ export type Player = {
 
 export type GamePhase = 'waiting' | 'drawing' | 'playing' | 'finished';
 
+export type HelpSuggestion = { slot: Slot; word: string };
+
+// Per-turn word hints: non-active players queue words privately; nothing is shown
+// (the active player sees only a count) until they press "Прошу помощь" to reveal
+// all of them to everyone at once. Reset whenever the turn advances; never logged.
+export type HelpState = {
+  revealed: boolean;
+  suggestions: HelpSuggestion[];
+};
+
 export type GameState = {
   phase: GamePhase;
   players: [Player, Player, Player];
@@ -155,6 +165,7 @@ export type GameState = {
   startedAt: number | null;
   drawState: DrawState | null;
   pendingSwap: SwapOffer | null;
+  help: HelpState;
 };
 
 export type GameSummary = {
@@ -192,6 +203,8 @@ export type ClientMessage =
   | { type: 'join'; slot: Slot; name: string; password: string }
   | { type: 'submitMove'; placements: Placement[] }
   | { type: 'giveAssist'; toSlot: Slot }
+  | { type: 'suggestWord'; word: string }
+  | { type: 'requestHelp' }
   | { type: 'claimBlank'; row: number; col: number; myTileId: string }
   | { type: 'pass' }
   | { type: 'redraw' }

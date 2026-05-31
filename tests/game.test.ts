@@ -528,6 +528,66 @@ describe('Game — giveAssist', () => {
     expect(res).toEqual({ ok: false, error: { kind: 'not-playing' } });
   });
 });
+
+describe('Game — word suggestions', () => {
+  function setup() {
+    const g = new Game({ seed: 1 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    startAndDraw(g);
+    return g;
+  }
+
+  it('queues per-turn hints (uppercased, in order) and reveals them once per turn', () => {
+    const g = setup();
+    const active = g.snapshot().turnIndex;
+    const helper = ((active + 1) % 3) as Slot;
+    const other = ((active + 2) % 3) as Slot;
+
+    expect(g.snapshot().help).toEqual({ revealed: false, suggestions: [] });
+
+    // Active player cannot suggest on their own turn; blank words are rejected.
+    expect(g.suggestWord(active, 'КОТ')).toEqual({ ok: false, error: { kind: 'cannot-suggest-own-turn' } });
+    expect(g.suggestWord(helper, '   ')).toEqual({ ok: false, error: { kind: 'empty-word' } });
+
+    expect(g.suggestWord(helper, 'кот')).toEqual({ ok: true });
+    expect(g.suggestWord(helper, 'дом')).toEqual({ ok: true });
+    expect(g.suggestWord(other, 'сыр')).toEqual({ ok: true });
+
+    // Stored uppercased, insertion order, still hidden.
+    expect(g.snapshot().help.suggestions).toEqual([
+      { slot: helper, word: 'КОТ' },
+      { slot: helper, word: 'ДОМ' },
+      { slot: other, word: 'СЫР' },
+    ]);
+    expect(g.snapshot().help.revealed).toBe(false);
+
+    // Only the active player can reveal.
+    expect(g.requestHelp(helper)).toEqual({ ok: false, error: { kind: 'not-your-turn' } });
+    expect(g.requestHelp(active)).toEqual({ ok: true });
+    expect(g.snapshot().help.revealed).toBe(true);
+
+    // After the reveal, new suggestions wait for the next turn.
+    expect(g.suggestWord(helper, 'мяч')).toEqual({ ok: false, error: { kind: 'help-already-revealed' } });
+  });
+
+  it('clears suggestions when the turn advances', () => {
+    const g = setup();
+    const active = g.snapshot().turnIndex;
+    const helper = ((active + 1) % 3) as Slot;
+    expect(g.suggestWord(helper, 'кот')).toEqual({ ok: true });
+    g.requestHelp(active);
+    expect(g.snapshot().help.suggestions).toHaveLength(1);
+    g.passTurn(active);
+    expect(g.snapshot().help).toEqual({ revealed: false, suggestions: [] });
+  });
+
+  it('rejects suggestions when not in playing phase', () => {
+    const g = new Game({ seed: 1 });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    expect(g.suggestWord(1, 'кот')).toEqual({ ok: false, error: { kind: 'not-playing' } });
+    expect(g.requestHelp(0)).toEqual({ ok: false, error: { kind: 'not-playing' } });
+  });
+});
 describe('startGame draw-for-order', () => {
   it('emits a DrawForOrderRecord as the first event', () => {
     const g = new Game({ seed: 12345 });

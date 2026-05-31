@@ -184,3 +184,9 @@ export function sendSubmitMove(placements: Placement[]): void {
 export function sendGiveAssist(toSlot: Slot): void {
   send({ type: 'giveAssist', toSlot });
 }
+export function sendSuggestWord(word: string): void {
+  send({ type: 'suggestWord', word });
+}
+export function sendRequestHelp(): void {
+  send({ type: 'requestHelp' });
+}

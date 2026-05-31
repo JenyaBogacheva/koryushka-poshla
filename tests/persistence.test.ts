@@ -34,6 +34,7 @@ const sampleState = (): GameState => ({
   startedAt: 1_700_000_000_000,
   drawState: null,
   pendingSwap: null,
+  help: { revealed: false, suggestions: [] },
 });
 
 describe('persistence', () => {
