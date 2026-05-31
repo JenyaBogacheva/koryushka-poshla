@@ -30,6 +30,12 @@ export function isCyrillicLetter(value: string): boolean {
   return VOWELS.has(value) || CONSONANTS.has(value) || SIGNS.has(value);
 }
 
+export function countCyrillicLetters(value: string): number {
+  let n = 0;
+  for (const ch of value.toUpperCase()) if (isCyrillicLetter(ch)) n++;
+  return n;
+}
+
 /**
  * True iff a tile with `tileLetter` may be played as `playedAs`.
  * Identity is always allowed; named substitutions are allowed one-way only.

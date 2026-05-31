@@ -5,7 +5,7 @@ import { createEmptyBoard, applyPlacements, isEmpty, extractWordsFormed } from '
 import { validateMove, type MoveError } from './moves.js';
 import { scoreMove } from './scoring.js';
 import { checkWords } from './dictionary.js';
-import { compareLetterOrder } from './letters.js';
+import { compareLetterOrder, countCyrillicLetters } from './letters.js';
 
 export type GameOpts = { seed: number };
 
@@ -22,6 +22,15 @@ export type PreviewResult =
       dictionaryWarnings: string[];
     }
   | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } };
+
+const SWAP_MIN_WORD_LEN = 7;
+const SWAP_PHRASES = [
+  'Какое крутое слово!',
+  'Вот это да!',
+  'Ну и ну!',
+  'Вот это слово так слово!',
+  'Какая красота!',
+];
 
 export class Game {
   private state: GameState;
@@ -243,6 +252,30 @@ export class Game {
     this.state.players[toSlot]!.score += 5;
     this.state.events.push({ kind: 'assist', helperSlot: toSlot, points: 5, timestamp: Date.now() });
     return { ok: true };
+  }
+
+  /**
+   * Offer to trade one of your tiles for one of another player's, on your turn.
+   * Honor-system "cool word" gate: the declared word must be ≥ 7 Cyrillic letters,
+   * but is never verified. Stores a pending offer; the target responds via respondSwap.
+   */
+  offerSwap(fromSlot: Slot, toSlot: Slot, giveTileId: string, takeTileId: string, word: string): void {
+    this.assertTurn(fromSlot);
+    if (this.state.pendingSwap !== null) throw new Error('Обмен уже предложен');
+    if (toSlot === fromSlot || (toSlot !== 0 && toSlot !== 1 && toSlot !== 2)) {
+      throw new Error('Неверный игрок для обмена');
+    }
+    const target = this.state.players[toSlot]!;
+    if (!target.rackVisible) throw new Error('Стойка игрока скрыта');
+    const from = this.state.players[fromSlot]!;
+    if (!from.rack.some((t) => t.id === giveTileId)) throw new Error('Вашей плитки нет на стойке');
+    if (!target.rack.some((t) => t.id === takeTileId)) throw new Error('Плитки игрока нет на стойке');
+    if (countCyrillicLetters(word) < SWAP_MIN_WORD_LEN) {
+      throw new Error('Слово должно быть не короче 7 букв');
+    }
+    // Deterministic phrase choice (engine must not call Math.random); rotates per event.
+    const phrase = SWAP_PHRASES[this.state.events.length % SWAP_PHRASES.length]!;
+    this.state.pendingSwap = { fromSlot, toSlot, giveTileId, takeTileId, word, phrase, createdAt: Date.now() };
   }
 
   previewMove(slot: Slot, placements: Placement[]): PreviewResult {

@@ -750,3 +750,63 @@ describe('Game.revertLastTurn — silent revert (no log trace)', () => {
     expect(g2.snapshot().events).toHaveLength(eventsBefore);
   });
 });
+
+describe('Game — offerSwap', () => {
+  // The current player offers a tile from their rack for a tile from the next player's rack.
+  function setup() {
+    const g = makeReadyGame(7);
+    const s = g.snapshot();
+    const from = s.turnIndex;
+    const to = nextInTurnOrder(s.turnOrder, from);
+    const giveTileId = s.players[from]!.rack[0]!.id;
+    const takeTileId = s.players[to]!.rack[0]!.id;
+    return { g, from, to, giveTileId, takeTileId };
+  }
+  const WORD = 'КОРЮШКА'; // 7 letters
+
+  it('stores a pending swap on a valid offer', () => {
+    const { g, from, to, giveTileId, takeTileId } = setup();
+    g.offerSwap(from, to, giveTileId, takeTileId, WORD);
+    const ps = g.snapshot().pendingSwap;
+    expect(ps).not.toBeNull();
+    expect(ps!.fromSlot).toBe(from);
+    expect(ps!.toSlot).toBe(to);
+    expect(ps!.giveTileId).toBe(giveTileId);
+    expect(ps!.takeTileId).toBe(takeTileId);
+    expect(ps!.word).toBe(WORD);
+    expect(ps!.phrase.length).toBeGreaterThan(0);
+  });
+
+  it('rejects an offer when it is not the offerer\'s turn', () => {
+    const { g, from, to, giveTileId, takeTileId } = setup();
+    expect(() => g.offerSwap(to, from, takeTileId, giveTileId, WORD)).toThrow();
+  });
+
+  it('rejects an offer to a player whose rack is hidden', () => {
+    const { g, from, to, giveTileId, takeTileId } = setup();
+    g.toggleRackVisibility(to, false);
+    expect(() => g.offerSwap(from, to, giveTileId, takeTileId, WORD)).toThrow();
+  });
+
+  it('rejects a word shorter than 7 letters', () => {
+    const { g, from, to, giveTileId, takeTileId } = setup();
+    expect(() => g.offerSwap(from, to, giveTileId, takeTileId, 'КОТ')).toThrow();
+  });
+
+  it('rejects a tile not on the relevant rack', () => {
+    const { g, from, to, takeTileId } = setup();
+    expect(() => g.offerSwap(from, to, 'no-such-tile', takeTileId, WORD)).toThrow();
+  });
+
+  it('rejects a second offer while one is pending', () => {
+    const { g, from, to, giveTileId, takeTileId } = setup();
+    g.offerSwap(from, to, giveTileId, takeTileId, WORD);
+    expect(() => g.offerSwap(from, to, giveTileId, takeTileId, WORD)).toThrow();
+  });
+
+  it('does not advance the turn on offer', () => {
+    const { g, from, to, giveTileId, takeTileId } = setup();
+    g.offerSwap(from, to, giveTileId, takeTileId, WORD);
+    expect(g.snapshot().turnIndex).toBe(from);
+  });
+});
