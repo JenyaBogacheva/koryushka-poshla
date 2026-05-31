@@ -278,6 +278,46 @@ export class Game {
     this.state.pendingSwap = { fromSlot, toSlot, giveTileId, takeTileId, word, phrase, createdAt: Date.now() };
   }
 
+  /**
+   * Target accepts or declines the pending swap. On accept the two tiles change
+   * racks, the offerer pays −5 and the giver earns +5, and a SwapRecord is logged.
+   * Like the +5 helping hand, this does not touch single-step undo.
+   */
+  respondSwap(slot: Slot, accept: boolean): void {
+    const offer = this.state.pendingSwap;
+    if (offer === null) throw new Error('Нет предложенного обмена');
+    if (slot !== offer.toSlot) throw new Error('Ответить может только адресат');
+    if (!accept) {
+      this.state.pendingSwap = null;
+      return;
+    }
+    const from = this.state.players[offer.fromSlot]!;
+    const to = this.state.players[offer.toSlot]!;
+    const giveIdx = from.rack.findIndex((t) => t.id === offer.giveTileId);
+    const takeIdx = to.rack.findIndex((t) => t.id === offer.takeTileId);
+    if (giveIdx === -1 || takeIdx === -1) {
+      // A tile moved since the offer (e.g. claimBlank) — abort cleanly.
+      this.state.pendingSwap = null;
+      throw new Error('Плитки изменились — обмен отменён');
+    }
+    const giveTile = from.rack.splice(giveIdx, 1)[0]!;
+    const takeTile = to.rack.splice(takeIdx, 1)[0]!;
+    from.rack.push(takeTile);
+    to.rack.push(giveTile);
+    from.score -= 5;
+    to.score += 5;
+    this.state.events.push({
+      kind: 'swap',
+      fromSlot: offer.fromSlot,
+      toSlot: offer.toSlot,
+      word: offer.word,
+      gaveLetter: giveTile.isBlank ? '' : giveTile.letter,
+      tookLetter: takeTile.isBlank ? '' : takeTile.letter,
+      timestamp: Date.now(),
+    });
+    this.state.pendingSwap = null;
+  }
+
   previewMove(slot: Slot, placements: Placement[]): PreviewResult {
     if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
     if (slot !== this.state.turnIndex) return { ok: false, error: { kind: 'not-your-turn' } };

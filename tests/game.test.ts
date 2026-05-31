@@ -810,3 +810,56 @@ describe('Game — offerSwap', () => {
     expect(g.snapshot().turnIndex).toBe(from);
   });
 });
+
+describe('Game — respondSwap', () => {
+  function offer(seed = 7) {
+    const g = makeReadyGame(seed);
+    const s = g.snapshot();
+    const from = s.turnIndex;
+    const to = nextInTurnOrder(s.turnOrder, from);
+    const giveTile = s.players[from]!.rack[0]!;
+    const takeTile = s.players[to]!.rack[0]!;
+    g.offerSwap(from, to, giveTile.id, takeTile.id, 'КОРЮШКА');
+    return { g, from, to, giveTile, takeTile };
+  }
+
+  it('accept exchanges the tiles, applies −5/+5, logs a swap, clears the offer', () => {
+    const { g, from, to, giveTile, takeTile } = offer();
+    g.respondSwap(to, true);
+    const s = g.snapshot();
+    expect(s.pendingSwap).toBeNull();
+    expect(s.players[from]!.rack.some((t) => t.id === takeTile.id)).toBe(true);
+    expect(s.players[from]!.rack.some((t) => t.id === giveTile.id)).toBe(false);
+    expect(s.players[to]!.rack.some((t) => t.id === giveTile.id)).toBe(true);
+    expect(s.players[from]!.score).toBe(-5);
+    expect(s.players[to]!.score).toBe(5);
+    const last = s.events[s.events.length - 1]!;
+    expect(last.kind).toBe('swap');
+  });
+
+  it('accept does not advance the turn', () => {
+    const { g, from } = offer();
+    g.respondSwap(g.snapshot().pendingSwap!.toSlot, true);
+    expect(g.snapshot().turnIndex).toBe(from);
+  });
+
+  it('decline clears the offer and logs nothing', () => {
+    const { g, to } = offer();
+    const before = g.snapshot().events.length;
+    g.respondSwap(to, false);
+    const s = g.snapshot();
+    expect(s.pendingSwap).toBeNull();
+    expect(s.events.length).toBe(before);
+    expect(s.players[s.turnIndex]!.score).toBe(0);
+  });
+
+  it('rejects a response from a slot other than the target', () => {
+    const { g, from } = offer();
+    expect(() => g.respondSwap(from, true)).toThrow();
+  });
+
+  it('throws when there is no pending offer', () => {
+    const g = makeReadyGame(7);
+    expect(() => g.respondSwap(0, true)).toThrow();
+  });
+});
