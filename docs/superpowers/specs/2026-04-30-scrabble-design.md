@@ -33,6 +33,7 @@ A real-time, online, three-player Russian Scrabble game ("Эрудит") for a f
 | **Revert last turn** | The player who just submitted an action (place / pass / redraw / claimBlank) may revert it, restoring the pre-action state. The window closes the moment any other player submits any action. One level of undo only; not persisted across server restarts. |
 | **Blank-swap ("claim blank")** | When a blank tile is on the board representing letter X, any player who has a real X tile in their rack may, on their own turn (before submitting a move), claim the blank: the real X takes the cell, the blank moves to the player's rack. **First-come-first-served** — first valid claim wins. |
 | **Helping hand (+5)** | Each player's card shows a **fish + name** button for each of the **other two** players, available throughout play and not tied to any turn. Pressing it awards that player **+5** immediately ("помог +5"). No move required, no cap, no attribution to a specific move, no undo — family honor system. Each award is logged as an `assist` event; the "helper" end-game badge goes to whoever received the most awards. |
+| **Cool-word swap** | On your turn (before submitting), you may offer to trade one of your rack tiles for a specific tile from one opponent whose rack is visible, declaring a "cool word" of ≥ 7 letters. The word is self-declared and never verified. If the opponent accepts, the tiles trade, you get **−5** and they get **+5**, and a `swap` event is logged. Declining clears the offer. The swap does not consume your turn. See `2026-06-01-cool-word-swap-design.md`. |
 | **Challenges** | None — there is no challenge mechanic. The dictionary advisory replaces it. |
 | **Time limits** | None. |
 | **Game end** | No automatic end. Any player can end the game at any time via an "End game" button (single confirmation modal to avoid accidents). Scores are taken as-is — no remaining-tile-point adjustment. Highest score wins; ties are ties. |
@@ -99,6 +100,8 @@ scrabble/
 │   │   ├── ActionBar.tsx           # Submit / Swap / Pass / Redraw / Toggle visibility / End game
 │   │   ├── BlankPicker.tsx         # Dialog when placing a blank
 │   │   ├── SubstitutionPicker.tsx  # Dialog when placing any letter in a substitution pair (Ё↔Е, Ъ↔Ь, Щ↔Ш, Й↔И): pick itself or partner
+│   │   ├── SwapDialog.tsx          # Offer dialog: pick opponent + two tiles + cool word
+│   │   ├── SwapBanner.tsx          # Pending-swap banner: accept / decline / cancel
 │   │   ├── HistoryPanel.tsx        # List of past games (date, scores, winner)
 │   │   ├── SlotPicker.tsx          # First-visit slot + name entry
 │   │   └── DisconnectOverlay.tsx   # "Waiting for {name}…" pause screen
