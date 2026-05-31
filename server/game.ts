@@ -271,7 +271,7 @@ export class Game {
     if (!from.rack.some((t) => t.id === giveTileId)) throw new Error('Вашей плитки нет на стойке');
     if (!target.rack.some((t) => t.id === takeTileId)) throw new Error('Плитки игрока нет на стойке');
     if (countCyrillicLetters(word) < SWAP_MIN_WORD_LEN) {
-      throw new Error('Слово должно быть не короче 7 букв');
+      throw new Error(`Слово должно быть не короче ${SWAP_MIN_WORD_LEN} букв`);
     }
     // Deterministic phrase choice (engine must not call Math.random); rotates per event.
     const phrase = SWAP_PHRASES[this.state.events.length % SWAP_PHRASES.length]!;
