@@ -120,6 +120,20 @@ function renderEvent(e: GameEvent, nameOf: (s: number) => string): React.ReactNo
         </div>
       );
     }
+    case 'swap': {
+      const fromName = nameOf(e.fromSlot);
+      const fem = isFemName(fromName);
+      const gave = e.gaveLetter || '★';
+      const took = e.tookLetter || '★';
+      return (
+        <div className="flex items-start gap-2">
+          <FishStamp slot={e.fromSlot} />
+          <div className="flex-1 min-w-0">
+            <PlayerName slot={e.fromSlot} nameOf={nameOf} /> ↔ <PlayerName slot={e.toSlot} nameOf={nameOf} />: отдал{fem ? 'а' : ''} {gave}, взял{fem ? 'а' : ''} {took} <span className="text-ink-soft">— ради «{e.word}»</span> <span className="tabular-nums font-bold">−5</span>/<span className="tabular-nums font-bold">+5</span>
+          </div>
+        </div>
+      );
+    }
     case 'endGame': {
       const cause =
         e.cause === 'playerEnded' ? `${nameOf(e.slot)} завершил${isFemName(nameOf(e.slot)) ? 'а' : ''}`
