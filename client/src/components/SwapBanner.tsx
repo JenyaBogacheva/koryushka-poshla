@@ -1,6 +1,7 @@
 import type { GameState, Slot } from '@shared/types';
 import { sendRespondSwap, sendCancelSwap } from '../ws.js';
 import { fishForSlot } from '../fish.js';
+import { isFemName } from '../gender.js';
 
 type Props = { state: GameState; mySlot: Slot };
 
@@ -37,7 +38,7 @@ export function SwapBanner({ state, mySlot }: Props) {
                 className="font-heading rounded-full px-4 py-2 text-base font-semibold text-white shadow"
                 style={{ background: fromFish.accent }}
               >
-                Согласна (+5)
+                Согласн{isFemName(nameOf(offer.toSlot)) ? 'а' : 'ен'} (+5)
               </button>
               <button
                 type="button"
