@@ -205,6 +205,7 @@ export class Game {
     const validation = validateMove(this.state.board, player.rack, placements, isFirst);
     if (!validation.ok) return { ok: false, error: validation.error };
 
+    this.state.pendingSwap = null;
     this.maybeClearRevertOnActionBy(slot);
     const preStateForRevert = structuredClone(this.state);
 
@@ -319,6 +320,13 @@ export class Game {
     this.state.pendingSwap = null;
   }
 
+  cancelSwap(slot: Slot): void {
+    const offer = this.state.pendingSwap;
+    if (offer === null) throw new Error('Нет предложенного обмена');
+    if (slot !== offer.fromSlot) throw new Error('Отменить может только предложивший');
+    this.state.pendingSwap = null;
+  }
+
   previewMove(slot: Slot, placements: Placement[]): PreviewResult {
     if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
     if (slot !== this.state.turnIndex) return { ok: false, error: { kind: 'not-your-turn' } };
@@ -357,6 +365,7 @@ export class Game {
 
   passTurn(slot: Slot): void {
     this.assertTurn(slot);
+    this.state.pendingSwap = null;
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
     this.state.turnIndex = this.nextSlot(slot);
@@ -375,6 +384,7 @@ export class Game {
     if (this.bag.tiles.length === 0) {
       throw new Error('Bag is empty — cannot swap');
     }
+    this.state.pendingSwap = null;
     const tileCount = player.rack.length;
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
@@ -451,6 +461,7 @@ export class Game {
 
   endGame(slot: Slot): void {
     if (this.state.phase !== 'playing') return; // idempotent if already finished
+    this.state.pendingSwap = null;
     this.maybeClearRevertOnActionBy(slot);
     this.lastSnapshot = null; // ending the game finalizes everything
     this.state.phase = 'finished';

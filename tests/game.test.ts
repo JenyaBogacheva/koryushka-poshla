@@ -869,3 +869,37 @@ describe('Game — respondSwap', () => {
     expect(() => g.respondSwap(to, true)).toThrow();
   });
 });
+
+describe('Game — cancelSwap and stale-offer clearing', () => {
+  function offer(seed = 7) {
+    const g = makeReadyGame(seed);
+    const s = g.snapshot();
+    const from = s.turnIndex;
+    const to = nextInTurnOrder(s.turnOrder, from);
+    g.offerSwap(from, to, s.players[from]!.rack[0]!.id, s.players[to]!.rack[0]!.id, 'КОРЮШКА');
+    return { g, from, to };
+  }
+
+  it('initiator can cancel their own offer', () => {
+    const { g, from } = offer();
+    g.cancelSwap(from);
+    expect(g.snapshot().pendingSwap).toBeNull();
+  });
+
+  it('a non-initiator cannot cancel', () => {
+    const { g, to } = offer();
+    expect(() => g.cancelSwap(to)).toThrow();
+  });
+
+  it('passing clears a pending offer', () => {
+    const { g, from } = offer();
+    g.passTurn(from);
+    expect(g.snapshot().pendingSwap).toBeNull();
+  });
+
+  it('ending the game clears a pending offer', () => {
+    const { g, from } = offer();
+    g.endGame(from);
+    expect(g.snapshot().pendingSwap).toBeNull();
+  });
+});
