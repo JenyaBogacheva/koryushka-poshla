@@ -862,4 +862,10 @@ describe('Game — respondSwap', () => {
     const g = makeReadyGame(7);
     expect(() => g.respondSwap(0, true)).toThrow();
   });
+
+  it('rejects a response once the game is finished', () => {
+    const { g, from, to } = offer();
+    g.endGame(from);
+    expect(() => g.respondSwap(to, true)).toThrow();
+  });
 });

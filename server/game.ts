@@ -284,6 +284,7 @@ export class Game {
    * Like the +5 helping hand, this does not touch single-step undo.
    */
   respondSwap(slot: Slot, accept: boolean): void {
+    if (this.state.phase !== 'playing') throw new Error('Игра не в процессе');
     const offer = this.state.pendingSwap;
     if (offer === null) throw new Error('Нет предложенного обмена');
     if (slot !== offer.toSlot) throw new Error('Ответить может только адресат');
