@@ -33,6 +33,7 @@ const sampleState = (): GameState => ({
   events: [],
   startedAt: 1_700_000_000_000,
   drawState: null,
+  pendingSwap: null,
 });
 
 describe('persistence', () => {

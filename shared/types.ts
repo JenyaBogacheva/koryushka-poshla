@@ -83,6 +83,26 @@ export type EndGameRecord = {
   timestamp: number;
 };
 
+export type SwapOffer = {
+  fromSlot: Slot;        // initiator (−5 on accept)
+  toSlot: Slot;          // chosen giver (+5 on accept)
+  giveTileId: string;    // initiator's tile → moves to target on accept
+  takeTileId: string;    // target's tile → moves to initiator on accept
+  word: string;          // declared cool word (≥ 7 Cyrillic letters)
+  phrase: string;        // celebratory line chosen server-side
+  createdAt: number;
+};
+
+export type SwapRecord = {
+  kind: 'swap';
+  fromSlot: Slot;
+  toSlot: Slot;
+  word: string;
+  gaveLetter: Letter;    // letter the initiator gave away ('' for a blank)
+  tookLetter: Letter;    // letter the initiator received ('' for a blank)
+  timestamp: number;
+};
+
 export type DrawState = {
   round: number;            // 1 = initial three-way; 2+ = tiebreak rounds
   candidates: Slot[];       // slots being ordered among themselves this round (subset of [0,1,2])
@@ -105,7 +125,8 @@ export type GameEvent =
   | RedrawRecord
   | ClaimBlankRecord
   | EndGameRecord
-  | DrawForOrderRecord;
+  | DrawForOrderRecord
+  | SwapRecord;
 
 export type GameEventKind = GameEvent['kind'];
 
@@ -133,6 +154,7 @@ export type GameState = {
   events: GameEvent[];
   startedAt: number | null;
   drawState: DrawState | null;
+  pendingSwap: SwapOffer | null;
 };
 
 export type GameSummary = {
@@ -174,6 +196,9 @@ export type ClientMessage =
   | { type: 'pass' }
   | { type: 'redraw' }
   | { type: 'swapAll' }
+  | { type: 'offerSwap'; toSlot: Slot; giveTileId: string; takeTileId: string; word: string }
+  | { type: 'respondSwap'; accept: boolean }
+  | { type: 'cancelSwap' }
   | { type: 'toggleRackVisible'; visible: boolean }
   | { type: 'endGame' }
   | { type: 'revertLastTurn' }

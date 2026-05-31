@@ -104,6 +104,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       events: [],
       startedAt: null,
       drawState: null,
+      pendingSwap: null,
     };
   }
 

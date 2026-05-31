@@ -56,6 +56,7 @@ export function PastGamesDetail({ id }: { id: string }) {
     events: archive.events,
     startedAt: archive.startedAt,
     drawState: null,
+    pendingSwap: null,
   };
 
   const scoresMap: Record<Slot, number> = {

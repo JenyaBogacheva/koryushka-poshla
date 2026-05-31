@@ -57,6 +57,7 @@ export class Game {
       events: [],
       startedAt: null,
       drawState: null,
+      pendingSwap: null,
     };
   }
 
