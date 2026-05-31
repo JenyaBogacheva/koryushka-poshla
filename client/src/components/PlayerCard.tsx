@@ -4,6 +4,7 @@ import { Rack } from './Rack.js';
 import { BadgeStrip } from './BadgeStrip.js';
 import { FishBadge } from './FishBadge.js';
 import { ConfirmModal } from './ConfirmModal.js';
+import { SwapDialog } from './SwapDialog.js';
 import { useGameStore } from '../store.js';
 import { sendSubmitMove, sendPass, sendSwapAll, sendRedraw, sendGiveAssist } from '../ws.js';
 import { perMoveBadges, endGameBadges } from '@shared/badges.js';
@@ -26,6 +27,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   const bagLeft = useGameStore((s) => s.state?.bag.length ?? 0);
   const [passOpen, setPassOpen] = useState(false);
   const [swapAllOpen, setSwapAllOpen] = useState(false);
+  const [swapOpen, setSwapOpen] = useState(false);
 
   const badges: BadgeKind[] = (() => {
     const live: BadgeKind[] = [];
@@ -202,6 +204,13 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
               Поменять буквы{player.redrawEligible ? ' · бесплатно' : ''}
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setSwapOpen(true)}
+            className="rounded-full bg-ink/10 px-4 py-2 text-sm hover:bg-ink/20"
+          >
+            Обмен буквой
+          </button>
         </div>
       )}
       <ConfirmModal
@@ -230,6 +239,14 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
         }}
         onCancel={() => setSwapAllOpen(false)}
       />
+      {swapOpen && (
+        <SwapDialog
+          mySlot={player.slot}
+          myRack={player.rack}
+          opponents={(allPlayers as Player[]).filter((p) => p.slot !== player.slot)}
+          onClose={() => setSwapOpen(false)}
+        />
+      )}
     </div>
   );
 }
