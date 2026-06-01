@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import type { DrawForOrderRecord, Slot } from '@shared/types';
 import { fishForSlot } from '../fish.js';
+import { drawTurnOrder } from '../drawOrder.js';
 
 type Props = {
   ev: DrawForOrderRecord;
@@ -9,9 +10,9 @@ type Props = {
 };
 
 export function DrawResultReveal({ ev, nameOf, onDismiss }: Props) {
-  // Turn order: firstSlot, (firstSlot+1)%3, (firstSlot+2)%3
-  const ordered = [0, 1, 2].map((i) => {
-    const slot = ((ev.firstSlot + i) % 3) as Slot;
+  // Turn order is decided by the draw: rank 1 → 3, sorted by drawn letter.
+  const order = drawTurnOrder(ev);
+  const ordered = order.map((slot, i) => {
     const draw = ev.draws.find((d) => d.slot === slot) ?? null;
     return { slot, letter: draw?.letter ?? '★', position: i + 1 };
   });
@@ -36,7 +37,7 @@ export function DrawResultReveal({ ev, nameOf, onDismiss }: Props) {
         <h2 className="font-heading font-bold leading-none" style={{ fontSize: 36 }}>
           Жребий брошен
         </h2>
-        <p className="mt-2 text-sm italic text-ink-soft">первым ходит {nameOf(ev.firstSlot)}</p>
+        <p className="mt-2 text-sm italic text-ink-soft">первым ходит {nameOf(order[0])}</p>
 
         <div className="mt-6 flex items-end justify-center gap-3">
           {ordered.map((p, i) => {
@@ -104,7 +105,7 @@ export function DrawResultReveal({ ev, nameOf, onDismiss }: Props) {
             type="button"
             onClick={onDismiss}
             className="font-heading rounded-full px-7 py-3 text-xl font-semibold tracking-wide text-white shadow-[0_2px_0_rgba(60,50,35,0.06),0_6px_18px_rgba(60,50,35,0.10)]"
-            style={{ background: fishForSlot(ev.firstSlot).accent }}
+            style={{ background: fishForSlot(order[0]).accent }}
           >
             К игре
           </button>

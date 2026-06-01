@@ -11,6 +11,7 @@ import { LetterPicker } from './components/LetterPicker.js';
 import { WaitingRoom } from './components/WaitingRoom.js';
 import { ActionBar } from './components/ActionBar.js';
 import { MoveLog } from './components/MoveLog.js';
+import { SwapBanner } from './components/SwapBanner.js';
 import { BagIndicator } from './components/BagIndicator.js';
 import { CYRILLIC_LETTERS } from './letters.js';
 import { PastGamesList } from './components/PastGamesList.js';
@@ -212,6 +213,7 @@ export function App() {
           </header>
           <Board board={state.board} size={boardSquareSize} />
           <ErrorBanner />
+          <SwapBanner state={state} mySlot={identity.slot} />
         </div>
         <aside className="flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-y-auto pr-1">
           <BagIndicator

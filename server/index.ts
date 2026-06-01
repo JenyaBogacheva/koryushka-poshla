@@ -97,12 +97,15 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         canRevert: false,
       })) as unknown as GameState['players'],
       turnIndex: 0,
+      turnOrder: [0, 1, 2],
       board: createEmptyBoard(),
       bag: [],
       centerBonusUsed: false,
       events: [],
       startedAt: null,
       drawState: null,
+      pendingSwap: null,
+      help: { revealed: false, suggestions: [] },
     };
   }
 
@@ -217,21 +220,27 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'submitMove':
           handleSubmitMove(slot, msg, ws);
           return;
-        case 'attributeHelper': {
-          if (game === null) {
-            sendMsg(ws, { type: 'error', message: 'Game not started' });
-            return;
-          }
-          const result = game.attributeHelper(slot, msg.helperSlot);
-          if (!result.ok) {
-            sendMsg(ws, { type: 'error', message: humanReadableReason(result.error) });
-            return;
-          }
-          try {
-            saveActiveGame(dataDir, game.snapshot());
-          } catch (err) {
-            console.error('[scrabble] saveActiveGame failed:', err);
-          }
+        case 'giveAssist': {
+          if (game === null) { sendMsg(ws, { type: 'error', message: 'Game not started' }); return; }
+          const result = game.giveAssist(msg.toSlot);
+          if (!result.ok) { sendMsg(ws, { type: 'error', message: humanReadableReason(result.error) }); return; }
+          try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
+          broadcastState();
+          return;
+        }
+        case 'suggestWord': {
+          if (game === null) { sendMsg(ws, { type: 'error', message: 'Game not started' }); return; }
+          const result = game.suggestWord(slot, msg.word);
+          if (!result.ok) { sendMsg(ws, { type: 'error', message: humanReadableReason(result.error) }); return; }
+          try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
+          broadcastState();
+          return;
+        }
+        case 'requestHelp': {
+          if (game === null) { sendMsg(ws, { type: 'error', message: 'Game not started' }); return; }
+          const result = game.requestHelp(slot);
+          if (!result.ok) { sendMsg(ws, { type: 'error', message: humanReadableReason(result.error) }); return; }
+          try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
           broadcastState();
           return;
         }
@@ -243,6 +252,15 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
           return;
         case 'swapAll':
           handleEngineAction(ws, () => game!.swapAllAndPass(slot));
+          return;
+        case 'offerSwap':
+          handleEngineAction(ws, () => game!.offerSwap(slot, msg.toSlot, msg.giveTileId, msg.takeTileId, msg.word));
+          return;
+        case 'respondSwap':
+          handleEngineAction(ws, () => game!.respondSwap(slot, msg.accept));
+          return;
+        case 'cancelSwap':
+          handleEngineAction(ws, () => game!.cancelSwap(slot));
           return;
         case 'claimBlank':
           handleEngineAction(ws, () => game!.claimBlank(slot, msg.row, msg.col, msg.myTileId));
@@ -449,8 +467,9 @@ function humanReadableReason(error: { kind: string }): string {
     case 'not-your-turn': return 'Сейчас не ваш ход';
     case 'not-playing': return 'Игра не в процессе';
     case 'invalid-helper': return 'Неверный помощник';
-    case 'no-attributable-move': return 'Нет хода для приписывания помощи';
-    case 'not-your-move': return 'Это не ваш ход';
+    case 'cannot-suggest-own-turn': return 'Нельзя подсказывать в свой ход';
+    case 'help-already-revealed': return 'Подсказки уже открыты';
+    case 'empty-word': return 'Пустое слово';
     case 'no-placements': return 'Нет плиток для хода';
     case 'out-of-range': return 'Плитка вне поля';
     case 'duplicate-target': return 'Две плитки в одну клетку';

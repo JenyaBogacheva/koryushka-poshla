@@ -188,6 +188,21 @@ export function sendPreviewMove(placements: Placement[]): void {
 export function sendSubmitMove(placements: Placement[]): void {
   send({ type: 'submitMove', placements });
 }
-export function sendAttributeHelper(helperSlot: Slot | null): void {
-  send({ type: 'attributeHelper', helperSlot });
+export function sendGiveAssist(toSlot: Slot): void {
+  send({ type: 'giveAssist', toSlot });
+}
+export function sendSuggestWord(word: string): void {
+  send({ type: 'suggestWord', word });
+}
+export function sendRequestHelp(): void {
+  send({ type: 'requestHelp' });
+}
+export function sendOfferSwap(toSlot: Slot, giveTileId: string, takeTileId: string, word: string): void {
+  send({ type: 'offerSwap', toSlot, giveTileId, takeTileId, word });
+}
+export function sendRespondSwap(accept: boolean): void {
+  send({ type: 'respondSwap', accept });
+}
+export function sendCancelSwap(): void {
+  send({ type: 'cancelSwap' });
 }

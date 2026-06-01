@@ -112,9 +112,8 @@ async function threeJoined() {
     waitFor(c, isStateWithPhase('playing')),
   ]);
   const bs = [a, b, c] as const;
-  const first = snapA.state.turnIndex;
-  const second = ((first + 1) % 3) as Slot;
-  const third = ((first + 2) % 3) as Slot;
+  // Turn order is decided by the draw, not seat order.
+  const [first, second, third] = snapA.state.turnOrder;
   return { ...ctx, a, b, c, bs, first, second, third };
 }
 
@@ -249,5 +248,66 @@ describe('M4b server: action handlers', () => {
       expect(bs[first].messages.some((m) => m.type === 'liveDraft')).toBe(false);
       expect(bs[third].messages.some((m) => m.type === 'liveDraft')).toBe(false);
     } finally { await server.close(); }
+  });
+});
+
+describe('integration — cool-word swap', () => {
+  function latestState(b: Buffered) {
+    return b.messages.filter((m): m is Extract<ServerMessage, { type: 'state' }> => m.type === 'state').at(-1)!;
+  }
+
+  it('offer then accept moves tiles and applies −5/+5', async () => {
+    const { server, url } = await freshServer();
+    const bs = [await buffered(url), await buffered(url), await buffered(url)] as const;
+    join(bs[0], 0, 'A'); join(bs[1], 1, 'B'); join(bs[2], 2, 'C');
+    await driveDraws(bs);
+    await waitFor(bs[0], isStatePlaying());
+
+    const st = latestState(bs[0]).state;
+    const from = st.turnIndex;
+    const to = ((from + 1) % 3) as Slot;
+    const giveTileId = st.players[from]!.rack[0]!.id;
+    const takeTileId = st.players[to]!.rack[0]!.id;
+
+    send(bs[from], { type: 'offerSwap', toSlot: to, giveTileId, takeTileId, word: 'КОРЮШКА' });
+    await waitFor(bs[to], (m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state' && m.state.pendingSwap !== null);
+
+    send(bs[to], { type: 'respondSwap', accept: true });
+    await waitFor(bs[from], (m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state' && m.state.pendingSwap === null && m.state.players[from]!.score === -5);
+
+    const final = latestState(bs[from]).state;
+    expect(final.players[from]!.score).toBe(-5);
+    expect(final.players[to]!.score).toBe(5);
+    expect(final.players[from]!.rack.some((t) => t.id === takeTileId)).toBe(true);
+    expect(final.events.some((e) => e.kind === 'swap')).toBe(true);
+
+    await server.close();
+  });
+
+  it('offer then decline clears the offer with no score change', async () => {
+    const { server, url } = await freshServer();
+    const bs = [await buffered(url), await buffered(url), await buffered(url)] as const;
+    join(bs[0], 0, 'A'); join(bs[1], 1, 'B'); join(bs[2], 2, 'C');
+    await driveDraws(bs);
+    await waitFor(bs[0], isStatePlaying());
+
+    const st = latestState(bs[0]).state;
+    const from = st.turnIndex;
+    const to = ((from + 1) % 3) as Slot;
+    send(bs[from], { type: 'offerSwap', toSlot: to,
+      giveTileId: st.players[from]!.rack[0]!.id, takeTileId: st.players[to]!.rack[0]!.id, word: 'КОРЮШКА' });
+    await waitFor(bs[to], (m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state' && m.state.pendingSwap !== null);
+
+    send(bs[to], { type: 'respondSwap', accept: false });
+    await waitFor(bs[from], (m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state' && m.state.pendingSwap === null && m.state.events.length >= 1);
+
+    const final = latestState(bs[from]).state;
+    expect(final.players[from]!.score).toBe(0);
+    expect(final.players[to]!.score).toBe(0);
+    await server.close();
   });
 });

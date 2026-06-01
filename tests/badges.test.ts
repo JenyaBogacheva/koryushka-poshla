@@ -74,8 +74,9 @@ describe('perMoveBadges', () => {
 import { endGameBadges } from '@shared/badges.js';
 import type { AssistRecord, Slot } from '@shared/types';
 
-function assist(helpedSlot: Slot, helperSlot: Slot): AssistRecord {
-  return { kind: 'assist', helpedSlot, helperSlot, points: 5, forMoveIndex: 0, timestamp: 0 };
+// helperSlot is the player credited with the +5 help award.
+function assist(helperSlot: Slot): AssistRecord {
+  return { kind: 'assist', helperSlot, points: 5, timestamp: 0 };
 }
 
 describe('endGameBadges — places', () => {
@@ -118,7 +119,7 @@ describe('endGameBadges — places', () => {
 describe('endGameBadges — helper', () => {
   it('awards helper to single max-assist helper', () => {
     // helperSlot counts: 1 → 1, 2 → 2 → slot 2 wins.
-    const events = [assist(0, 1), assist(0, 2), assist(1, 2)];
+    const events = [assist(1), assist(2), assist(2)];
     const out = endGameBadges(events, { 0: 50, 1: 30, 2: 30 });
     expect(out[2]).toContain('helper');
     expect(out[0]).not.toContain('helper');
@@ -127,7 +128,7 @@ describe('endGameBadges — helper', () => {
 
   it('shares helper on tie', () => {
     // helperSlot counts: 0 → 1, 2 → 1 → tie between 0 and 2.
-    const events = [assist(1, 0), assist(1, 2)];
+    const events = [assist(0), assist(2)];
     const out = endGameBadges(events, { 0: 50, 1: 50, 2: 50 });
     expect(out[0]).toContain('helper');
     expect(out[2]).toContain('helper');
@@ -142,8 +143,8 @@ describe('endGameBadges — helper', () => {
   });
 
   it('place badge appears before helper in returned array', () => {
-    // assist(0, 1): helper is slot 1. Slot 1 has silver + helper.
-    const events = [assist(0, 1)];
+    // assist(1): helper is slot 1. Slot 1 has silver + helper.
+    const events = [assist(1)];
     const out = endGameBadges(events, { 0: 100, 1: 80, 2: 60 });
     expect(out[1]).toEqual(['silver', 'helper']);
   });
