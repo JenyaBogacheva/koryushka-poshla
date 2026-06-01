@@ -57,6 +57,7 @@ export function PastGamesDetail({ id }: { id: string }) {
     startedAt: archive.startedAt,
     drawState: null,
     pendingSwap: null,
+    help: { revealed: false, suggestions: [] },
   };
 
   const scoresMap: Record<Slot, number> = {

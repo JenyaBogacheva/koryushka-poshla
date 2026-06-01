@@ -67,6 +67,7 @@ export class Game {
       startedAt: null,
       drawState: null,
       pendingSwap: null,
+      help: { revealed: false, suggestions: [] },
     };
   }
 
@@ -79,6 +80,9 @@ export class Game {
     }
     if ((cloned as { pendingSwap?: unknown }).pendingSwap === undefined) {
       cloned.pendingSwap = null;
+    }
+    if ((cloned as { help?: unknown }).help === undefined) {
+      cloned.help = { revealed: false, suggestions: [] };
     }
     const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
     cloned.bag = bag.tiles;
@@ -198,6 +202,11 @@ export class Game {
     return order[(order.indexOf(slot) + 1) % order.length]!;
   }
 
+  // Per-turn word hints don't outlive the turn. Called wherever the turn advances.
+  private resetHelp(): void {
+    this.state.help = { revealed: false, suggestions: [] };
+  }
+
   submitMove(slot: Slot, placements: Placement[]): SubmitResult {
     if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
     if (slot !== this.state.turnIndex) return { ok: false, error: { kind: 'not-your-turn' } };
@@ -245,6 +254,7 @@ export class Game {
     this.state.events.push(moveRecord);
 
     this.state.turnIndex = this.nextSlot(slot);
+    this.resetHelp();
 
     this.armRevert(slot, preStateForRevert);
     return { ok: true, moveRecord, dictionaryWarnings };
@@ -255,6 +265,31 @@ export class Game {
     if (toSlot !== 0 && toSlot !== 1 && toSlot !== 2) return { ok: false, error: { kind: 'invalid-helper' } };
     this.state.players[toSlot]!.score += 5;
     this.state.events.push({ kind: 'assist', helperSlot: toSlot, points: 5, timestamp: Date.now() });
+    return { ok: true };
+  }
+
+  // Non-active players privately queue word hints for the current turn. Nothing is
+  // shown to anyone (the active player sees only a count) until they call requestHelp.
+  // Suggestions are per-turn — resetHelp() wipes them on every turn advance — and are
+  // never logged as events or surfaced in game history.
+  suggestWord(slot: Slot, word: string):
+    | { ok: true }
+    | { ok: false; error: { kind: 'not-playing' | 'cannot-suggest-own-turn' | 'help-already-revealed' | 'empty-word' } } {
+    if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
+    if (slot === this.state.turnIndex) return { ok: false, error: { kind: 'cannot-suggest-own-turn' } };
+    if (this.state.help.revealed) return { ok: false, error: { kind: 'help-already-revealed' } };
+    const w = word.trim().toUpperCase().slice(0, 40);
+    if (w.length === 0) return { ok: false, error: { kind: 'empty-word' } };
+    this.state.help.suggestions.push({ slot, word: w });
+    return { ok: true };
+  }
+
+  // The active player reveals all queued hints to everyone at once. Once per turn:
+  // after this, further suggestWord calls are rejected until the turn advances.
+  requestHelp(slot: Slot): { ok: true } | { ok: false; error: { kind: 'not-playing' | 'not-your-turn' } } {
+    if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
+    if (slot !== this.state.turnIndex) return { ok: false, error: { kind: 'not-your-turn' } };
+    this.state.help.revealed = true;
     return { ok: true };
   }
 
@@ -377,6 +412,7 @@ export class Game {
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
     this.state.turnIndex = this.nextSlot(slot);
+    this.resetHelp();
     this.state.events.push({ kind: 'pass', slot, timestamp: Date.now() });
     this.armRevert(slot, pre);
   }
@@ -403,6 +439,7 @@ export class Game {
     addTilesToRack(player.rack, drawn);
     this.state.bag = this.bag.tiles;
     this.state.turnIndex = this.nextSlot(slot);
+    this.resetHelp();
     this.state.events.push({ kind: 'redraw', slot, reason: 'swapAll', tileCount, timestamp: Date.now() });
     this.armRevert(slot, pre);
   }

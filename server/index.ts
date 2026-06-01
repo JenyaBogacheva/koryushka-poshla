@@ -105,6 +105,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       startedAt: null,
       drawState: null,
       pendingSwap: null,
+      help: { revealed: false, suggestions: [] },
     };
   }
 
@@ -211,6 +212,22 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'giveAssist': {
           if (game === null) { sendMsg(ws, { type: 'error', message: 'Game not started' }); return; }
           const result = game.giveAssist(msg.toSlot);
+          if (!result.ok) { sendMsg(ws, { type: 'error', message: humanReadableReason(result.error) }); return; }
+          try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
+          broadcastState();
+          return;
+        }
+        case 'suggestWord': {
+          if (game === null) { sendMsg(ws, { type: 'error', message: 'Game not started' }); return; }
+          const result = game.suggestWord(slot, msg.word);
+          if (!result.ok) { sendMsg(ws, { type: 'error', message: humanReadableReason(result.error) }); return; }
+          try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
+          broadcastState();
+          return;
+        }
+        case 'requestHelp': {
+          if (game === null) { sendMsg(ws, { type: 'error', message: 'Game not started' }); return; }
+          const result = game.requestHelp(slot);
           if (!result.ok) { sendMsg(ws, { type: 'error', message: humanReadableReason(result.error) }); return; }
           try { saveActiveGame(dataDir, game.snapshot()); } catch (err) { console.error('[scrabble] saveActiveGame failed:', err); }
           broadcastState();
@@ -434,6 +451,9 @@ function humanReadableReason(error: { kind: string }): string {
     case 'not-your-turn': return 'Сейчас не ваш ход';
     case 'not-playing': return 'Игра не в процессе';
     case 'invalid-helper': return 'Неверный помощник';
+    case 'cannot-suggest-own-turn': return 'Нельзя подсказывать в свой ход';
+    case 'help-already-revealed': return 'Подсказки уже открыты';
+    case 'empty-word': return 'Пустое слово';
     case 'no-placements': return 'Нет плиток для хода';
     case 'out-of-range': return 'Плитка вне поля';
     case 'duplicate-target': return 'Две плитки в одну клетку';

@@ -184,6 +184,12 @@ export function sendSubmitMove(placements: Placement[]): void {
 export function sendGiveAssist(toSlot: Slot): void {
   send({ type: 'giveAssist', toSlot });
 }
+export function sendSuggestWord(word: string): void {
+  send({ type: 'suggestWord', word });
+}
+export function sendRequestHelp(): void {
+  send({ type: 'requestHelp' });
+}
 export function sendOfferSwap(toSlot: Slot, giveTileId: string, takeTileId: string, word: string): void {
   send({ type: 'offerSwap', toSlot, giveTileId, takeTileId, word });
 }
