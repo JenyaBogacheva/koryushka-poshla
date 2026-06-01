@@ -53,11 +53,16 @@ export function App() {
   }, []);
 
   const setMovePreview = useGameStore((s) => s.setMovePreview);
+  const prevPendingLen = useRef(0);
   useEffect(() => {
     if (pendingPlacements.length === 0) {
       setMovePreview(null);
+      // Took the last tile back — tell the server so it clears the others' mirror.
+      if (prevPendingLen.current > 0) sendPreviewMove([]);
+      prevPendingLen.current = 0;
       return;
     }
+    prevPendingLen.current = pendingPlacements.length;
     const t = setTimeout(() => {
       sendPreviewMove(pendingPlacements.map((p) => ({ tileId: p.tileId, row: p.row, col: p.col, playedAs: p.playedAs })));
     }, 120);

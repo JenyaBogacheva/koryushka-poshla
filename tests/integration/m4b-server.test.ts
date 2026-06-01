@@ -50,6 +50,8 @@ const isStateWithPhase = (phase: GameState['phase']) =>
 
 const isError = (m: ServerMessage): m is Extract<ServerMessage, { type: 'error' }> => m.type === 'error';
 
+const isLiveDraft = (m: ServerMessage): m is Extract<ServerMessage, { type: 'liveDraft' }> => m.type === 'liveDraft';
+
 function send(b: Buffered, msg: ClientMessage): void { b.ws.send(JSON.stringify(msg)); }
 function join(b: Buffered, slot: 0 | 1 | 2, name: string): void {
   send(b, { type: 'join', slot, name, password: 'pw' });
@@ -202,6 +204,49 @@ describe('M4b server: action handlers', () => {
       const s = await waitFor(bs[third], isStateWithTurn(third));
       expect(s.state.players[first]!.canRevert).toBe(false);
       expect(s.state.players[second]!.canRevert).toBe(true);
+    } finally { await server.close(); }
+  });
+
+  it('previewMove mirrors the draft to the other two players as liveDraft', async () => {
+    const { server, bs, first, second, third } = await threeJoined();
+    try {
+      const latest = bs[first].messages.filter(isStatePlaying()).at(-1)!;
+      const tile = latest.state.players[first]!.rack[0]!;
+      const placements = [
+        { tileId: tile.id, row: 7, col: 7, playedAs: tile.isBlank ? 'А' : tile.letter },
+      ];
+      send(bs[first], { type: 'previewMove', placements });
+
+      const [toSecond, toThird] = await Promise.all([
+        waitFor(bs[second], isLiveDraft),
+        waitFor(bs[third], isLiveDraft),
+      ]);
+      expect(toSecond.slot).toBe(first);
+      expect(toSecond.placements).toEqual(placements);
+      expect(toThird.slot).toBe(first);
+      // The acting player drives their own board locally — no self-mirror.
+      expect(bs[first].messages.some((m) => m.type === 'liveDraft')).toBe(false);
+    } finally { await server.close(); }
+  });
+
+  it('previewMove with empty placements broadcasts an empty liveDraft (clears the mirror)', async () => {
+    const { server, bs, first, second } = await threeJoined();
+    try {
+      send(bs[first], { type: 'previewMove', placements: [] });
+      const cleared = await waitFor(bs[second], isLiveDraft);
+      expect(cleared.slot).toBe(first);
+      expect(cleared.placements).toEqual([]);
+    } finally { await server.close(); }
+  });
+
+  it('previewMove from a player whose turn it is not does not broadcast a liveDraft', async () => {
+    const { server, bs, first, second, third } = await threeJoined();
+    try {
+      // `second` is not on turn; their preview must not leak to the others.
+      send(bs[second], { type: 'previewMove', placements: [] });
+      await new Promise((r) => setTimeout(r, 40));
+      expect(bs[first].messages.some((m) => m.type === 'liveDraft')).toBe(false);
+      expect(bs[third].messages.some((m) => m.type === 'liveDraft')).toBe(false);
     } finally { await server.close(); }
   });
 });
