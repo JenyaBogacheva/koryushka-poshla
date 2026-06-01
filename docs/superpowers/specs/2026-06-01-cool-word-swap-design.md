@@ -40,7 +40,7 @@ or ever played; the point cost is the only deterrent against frivolous trades.
 | **Points** | On accept: initiator `−5`, giver `+5`. Mirrors the +5 helping hand. |
 | **Negative score** | Allowed. Scores stay additive and "taken as-is", consistent with the main spec; a swap may push a score below zero. |
 | **Concurrency** | At most **one** pending swap at a time (only one player has the turn). |
-| **Undo** | A completed swap does **not** arm or clear single-step undo — it is a mutual agreement, like the +5 award. |
+| **Undo** | A completed swap does **not** arm single-step undo — it is a mutual agreement, like the +5 award, and is not itself revertible. But **offering** a swap is an action by the offerer, so (per the revert rule "any other player's action closes the window") it closes any *other* player's open revert window — preventing a later revert from wiping the accepted swap. The offerer's own in-turn undo window is preserved. |
 | **Clearing a pending offer** | Submitting a move, passing, swap-all, or ending the game clears any pending offer. The initiator may also explicitly cancel it. |
 
 ## 4. Data Model
