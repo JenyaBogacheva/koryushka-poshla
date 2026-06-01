@@ -4,10 +4,12 @@ import { Rack } from './Rack.js';
 import { BadgeStrip } from './BadgeStrip.js';
 import { FishBadge } from './FishBadge.js';
 import { ConfirmModal } from './ConfirmModal.js';
+import { SwapDialog } from './SwapDialog.js';
 import { useGameStore } from '../store.js';
-import { sendSubmitMove, sendPass, sendSwapAll, sendRedraw } from '../ws.js';
+import { sendSubmitMove, sendPass, sendSwapAll, sendRedraw, sendGiveAssist } from '../ws.js';
 import { perMoveBadges, endGameBadges } from '@shared/badges.js';
 import { fishForSlot } from '../fish.js';
+import { isFemName } from '../gender.js';
 
 type Props = {
   player: Player;
@@ -25,6 +27,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   const bagLeft = useGameStore((s) => s.state?.bag.length ?? 0);
   const [passOpen, setPassOpen] = useState(false);
   const [swapAllOpen, setSwapAllOpen] = useState(false);
+  const [swapOpen, setSwapOpen] = useState(false);
 
   const badges: BadgeKind[] = (() => {
     const live: BadgeKind[] = [];
@@ -136,6 +139,18 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
         <BadgeStrip badges={badges} />
         <Rack slot={player.slot} tiles={player.rack} />
       </div>
+      {!isMine && phase === 'playing' && (
+        <div className="relative mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => sendGiveAssist(player.slot)}
+            className="font-heading rounded-full px-4 py-2 text-base font-semibold text-white shadow"
+            style={{ background: fish.accent }}
+          >
+            помог{isFemName(player.name) ? 'ла' : ''} +5
+          </button>
+        </div>
+      )}
       {showButtons && (
         <div className="relative mt-3 flex flex-wrap items-center gap-2">
           <button
@@ -189,6 +204,13 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
               Поменять буквы{player.redrawEligible ? ' · бесплатно' : ''}
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => setSwapOpen(true)}
+            className="rounded-full bg-ink/10 px-4 py-2 text-sm hover:bg-ink/20"
+          >
+            Обмен буквой
+          </button>
         </div>
       )}
       <ConfirmModal
@@ -217,6 +239,14 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
         }}
         onCancel={() => setSwapAllOpen(false)}
       />
+      {swapOpen && (
+        <SwapDialog
+          mySlot={player.slot}
+          myRack={player.rack}
+          opponents={(allPlayers as Player[]).filter((p) => p.slot !== player.slot)}
+          onClose={() => setSwapOpen(false)}
+        />
+      )}
     </div>
   );
 }

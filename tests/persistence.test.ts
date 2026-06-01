@@ -26,12 +26,14 @@ const sampleState = (): GameState => ({
     canRevert: false,
   })) as unknown as GameState['players'],
   turnIndex: 0,
+  turnOrder: [0, 1, 2],
   board: Array.from({ length: 15 }, () => Array(15).fill(null)),
   bag: [],
   centerBonusUsed: false,
   events: [],
   startedAt: 1_700_000_000_000,
   drawState: null,
+  pendingSwap: null,
 });
 
 describe('persistence', () => {
@@ -131,6 +133,16 @@ describe('persistence', () => {
     expect(loaded).not.toBeNull();
     expect(loaded!.id).toBe(archive.id);
     expect(loaded!.events.length).toBe(archive.events.length);
+  });
+
+  it('roundtrips a non-null pendingSwap', () => {
+    const s = sampleState();
+    s.pendingSwap = {
+      fromSlot: 0, toSlot: 1, giveTileId: 't-1', takeTileId: 't-2',
+      word: 'КОРЮШКА', phrase: 'Какое крутое слово!', createdAt: 1_700_000_000_000,
+    };
+    saveActiveGame(dataDir, s);
+    expect(loadActiveGame(dataDir)?.pendingSwap?.word).toBe('КОРЮШКА');
   });
 
   it('listGameSummaries returns just the summary slice from a flat GameArchive on disk', () => {

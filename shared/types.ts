@@ -48,10 +48,8 @@ export type MoveRecord = {
 
 export type AssistRecord = {
   kind: 'assist';
-  helpedSlot: Slot;
-  helperSlot: Slot;
+  helperSlot: Slot; // player awarded +5 for helping
   points: 5;
-  forMoveIndex: number;
   timestamp: number;
 };
 
@@ -85,16 +83,38 @@ export type EndGameRecord = {
   timestamp: number;
 };
 
+export type SwapOffer = {
+  fromSlot: Slot;        // initiator (−5 on accept)
+  toSlot: Slot;          // chosen giver (+5 on accept)
+  giveTileId: string;    // initiator's tile → moves to target on accept
+  takeTileId: string;    // target's tile → moves to initiator on accept
+  word: string;          // declared cool word (≥ 7 Cyrillic letters)
+  phrase: string;        // celebratory line chosen server-side
+  createdAt: number;
+};
+
+export type SwapRecord = {
+  kind: 'swap';
+  fromSlot: Slot;
+  toSlot: Slot;
+  word: string;
+  gaveLetter: Letter;    // letter the initiator gave away ('' for a blank)
+  tookLetter: Letter;    // letter the initiator received ('' for a blank)
+  timestamp: number;
+};
+
 export type DrawState = {
   round: number;            // 1 = initial three-way; 2+ = tiebreak rounds
-  candidates: Slot[];       // slots still in contention this round (subset of [0,1,2])
+  candidates: Slot[];       // slots being ordered among themselves this round (subset of [0,1,2])
   draws: { slot: Slot; letter: Letter | null }[]; // already-revealed draws this round (null = blank)
+  rankedTop: Slot[];        // slots whose ranks are already fixed, best rank first (precede the candidates)
+  rankedBottom: Slot[];     // slots whose ranks are already fixed, best rank first (follow the candidates)
 };
 
 export type DrawForOrderRecord = {
   kind: 'drawForOrder';
-  draws: { slot: Slot; letter: Letter | null }[]; // null = blank; one entry per player in slot order
-  firstSlot: Slot;
+  draws: { slot: Slot; letter: Letter | null }[]; // initial three-way draw; null = blank
+  order: [Slot, Slot, Slot]; // full turn order (rank 1 → 3) decided by the draw, ties broken by redraw
   timestamp: number;
 };
 
@@ -105,7 +125,8 @@ export type GameEvent =
   | RedrawRecord
   | ClaimBlankRecord
   | EndGameRecord
-  | DrawForOrderRecord;
+  | DrawForOrderRecord
+  | SwapRecord;
 
 export type GameEventKind = GameEvent['kind'];
 
@@ -126,12 +147,14 @@ export type GameState = {
   phase: GamePhase;
   players: [Player, Player, Player];
   turnIndex: Slot;
+  turnOrder: [Slot, Slot, Slot]; // play order for the whole game, decided by the жребий draw
   board: Board;
   bag: Tile[];
   centerBonusUsed: boolean;
   events: GameEvent[];
   startedAt: number | null;
   drawState: DrawState | null;
+  pendingSwap: SwapOffer | null;
 };
 
 export type GameSummary = {
@@ -168,11 +191,14 @@ export type BadgeKind =
 export type ClientMessage =
   | { type: 'join'; slot: Slot; name: string; password: string }
   | { type: 'submitMove'; placements: Placement[] }
-  | { type: 'attributeHelper'; helperSlot: Slot | null }
+  | { type: 'giveAssist'; toSlot: Slot }
   | { type: 'claimBlank'; row: number; col: number; myTileId: string }
   | { type: 'pass' }
   | { type: 'redraw' }
   | { type: 'swapAll' }
+  | { type: 'offerSwap'; toSlot: Slot; giveTileId: string; takeTileId: string; word: string }
+  | { type: 'respondSwap'; accept: boolean }
+  | { type: 'cancelSwap' }
   | { type: 'toggleRackVisible'; visible: boolean }
   | { type: 'endGame' }
   | { type: 'revertLastTurn' }

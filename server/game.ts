@@ -5,24 +5,13 @@ import { createEmptyBoard, applyPlacements, isEmpty, extractWordsFormed } from '
 import { validateMove, type MoveError } from './moves.js';
 import { scoreMove } from './scoring.js';
 import { checkWords } from './dictionary.js';
-import { compareLetterOrder } from './letters.js';
+import { compareLetterOrder, countCyrillicLetters } from './letters.js';
 
 export type GameOpts = { seed: number };
 
 export type SubmitResult =
   | { ok: true; moveRecord: MoveRecord; dictionaryWarnings: string[] }
   | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } };
-
-export type AttributeHelperResult =
-  | { ok: true }
-  | {
-      ok: false;
-      error:
-        | { kind: 'not-playing' }
-        | { kind: 'no-attributable-move' }
-        | { kind: 'not-your-move' }
-        | { kind: 'invalid-helper' };
-    };
 
 export type PreviewResult =
   | {
@@ -33,6 +22,15 @@ export type PreviewResult =
       dictionaryWarnings: string[];
     }
   | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } };
+
+const SWAP_MIN_WORD_LEN = 7;
+const SWAP_PHRASES = [
+  'Какое крутое слово!',
+  'Вот это да!',
+  'Ну и ну!',
+  'Вот это слово так слово!',
+  'Какая красота!',
+];
 
 export class Game {
   private state: GameState;
@@ -61,18 +59,27 @@ export class Game {
       phase: 'waiting',
       players,
       turnIndex: 0,
+      turnOrder: [0, 1, 2],
       board: createEmptyBoard(),
       bag: this.bag.tiles,
       centerBonusUsed: false,
       events: [],
       startedAt: null,
       drawState: null,
+      pendingSwap: null,
     };
   }
 
   static fromState(state: GameState): Game {
     const g = Object.create(Game.prototype) as Game;
     const cloned = structuredClone(state);
+    // Games persisted before turn-order-by-draw lack turnOrder; default to seat order.
+    if ((cloned as { turnOrder?: unknown }).turnOrder === undefined) {
+      cloned.turnOrder = [0, 1, 2];
+    }
+    if ((cloned as { pendingSwap?: unknown }).pendingSwap === undefined) {
+      cloned.pendingSwap = null;
+    }
     const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
     cloned.bag = bag.tiles;
     type Mutable = {
@@ -99,7 +106,7 @@ export class Game {
       throw new Error('Cannot start until all three slots are connected');
     }
     this.state.phase = 'drawing';
-    this.state.drawState = { round: 1, candidates: [0, 1, 2], draws: [] };
+    this.state.drawState = { round: 1, candidates: [0, 1, 2], draws: [], rankedTop: [], rankedBottom: [] };
     this.initialDrawSnapshot = null;
   }
 
@@ -131,35 +138,64 @@ export class Game {
   private resolveDrawRound(): void {
     const ds = this.state.drawState!;
     const sorted = [...ds.draws].sort((a, b) => compareLetterOrder(a.letter, b.letter));
-    const best = sorted[0]!;
-    const tied = sorted.filter((d) => compareLetterOrder(d.letter, best.letter) === 0);
 
-    if (tied.length === 1) {
-      const firstSlot = best.slot;
-      for (const p of this.state.players) {
-        const drawn = drawTiles(this.bag, 7);
-        addTilesToRack(p.rack, drawn);
-      }
-      this.state.events.push({
-        kind: 'drawForOrder',
-        draws: this.initialDrawSnapshot ?? ds.draws.map((d) => ({ slot: d.slot, letter: d.letter })),
-        firstSlot,
-        timestamp: Date.now(),
-      });
-      this.state.turnIndex = firstSlot;
-      this.state.phase = 'playing';
-      this.state.bag = this.bag.tiles;
-      this.state.startedAt = Date.now();
-      this.state.drawState = null;
-      this.initialDrawSnapshot = null;
+    // Group the candidates' draws into maximal equal-letter tiers, in rank order.
+    const tiers: { slot: Slot; letter: Letter | null }[][] = [];
+    for (const d of sorted) {
+      const last = tiers[tiers.length - 1];
+      if (last && compareLetterOrder(last[0]!.letter, d.letter) === 0) last.push(d);
+      else tiers.push([d]);
+    }
+
+    // Singleton tiers are settled. With ≤3 players at most one tier can hold a tie.
+    const tieIndex = tiers.findIndex((t) => t.length > 1);
+
+    if (tieIndex === -1) {
+      const order = [
+        ...ds.rankedTop,
+        ...sorted.map((d) => d.slot),
+        ...ds.rankedBottom,
+      ] as [Slot, Slot, Slot];
+      this.finalizeDraw(order);
       return;
     }
 
+    // Fix the tiers above/below the tie; only the tied slots draw again next round.
+    const above = tiers.slice(0, tieIndex).flat().map((d) => d.slot);
+    const below = tiers.slice(tieIndex + 1).flat().map((d) => d.slot);
     this.state.drawState = {
       round: ds.round + 1,
-      candidates: tied.map((d) => d.slot),
+      candidates: tiers[tieIndex]!.map((d) => d.slot),
       draws: [],
+      rankedTop: [...ds.rankedTop, ...above],
+      rankedBottom: [...below, ...ds.rankedBottom],
     };
+  }
+
+  private finalizeDraw(order: [Slot, Slot, Slot]): void {
+    for (const p of this.state.players) {
+      const drawn = drawTiles(this.bag, 7);
+      addTilesToRack(p.rack, drawn);
+    }
+    this.state.events.push({
+      kind: 'drawForOrder',
+      draws: this.initialDrawSnapshot ?? [],
+      order,
+      timestamp: Date.now(),
+    });
+    this.state.turnOrder = order;
+    this.state.turnIndex = order[0];
+    this.state.phase = 'playing';
+    this.state.bag = this.bag.tiles;
+    this.state.startedAt = Date.now();
+    this.state.drawState = null;
+    this.initialDrawSnapshot = null;
+  }
+
+  /** Next slot in the draw-decided play order (wraps around). */
+  private nextSlot(slot: Slot): Slot {
+    const order = this.state.turnOrder;
+    return order[(order.indexOf(slot) + 1) % order.length]!;
   }
 
   submitMove(slot: Slot, placements: Placement[]): SubmitResult {
@@ -172,6 +208,7 @@ export class Game {
     const validation = validateMove(this.state.board, player.rack, placements, isFirst);
     if (!validation.ok) return { ok: false, error: validation.error };
 
+    this.state.pendingSwap = null;
     this.maybeClearRevertOnActionBy(slot);
     const preStateForRevert = structuredClone(this.state);
 
@@ -207,73 +244,95 @@ export class Game {
     };
     this.state.events.push(moveRecord);
 
-    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+    this.state.turnIndex = this.nextSlot(slot);
 
     this.armRevert(slot, preStateForRevert);
     return { ok: true, moveRecord, dictionaryWarnings };
   }
 
-  attributeHelper(slot: Slot, helperSlot: Slot | null): AttributeHelperResult {
+  giveAssist(toSlot: Slot): { ok: true } | { ok: false; error: { kind: 'not-playing' } | { kind: 'invalid-helper' } } {
     if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
-
-    const events = this.state.events;
-    if (events.length === 0) return { ok: false, error: { kind: 'no-attributable-move' } };
-
-    // Latest move is editable iff the last event is either:
-    //   (a) a move, or
-    //   (b) an assist whose forMoveIndex points at the immediately preceding move.
-    let moveIndex: number;
-    let existingAssistIndex: number | null;
-    const last = events[events.length - 1]!;
-    if (last.kind === 'move') {
-      moveIndex = events.length - 1;
-      existingAssistIndex = null;
-    } else if (
-      last.kind === 'assist' &&
-      last.forMoveIndex === events.length - 2 &&
-      events[events.length - 2]?.kind === 'move'
-    ) {
-      moveIndex = events.length - 2;
-      existingAssistIndex = events.length - 1;
-    } else {
-      return { ok: false, error: { kind: 'no-attributable-move' } };
-    }
-
-    const move = events[moveIndex]!;
-    if (move.kind !== 'move') return { ok: false, error: { kind: 'no-attributable-move' } };
-    if (move.slot !== slot) return { ok: false, error: { kind: 'not-your-move' } };
-
-    if (helperSlot !== null) {
-      if (helperSlot !== 0 && helperSlot !== 1 && helperSlot !== 2) {
-        return { ok: false, error: { kind: 'invalid-helper' } };
-      }
-      if (helperSlot === slot) return { ok: false, error: { kind: 'invalid-helper' } };
-    }
-
-    // Undo any prior assist for this move.
-    if (existingAssistIndex !== null) {
-      const oldAssist = events[existingAssistIndex];
-      if (oldAssist?.kind === 'assist') {
-        this.state.players[oldAssist.helperSlot]!.score -= oldAssist.points;
-      }
-      events.splice(existingAssistIndex, 1);
-    }
-
-    move.helperSlot = helperSlot;
-
-    if (helperSlot !== null) {
-      this.state.players[helperSlot]!.score += 5;
-      events.push({
-        kind: 'assist',
-        helpedSlot: slot,
-        helperSlot,
-        points: 5,
-        forMoveIndex: moveIndex,
-        timestamp: Date.now(),
-      });
-    }
-
+    if (toSlot !== 0 && toSlot !== 1 && toSlot !== 2) return { ok: false, error: { kind: 'invalid-helper' } };
+    this.state.players[toSlot]!.score += 5;
+    this.state.events.push({ kind: 'assist', helperSlot: toSlot, points: 5, timestamp: Date.now() });
     return { ok: true };
+  }
+
+  /**
+   * Offer to trade one of your tiles for one of another player's, on your turn.
+   * Honor-system "cool word" gate: the declared word must be ≥ 7 Cyrillic letters,
+   * but is never verified. Stores a pending offer; the target responds via respondSwap.
+   */
+  offerSwap(fromSlot: Slot, toSlot: Slot, giveTileId: string, takeTileId: string, word: string): void {
+    this.assertTurn(fromSlot);
+    if (this.state.pendingSwap !== null) throw new Error('Обмен уже предложен');
+    if (toSlot === fromSlot || (toSlot !== 0 && toSlot !== 1 && toSlot !== 2)) {
+      throw new Error('Неверный игрок для обмена');
+    }
+    const target = this.state.players[toSlot]!;
+    if (!target.rackVisible) throw new Error('Стойка игрока скрыта');
+    const from = this.state.players[fromSlot]!;
+    if (!from.rack.some((t) => t.id === giveTileId)) throw new Error('Вашей плитки нет на стойке');
+    if (!target.rack.some((t) => t.id === takeTileId)) throw new Error('Плитки игрока нет на стойке');
+    if (countCyrillicLetters(word) < SWAP_MIN_WORD_LEN) {
+      throw new Error(`Слово должно быть не короче ${SWAP_MIN_WORD_LEN} букв`);
+    }
+    // Offering is an action by this player: per the revert rule it closes any other
+    // player's open undo window, so a later accept can't be wiped by their revert.
+    // (Only clears a window owned by a different slot; the offerer keeps their own.)
+    this.maybeClearRevertOnActionBy(fromSlot);
+    // Deterministic phrase choice (engine must not call Math.random); rotates per event.
+    const phrase = SWAP_PHRASES[this.state.events.length % SWAP_PHRASES.length]!;
+    this.state.pendingSwap = { fromSlot, toSlot, giveTileId, takeTileId, word, phrase, createdAt: Date.now() };
+  }
+
+  /**
+   * Target accepts or declines the pending swap. On accept the two tiles change
+   * racks, the offerer pays −5 and the giver earns +5, and a SwapRecord is logged.
+   * Like the +5 helping hand, this does not touch single-step undo.
+   */
+  respondSwap(slot: Slot, accept: boolean): void {
+    if (this.state.phase !== 'playing') throw new Error('Игра не в процессе');
+    const offer = this.state.pendingSwap;
+    if (offer === null) throw new Error('Нет предложенного обмена');
+    if (slot !== offer.toSlot) throw new Error('Ответить может только адресат');
+    if (!accept) {
+      this.state.pendingSwap = null;
+      return;
+    }
+    const from = this.state.players[offer.fromSlot]!;
+    const to = this.state.players[offer.toSlot]!;
+    const giveIdx = from.rack.findIndex((t) => t.id === offer.giveTileId);
+    const takeIdx = to.rack.findIndex((t) => t.id === offer.takeTileId);
+    if (giveIdx === -1 || takeIdx === -1) {
+      // A tile moved since the offer (e.g. claimBlank) — abort cleanly.
+      this.state.pendingSwap = null;
+      throw new Error('Плитки изменились — обмен отменён');
+    }
+    const giveTile = from.rack.splice(giveIdx, 1)[0]!;
+    const takeTile = to.rack.splice(takeIdx, 1)[0]!;
+    from.rack.push(takeTile);
+    to.rack.push(giveTile);
+    from.score -= 5;
+    to.score += 5;
+    this.state.events.push({
+      kind: 'swap',
+      fromSlot: offer.fromSlot,
+      toSlot: offer.toSlot,
+      word: offer.word,
+      gaveLetter: giveTile.isBlank ? '' : giveTile.letter,
+      tookLetter: takeTile.isBlank ? '' : takeTile.letter,
+      timestamp: Date.now(),
+    });
+    this.state.pendingSwap = null;
+  }
+
+  cancelSwap(slot: Slot): void {
+    if (this.state.phase !== 'playing') throw new Error('Игра не в процессе');
+    const offer = this.state.pendingSwap;
+    if (offer === null) throw new Error('Нет предложенного обмена');
+    if (slot !== offer.fromSlot) throw new Error('Отменить может только предложивший');
+    this.state.pendingSwap = null;
   }
 
   previewMove(slot: Slot, placements: Placement[]): PreviewResult {
@@ -314,9 +373,10 @@ export class Game {
 
   passTurn(slot: Slot): void {
     this.assertTurn(slot);
+    this.state.pendingSwap = null;
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
-    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+    this.state.turnIndex = this.nextSlot(slot);
     this.state.events.push({ kind: 'pass', slot, timestamp: Date.now() });
     this.armRevert(slot, pre);
   }
@@ -332,6 +392,7 @@ export class Game {
     if (this.bag.tiles.length === 0) {
       throw new Error('Bag is empty — cannot swap');
     }
+    this.state.pendingSwap = null;
     const tileCount = player.rack.length;
     this.maybeClearRevertOnActionBy(slot);
     const pre = structuredClone(this.state);
@@ -341,7 +402,7 @@ export class Game {
     const drawn = drawTiles(this.bag, tileCount);
     addTilesToRack(player.rack, drawn);
     this.state.bag = this.bag.tiles;
-    this.state.turnIndex = ((slot + 1) % 3) as Slot;
+    this.state.turnIndex = this.nextSlot(slot);
     this.state.events.push({ kind: 'redraw', slot, reason: 'swapAll', tileCount, timestamp: Date.now() });
     this.armRevert(slot, pre);
   }
@@ -408,6 +469,7 @@ export class Game {
 
   endGame(slot: Slot): void {
     if (this.state.phase !== 'playing') return; // idempotent if already finished
+    this.state.pendingSwap = null;
     this.maybeClearRevertOnActionBy(slot);
     this.lastSnapshot = null; // ending the game finalizes everything
     this.state.phase = 'finished';

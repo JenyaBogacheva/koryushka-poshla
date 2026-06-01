@@ -19,7 +19,7 @@ A real-time, online, three-player Russian Scrabble game ("Эрудит") for a f
 
 | Rule | Behavior |
 |---|---|
-| **Tile distribution** | Standard Russian Эрудит set — 104 tiles, Ё separate from Е, Ъ separate from Ь, 2 blanks ("звёздочки"). |
+| **Tile distribution** | Russian Эрудит set — 105 tiles, Ё separate from Е, Ъ separate from Ь, 3 blanks ("звёздочки"). |
 | **Tile values** | Standard Russian point values per letter. |
 | **Bingo bonus** | **+10** for using all 7 rack tiles in one turn (not the standard +50). Counts when 7 tiles are placed across multiple disconnected groups. |
 | **Multi-spot placement** | A single turn may place tiles in **multiple disconnected groups** on the board. Each group must (a) form valid words individually and as cross-words, and (b) connect to existing tiles. *Exception:* the very first move of the game is one group and must cross the center star. |
@@ -32,6 +32,8 @@ A real-time, online, three-player Russian Scrabble game ("Эрудит") for a f
 | **All-vowel / all-consonant rack** | Free redraw — return all 7 tiles, draw 7 fresh ones, **does not consume the turn**. |
 | **Revert last turn** | The player who just submitted an action (place / pass / redraw / claimBlank) may revert it, restoring the pre-action state. The window closes the moment any other player submits any action. One level of undo only; not persisted across server restarts. |
 | **Blank-swap ("claim blank")** | When a blank tile is on the board representing letter X, any player who has a real X tile in their rack may, on their own turn (before submitting a move), claim the blank: the real X takes the cell, the blank moves to the player's rack. **First-come-first-served** — first valid claim wins. |
+| **Helping hand (+5)** | Each player's card shows a **fish + name** button for each of the **other two** players, available throughout play and not tied to any turn. Pressing it awards that player **+5** immediately ("помог +5"). No move required, no cap, no attribution to a specific move, no undo — family honor system. Each award is logged as an `assist` event; the "helper" end-game badge goes to whoever received the most awards. |
+| **Cool-word swap** | On your turn (before submitting), you may offer to trade one of your rack tiles for a specific tile from one opponent whose rack is visible, declaring a "cool word" of ≥ 7 letters. The word is self-declared and never verified. If the opponent accepts, the tiles trade, you get **−5** and they get **+5**, and a `swap` event is logged. Declining clears the offer. The swap does not consume your turn. See `2026-06-01-cool-word-swap-design.md`. |
 | **Challenges** | None — there is no challenge mechanic. The dictionary advisory replaces it. |
 | **Time limits** | None. |
 | **Game end** | No automatic end. Any player can end the game at any time via an "End game" button (single confirmation modal to avoid accidents). Scores are taken as-is — no remaining-tile-point adjustment. Highest score wins; ties are ties. |
@@ -84,7 +86,7 @@ scrabble/
 │   ├── persistence.ts              # JSON save/load for active game and history
 │   ├── protocol.ts                 # Shared WS message types (server side)
 │   └── data/
-│       ├── tiles-ru.json           # 104-tile Russian distribution + point values
+│       ├── tiles-ru.json           # 105-tile Russian distribution + point values
 │       └── nouns-ru.txt            # Russian nominative-singular noun list (~100k entries, OpenCorpora-derived)
 ├── client/
 │   ├── index.html
@@ -98,6 +100,8 @@ scrabble/
 │   │   ├── ActionBar.tsx           # Submit / Swap / Pass / Redraw / Toggle visibility / End game
 │   │   ├── BlankPicker.tsx         # Dialog when placing a blank
 │   │   ├── SubstitutionPicker.tsx  # Dialog when placing any letter in a substitution pair (Ё↔Е, Ъ↔Ь, Щ↔Ш, Й↔И): pick itself or partner
+│   │   ├── SwapDialog.tsx          # Offer dialog: pick opponent + two tiles + cool word
+│   │   ├── SwapBanner.tsx          # Pending-swap banner: accept / decline / cancel
 │   │   ├── HistoryPanel.tsx        # List of past games (date, scores, winner)
 │   │   ├── SlotPicker.tsx          # First-visit slot + name entry
 │   │   └── DisconnectOverlay.tsx   # "Waiting for {name}…" pause screen
@@ -235,7 +239,7 @@ After every rack draw, the server checks the player's 7 tiles. If all vowels or 
 
 ### 9.6 Жребий (draw-for-order)
 
-When all three players are seated, the game enters `phase: 'drawing'`. Each player clicks their own face-down tile (client message `drawTile`); the server reveals that slot's letter and returns the tile to the bag. After all candidates have drawn, the player whose letter is earliest in the Russian alphabet (`compareLetterOrder`) goes first. On a tie, only the tied players draw again in a subsequent round (`drawState.round` increments, `candidates` shrinks to the tied set); this repeats until a unique winner emerges. Racks are dealt and `phase` becomes `'playing'` only after resolution. The persisted `DrawForOrderRecord` event captures the **initial** three-way draw and the eventual `firstSlot`; tiebreak rounds are not retained in the event log. The transient `drawState: DrawState | null` on `GameState` is what the UI renders during the ritual; it is `null` outside the drawing phase, persisted across server restarts so a mid-draw reload resumes correctly.
+When all three players are seated, the game enters `phase: 'drawing'`. Each player clicks their own face-down tile (client message `drawTile`); the server reveals that slot's letter and returns the tile to the bag. After all candidates have drawn, **the full turn order is decided by the draw** (`compareLetterOrder`): the player whose letter is earliest in the Russian alphabet plays first, next-earliest second, latest third. On a tie at any rank, only the tied players draw again in a subsequent round (`drawState.round` increments, `candidates` shrinks to just the tied set, while `rankedTop`/`rankedBottom` hold the ranks already settled above and below them); this repeats until every rank is unique. Racks are dealt and `phase` becomes `'playing'` only after resolution. The resulting order is stored as `GameState.turnOrder` (a permutation of `[0,1,2]`) and drives turn rotation for the **whole game** — `turnIndex` advances through `turnOrder`, not seat order. The persisted `DrawForOrderRecord` event captures the **initial** three-way draw and the eventual full `order`; tiebreak rounds are not retained in the event log. The transient `drawState: DrawState | null` on `GameState` is what the UI renders during the ritual; it is `null` outside the drawing phase, persisted across server restarts so a mid-draw reload resumes correctly.
 
 ## 10. Identity & Session Flow
 

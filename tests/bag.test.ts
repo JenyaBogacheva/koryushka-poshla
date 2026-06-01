@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { createBag, drawTiles, returnTiles, bagCount, bagFromTiles, makeRng } from '../server/bag';
 
 describe('bag', () => {
-  it('starts with 104 tiles', () => {
+  it('starts with 105 tiles', () => {
     const bag = createBag(makeRng(1));
-    expect(bagCount(bag)).toBe(104);
+    expect(bagCount(bag)).toBe(105);
   });
 
   it('every tile has a unique id', () => {
@@ -17,14 +17,14 @@ describe('bag', () => {
     const bag = createBag(makeRng(1));
     const drawn = drawTiles(bag, 7);
     expect(drawn.length).toBe(7);
-    expect(bagCount(bag)).toBe(97);
+    expect(bagCount(bag)).toBe(98);
   });
 
   it('drawing more than available returns what remains', () => {
     const bag = createBag(makeRng(1));
     drawTiles(bag, 100);
     const drawn = drawTiles(bag, 10);
-    expect(drawn.length).toBe(4);
+    expect(drawn.length).toBe(5);
     expect(bagCount(bag)).toBe(0);
   });
 
@@ -32,7 +32,7 @@ describe('bag', () => {
     const bag = createBag(makeRng(1));
     const drawn = drawTiles(bag, 7);
     returnTiles(bag, drawn);
-    expect(bagCount(bag)).toBe(104);
+    expect(bagCount(bag)).toBe(105);
   });
 
   it('deterministic with same seed', () => {
@@ -62,6 +62,6 @@ describe('bagFromTiles', () => {
     const original = createBag(makeRng(1));
     const restored = bagFromTiles(original.tiles, makeRng(2));
     drawTiles(restored, 1);
-    expect(original.tiles.length).toBe(104);
+    expect(original.tiles.length).toBe(105);
   });
 });

@@ -32,5 +32,5 @@
   { "letter": "Э", "count": 1, "points": 8 },
   { "letter": "Ю", "count": 1, "points": 8 },
   { "letter": "Я", "count": 2, "points": 3 },
-  { "letter": "",  "count": 2, "points": 0, "isBlank": true }
+  { "letter": "",  "count": 3, "points": 0, "isBlank": true }
 ]

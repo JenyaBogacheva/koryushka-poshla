@@ -2,15 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { loadTileDistribution, totalTileCount } from '../server/data';
 
 describe('tile distribution', () => {
-  it('loads 104 tiles total', () => {
+  it('loads 105 tiles total', () => {
     const dist = loadTileDistribution();
-    expect(totalTileCount(dist)).toBe(104);
+    expect(totalTileCount(dist)).toBe(105);
   });
 
-  it('includes 2 blanks', () => {
+  it('includes 3 blanks', () => {
     const dist = loadTileDistribution();
     const blanks = dist.find((d) => d.isBlank);
-    expect(blanks?.count).toBe(2);
+    expect(blanks?.count).toBe(3);
     expect(blanks?.points).toBe(0);
   });
 
