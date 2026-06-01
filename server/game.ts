@@ -312,6 +312,10 @@ export class Game {
     if (countCyrillicLetters(word) < SWAP_MIN_WORD_LEN) {
       throw new Error(`Слово должно быть не короче ${SWAP_MIN_WORD_LEN} букв`);
     }
+    // Offering is an action by this player: per the revert rule it closes any other
+    // player's open undo window, so a later accept can't be wiped by their revert.
+    // (Only clears a window owned by a different slot; the offerer keeps their own.)
+    this.maybeClearRevertOnActionBy(fromSlot);
     // Deterministic phrase choice (engine must not call Math.random); rotates per event.
     const phrase = SWAP_PHRASES[this.state.events.length % SWAP_PHRASES.length]!;
     this.state.pendingSwap = { fromSlot, toSlot, giveTileId, takeTileId, word, phrase, createdAt: Date.now() };

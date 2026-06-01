@@ -869,6 +869,22 @@ describe('Game — offerSwap', () => {
     g.offerSwap(from, to, giveTileId, takeTileId, WORD);
     expect(g.snapshot().turnIndex).toBe(from);
   });
+
+  it('closes a prior player\'s revert window (offering is an action)', () => {
+    // The previous player moves (arming their one-step undo); when the next player
+    // offers a swap, that prior window must close so a later accept can't be reverted away.
+    const g = makeReadyGame(7);
+    const s0 = g.snapshot();
+    const p = s0.turnIndex;
+    const tile = s0.players[p]!.rack[0]!;
+    g.submitMove(p, [{ tileId: tile.id, row: 7, col: 7, playedAs: tile.isBlank ? 'А' : tile.letter }]);
+    expect(g.snapshot().players[p]!.canRevert).toBe(true);
+    const q = g.snapshot().turnIndex;
+    const s1 = g.snapshot();
+    const r = nextInTurnOrder(s1.turnOrder, q);
+    g.offerSwap(q, r, s1.players[q]!.rack[0]!.id, s1.players[r]!.rack[0]!.id, WORD);
+    expect(g.snapshot().players[p]!.canRevert).toBe(false);
+  });
 });
 
 describe('Game — respondSwap', () => {

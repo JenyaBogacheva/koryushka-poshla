@@ -190,3 +190,12 @@ export function sendSuggestWord(word: string): void {
 export function sendRequestHelp(): void {
   send({ type: 'requestHelp' });
 }
+export function sendOfferSwap(toSlot: Slot, giveTileId: string, takeTileId: string, word: string): void {
+  send({ type: 'offerSwap', toSlot, giveTileId, takeTileId, word });
+}
+export function sendRespondSwap(accept: boolean): void {
+  send({ type: 'respondSwap', accept });
+}
+export function sendCancelSwap(): void {
+  send({ type: 'cancelSwap' });
+}
