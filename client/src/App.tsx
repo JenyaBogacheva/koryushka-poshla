@@ -188,7 +188,7 @@ export function App() {
             Выйти
           </button>
         </nav>
-        <div className="flex h-full min-h-0 flex-col items-center gap-6">
+        <div className="relative flex h-full min-h-0 flex-col items-center gap-6">
           {/* Header — walking koryushka in the active player's color + handwritten title */}
           <header className="flex w-full items-center gap-6 self-start" style={{ marginLeft: 6 }}>
             <div className="relative shrink-0" style={{ width: 170, height: 80 }}>

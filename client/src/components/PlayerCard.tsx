@@ -161,7 +161,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
             className="font-heading rounded-full px-4 py-2 text-base font-semibold text-white shadow"
             style={{ background: fish.accent }}
           >
-            помог{isFemName(player.name) ? 'ла' : ''} +5
+            Помог{isFemName(player.name) ? 'ла' : ''} +5
           </button>
         </div>
       )}
@@ -184,7 +184,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
               ))}
             </div>
           )}
-          <div className="mt-1 text-sm text-ink/45">только ты это видишь — пока не попросят помощь</div>
+          <div className="mt-1 text-sm text-ink/45">Только ты это видишь — пока не попросят помощь</div>
         </div>
       )}
       {/* Active player: see only a count, then reveal everyone's hints at once (once per turn). */}
@@ -196,7 +196,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
             className="font-heading rounded-full px-4 py-2 text-base font-semibold text-white shadow"
             style={{ background: fish.accent }}
           >
-            Прошу помощь · 💡{totalSuggestions}
+            Подскажите! · 💡{totalSuggestions}
           </button>
         </div>
       )}

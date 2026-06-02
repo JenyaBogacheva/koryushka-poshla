@@ -34,6 +34,7 @@ type Store = {
   warning: string | null;
   lastPlacedCells: { row: number; col: number }[];
   lastPlacedAt: number;
+  lastPlacedSlot: Slot | null;
   drawState: DrawState | null;
   movePreview: MovePreview | null;
   setMovePreview: (preview: MovePreview | null) => void;
@@ -49,7 +50,7 @@ type Store = {
   clearPending: () => void;
   setError: (message: string | null) => void;
   setWarning: (message: string | null) => void;
-  setLastPlaced: (cells: { row: number; col: number }[], at: number) => void;
+  setLastPlaced: (cells: { row: number; col: number }[], at: number, slot: Slot | null) => void;
 };
 
 export const useGameStore = create<Store>((set) => ({
@@ -63,12 +64,20 @@ export const useGameStore = create<Store>((set) => ({
   warning: null,
   lastPlacedCells: [],
   lastPlacedAt: 0,
+  lastPlacedSlot: null,
   drawState: null,
   movePreview: null,
   setMovePreview: (movePreview) => set({ movePreview }),
-  // A fresh authoritative snapshot supersedes any in-flight drafts (move committed,
-  // turn passed, player joined/left) — clear the mirror so stale tiles don't linger.
-  setState: (state) => set({ state, drawState: state.drawState, othersDraft: { 0: [], 1: [], 2: [] } }),
+  // Keep only the active player's live draft across snapshots: unrelated broadcasts
+  // (assist, suggestions, reconnect) mid-turn shouldn't make their staged tiles
+  // flicker. A committed/passed move advances turnIndex, so the now-stale draft is
+  // dropped on that snapshot.
+  setState: (state) =>
+    set((s) => ({
+      state,
+      drawState: state.drawState,
+      othersDraft: { 0: [], 1: [], 2: [], [state.turnIndex]: s.othersDraft[state.turnIndex] },
+    })),
   setConnected: (connected) => set({ connected }),
   setLobby: (slots) => set({ lobby: slots }),
   setIdentity: (slot, name, password) => {
@@ -111,5 +120,5 @@ export const useGameStore = create<Store>((set) => ({
   clearPending: () => set({ pendingPlacements: [], lastError: null, movePreview: null }),
   setError: (lastError) => set({ lastError }),
   setWarning: (warning) => set({ warning }),
-  setLastPlaced: (cells, at) => set({ lastPlacedCells: cells, lastPlacedAt: at }),
+  setLastPlaced: (cells, at, slot) => set({ lastPlacedCells: cells, lastPlacedAt: at, lastPlacedSlot: slot }),
 }));

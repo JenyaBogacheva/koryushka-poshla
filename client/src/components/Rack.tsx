@@ -11,14 +11,19 @@ export function Rack({ slot, tiles }: Props) {
   const identity = useGameStore((s) => s.identity);
   const turnIndex = useGameStore((s) => s.state?.turnIndex);
   const pending = useGameStore((s) => s.pendingPlacements);
+  // Subscribe to just this slot's draft slice — selecting the whole othersDraft
+  // object would re-render every rack on any player's draft tick.
+  const draftForSlot = useGameStore((s) => s.othersDraft[slot]);
 
-  const pendingIds = new Set(pending.map((p) => p.tileId));
   const isMine = identity?.slot === slot;
   const myTurn = turnIndex === slot;
   const canDrag = isMine && myTurn;
 
-  // Hide tiles that are currently staged on the board.
-  const visible = tiles.filter((t) => !pendingIds.has(t.id));
+  // Hide tiles currently staged on the board — my own pending placements on my
+  // rack, or another player's live draft on theirs — so each rack shows what's
+  // actually left in that player's hand.
+  const stagedIds = new Set((isMine ? pending : draftForSlot).map((p) => p.tileId));
+  const visible = tiles.filter((t) => !stagedIds.has(t.id));
   const slots: (TileT | null)[] = Array.from({ length: RACK_SIZE }, (_, i) => visible[i] ?? null);
 
   return (

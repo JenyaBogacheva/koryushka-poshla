@@ -28,3 +28,11 @@ export const SUBSTITUTION_POINTS: Record<Letter, number> = {
 export function canSubstitute(letter: Letter): boolean {
   return Object.prototype.hasOwnProperty.call(SUBSTITUTIONS, letter);
 }
+
+// Face-value points a tile contributes when played as `playedAs`: the played-as
+// letter's canonical points (what the server scores), falling back to the tile's
+// own points when it isn't a substitution. Blanks score 0 — handle that before
+// calling. Used for both pending previews and committed-cell display.
+export function substitutionPoints(playedAs: Letter, tile: { letter: Letter; points: number }): number {
+  return playedAs === tile.letter ? tile.points : (SUBSTITUTION_POINTS[playedAs] ?? tile.points);
+}

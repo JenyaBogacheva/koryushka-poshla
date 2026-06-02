@@ -1,5 +1,6 @@
 import { useDraggable } from '@dnd-kit/core';
 import type { Cell, Letter, Tile as TileT } from '@shared/types';
+import { substitutionPoints } from '../letters.js';
 
 type Props = {
   /** Cell-mode (board): pass a cell to render the tile as it sits on the board. */
@@ -18,6 +19,8 @@ type Props = {
   displayOverride?: Letter;
   /** Override the displayed points (used when playedAs differs from the rack tile). */
   pointsOverride?: number;
+  /** Outline color for the ghost (pending) outline. Defaults to the global accent. */
+  outlineColor?: string;
 };
 
 type InnerProps = {
@@ -28,9 +31,11 @@ type InnerProps = {
   subBadge?: { display: Letter; onClick: () => void };
   /** When set, render ★ as the main glyph and this letter as a small top-right mark. */
   blankLetterMark?: Letter;
+  /** Outline color for the ghost (pending) outline. Defaults to the global accent. */
+  outlineColor?: string;
 };
 
-export function Tile({ cell, tile, size = 36, draggableId, ghost = false, subBadge, displayOverride, pointsOverride }: Props) {
+export function Tile({ cell, tile, size = 36, draggableId, ghost = false, subBadge, displayOverride, pointsOverride, outlineColor }: Props) {
   const t = cell?.tile ?? tile;
   if (!t) return null;
   // A blank shown as a letter — on the board (committed), or pending with a chosen letter.
@@ -40,13 +45,17 @@ export function Tile({ cell, tile, size = 36, draggableId, ghost = false, subBad
   const display = isBlankAsLetter
     ? '★'
     : (cell ? cell.playedAs : (displayOverride ?? (t.isBlank ? '★' : t.letter)));
-  const points = pointsOverride ?? (cell ? (cell.fromBlank ? 0 : t.points) : t.points);
+  // Committed cells score the played-as letter (server uses its canonical points),
+  // so a substituted tile (e.g. Е played as Ё) must show the played-as value, not
+  // the physical tile's.
+  const cellPoints = cell ? (cell.fromBlank ? 0 : substitutionPoints(cell.playedAs, cell.tile)) : t.points;
+  const points = pointsOverride ?? cellPoints;
   const blankLetterMark = isBlankAsLetter ? chosenLetter : undefined;
 
   if (draggableId !== undefined) {
-    return <DraggableTile id={draggableId} display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} blankLetterMark={blankLetterMark} />;
+    return <DraggableTile id={draggableId} display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} blankLetterMark={blankLetterMark} outlineColor={outlineColor} />;
   }
-  return <StaticTile display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} blankLetterMark={blankLetterMark} />;
+  return <StaticTile display={display} points={points} size={size} ghost={ghost} subBadge={subBadge} blankLetterMark={blankLetterMark} outlineColor={outlineColor} />;
 }
 
 function BlankLetterMark({ letter, size }: { letter: Letter; size: number }) {
@@ -90,14 +99,14 @@ const TILE_BASE =
 const TILE_SHADOW =
   'shadow-[0_1px_0_rgba(40,60,75,0.06),0_2px_5px_rgba(40,60,75,0.10),inset_0_0_0_1px_rgba(255,255,255,0.7)]';
 
-function StaticTile({ display, points, size, ghost, subBadge, blankLetterMark }: InnerProps) {
+function StaticTile({ display, points, size, ghost, subBadge, blankLetterMark, outlineColor }: InnerProps) {
   return (
     <div
       className={[
         TILE_BASE,
-        ghost ? 'opacity-85 outline outline-2 outline-accent -outline-offset-2' : TILE_SHADOW,
+        ghost ? 'outline outline-2 -outline-offset-2' : TILE_SHADOW,
       ].join(' ')}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.55), color: '#1f2a30' }}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.55), color: '#1f2a30', outlineColor: ghost ? (outlineColor ?? 'var(--color-accent)') : undefined }}
     >
       <span
         style={{
@@ -128,7 +137,7 @@ function StaticTile({ display, points, size, ghost, subBadge, blankLetterMark }:
   );
 }
 
-function DraggableTile({ id, display, points, size, ghost, subBadge, blankLetterMark }: InnerProps & { id: string }) {
+function DraggableTile({ id, display, points, size, ghost, subBadge, blankLetterMark, outlineColor }: InnerProps & { id: string }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id });
   const style: React.CSSProperties = {
     width: size,
@@ -139,6 +148,7 @@ function DraggableTile({ id, display, points, size, ghost, subBadge, blankLetter
     opacity: isDragging ? 0.4 : 1,
     cursor: 'grab',
     touchAction: 'none',
+    outlineColor: ghost ? (outlineColor ?? 'var(--color-accent)') : undefined,
   };
   return (
     <div
@@ -148,7 +158,7 @@ function DraggableTile({ id, display, points, size, ghost, subBadge, blankLetter
       {...listeners}
       className={[
         TILE_BASE,
-        ghost ? 'outline outline-2 outline-accent -outline-offset-2' : TILE_SHADOW,
+        ghost ? 'outline outline-2 -outline-offset-2' : TILE_SHADOW,
       ].join(' ')}
     >
       <span
