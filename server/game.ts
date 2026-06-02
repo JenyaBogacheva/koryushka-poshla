@@ -24,12 +24,10 @@ export type PreviewResult =
   | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } };
 
 const SWAP_MIN_WORD_LEN = 7;
+// Only phrases that name the слово itself — keeps the celebratory line on-topic.
 const SWAP_PHRASES = [
   'Какое крутое слово!',
-  'Вот это да!',
-  'Ну и ну!',
   'Вот это слово так слово!',
-  'Какая красота!',
 ];
 
 export class Game {

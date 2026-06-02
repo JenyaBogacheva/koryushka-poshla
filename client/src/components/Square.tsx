@@ -2,10 +2,15 @@ import { useDroppable } from '@dnd-kit/core';
 import type { Cell, Letter, Premium, Slot, Tile as TileT } from '@shared/types';
 import { Tile } from './Tile.js';
 import { useGameStore } from '../store.js';
-import { SUBSTITUTIONS, SUBSTITUTION_POINTS, canSubstitute } from '../letters.js';
+import { SUBSTITUTIONS, canSubstitute, substitutionPoints } from '../letters.js';
+import { fishForSlot } from '../fish.js';
 
 // Must match @keyframes tile-flash duration in styles/index.css.
 const TILE_FLASH_MS = 1400;
+
+// Stable empty reference so the activeDraft selector doesn't churn re-renders
+// for squares when there's no active draft to mirror.
+const EMPTY_DRAFT: { row: number; col: number; tileId: string; playedAs: Letter }[] = [];
 
 const PREMIUM_BG: Record<Exclude<Premium, null>, string> = {
   TW: 'bg-prem-tw',
@@ -37,10 +42,17 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
   const state = useGameStore((s) => s.state);
   const pending = useGameStore((s) => s.pendingPlacements);
   const removePending = useGameStore((s) => s.removePending);
-  const othersDraft = useGameStore((s) => s.othersDraft);
+  // Only the active player drafts, so mirror just their slice — selecting the
+  // whole othersDraft object would re-render all 225 squares on every draft tick.
+  const activeDraft = useGameStore((s) => {
+    const ti = s.state?.turnIndex;
+    const mine = s.identity?.slot ?? null;
+    return ti !== undefined && ti !== mine ? s.othersDraft[ti] : EMPTY_DRAFT;
+  });
   const togglePendingSubstitution = useGameStore((s) => s.togglePendingSubstitution);
   const lastPlacedCells = useGameStore((s) => s.lastPlacedCells);
   const lastPlacedAt = useGameStore((s) => s.lastPlacedAt);
+  const lastPlacedSlot = useGameStore((s) => s.lastPlacedSlot);
 
   const mySlot = identity?.slot ?? null;
   const pendingHere = readOnly ? null : (pending.find((p) => p.row === row && p.col === col) ?? null);
@@ -53,10 +65,12 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
   const isLastPlaced = cell !== null && Date.now() - lastPlacedAt < TILE_FLASH_MS &&
     lastPlacedCells.some((c) => c.row === row && c.col === col);
 
+  // Highlights around in-progress work are tinted with the acting player's fish color.
+  const myAccent = mySlot !== null ? fishForSlot(mySlot).accent : 'var(--color-accent)';
   const base = 'relative flex items-center justify-center border border-ink/10';
   const bg = cell ? 'bg-cell' : (premium ? PREMIUM_BG[premium] : 'bg-cell');
   const overRing = isOver
-    ? (isClaimBlankTarget ? 'outline outline-2 outline-emerald-500' : 'outline outline-2 outline-prem-tl')
+    ? (isClaimBlankTarget ? 'outline outline-2 outline-emerald-500' : 'outline outline-2')
     : '';
 
   let pendingTile: TileT | null = null;
@@ -69,15 +83,13 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
   // move commits, so we resolve the glyph from the broadcast state.
   let otherTile: TileT | null = null;
   let otherDraftHere: { row: number; col: number; tileId: string; playedAs: Letter } | null = null;
-  if (!readOnly && cell === null && pendingHere === null && state !== null) {
-    for (const s of [0, 1, 2] as Slot[]) {
-      if (s === mySlot) continue;
-      const p = othersDraft[s].find((x) => x.row === row && x.col === col);
-      if (p !== undefined) {
-        otherDraftHere = p;
-        otherTile = state.players[s]!.rack.find((t) => t.id === p.tileId) ?? null;
-        break;
-      }
+  let otherSlot: Slot | null = null;
+  if (!readOnly && cell === null && pendingHere === null && state !== null && state.turnIndex !== mySlot) {
+    const p = activeDraft.find((x) => x.row === row && x.col === col);
+    if (p !== undefined) {
+      otherDraftHere = p;
+      otherSlot = state.turnIndex as Slot;
+      otherTile = state.players[otherSlot]!.rack.find((t) => t.id === p.tileId) ?? null;
     }
   }
 
@@ -97,10 +109,18 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
     <div
       ref={setNodeRef}
       className={`${base} ${bg} ${overRing}`}
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, outlineColor: isOver && !isClaimBlankTarget ? myAccent : undefined }}
     >
       {cell ? (
-        <div key={isLastPlaced ? lastPlacedAt : 'static'} className={isLastPlaced ? 'tile-flash' : undefined}>
+        <div
+          key={isLastPlaced ? lastPlacedAt : 'static'}
+          className={isLastPlaced ? 'tile-flash' : undefined}
+          style={
+            isLastPlaced && lastPlacedSlot !== null
+              ? ({ ['--flash-color']: fishForSlot(lastPlacedSlot).accent } as React.CSSProperties)
+              : undefined
+          }
+        >
           <Tile cell={cell} size={size - 4} />
         </div>
       ) : pendingTile !== null && pendingHere !== null ? (
@@ -112,31 +132,22 @@ export function Square({ row, col, cell, premium, size, readOnly = false }: Prop
             tile={pendingTile}
             size={size - 4}
             ghost
+            outlineColor={myAccent}
             draggableId={isMyTurn ? pendingTile.id : undefined}
             displayOverride={pendingHere.playedAs}
-            pointsOverride={
-              pendingHere.playedAs !== pendingTile.letter
-                ? (SUBSTITUTION_POINTS[pendingHere.playedAs] ?? pendingTile.points)
-                : undefined
-            }
+            pointsOverride={substitutionPoints(pendingHere.playedAs, pendingTile)}
             subBadge={subBadge}
           />
         </div>
-      ) : otherTile !== null && otherDraftHere !== null ? (
-        <div
-          className="rounded-md"
-          style={{ opacity: 0.6, outline: '2px dashed rgba(60,50,35,0.55)', outlineOffset: -2 }}
-          title="Соперник ставит плитку"
-        >
+      ) : otherTile !== null && otherDraftHere !== null && otherSlot !== null ? (
+        <div title="Соперник ставит плитку">
           <Tile
             tile={otherTile}
             size={size - 4}
+            ghost
+            outlineColor={fishForSlot(otherSlot).accent}
             displayOverride={otherDraftHere.playedAs}
-            pointsOverride={
-              otherDraftHere.playedAs !== otherTile.letter
-                ? (SUBSTITUTION_POINTS[otherDraftHere.playedAs] ?? otherTile.points)
-                : undefined
-            }
+            pointsOverride={substitutionPoints(otherDraftHere.playedAs, otherTile)}
           />
         </div>
       ) : premium ? (

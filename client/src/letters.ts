@@ -1,1 +1,1 @@
-export { CYRILLIC_LETTERS, SUBSTITUTIONS, SUBSTITUTION_POINTS, canSubstitute } from '@shared/letters.js';
+export { CYRILLIC_LETTERS, SUBSTITUTIONS, SUBSTITUTION_POINTS, canSubstitute, substitutionPoints } from '@shared/letters.js';

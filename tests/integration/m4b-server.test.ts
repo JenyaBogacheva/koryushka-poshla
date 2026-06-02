@@ -286,6 +286,38 @@ describe('integration — cool-word swap', () => {
     await server.close();
   });
 
+  it('offer then cancel lets the same player offer again', async () => {
+    const { server, url } = await freshServer();
+    const bs = [await buffered(url), await buffered(url), await buffered(url)] as const;
+    join(bs[0], 0, 'A'); join(bs[1], 1, 'B'); join(bs[2], 2, 'C');
+    await driveDraws(bs);
+    await waitFor(bs[0], isStatePlaying());
+
+    const st = latestState(bs[0]).state;
+    const from = st.turnIndex;
+    const to = ((from + 1) % 3) as Slot;
+    const giveTileId = st.players[from]!.rack[0]!.id;
+    const takeTileId = st.players[to]!.rack[0]!.id;
+
+    send(bs[from], { type: 'offerSwap', toSlot: to, giveTileId, takeTileId, word: 'КОРЮШКА' });
+    await waitFor(bs[from], (m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state' && m.state.pendingSwap !== null);
+
+    send(bs[from], { type: 'cancelSwap' });
+    await waitFor(bs[from], (m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state' && m.state.pendingSwap === null);
+
+    // Re-offer after cancelling must be accepted (pendingSwap was cleared, still our turn).
+    send(bs[from], { type: 'offerSwap', toSlot: to, giveTileId, takeTileId, word: 'КОРЮШКА' });
+    await waitFor(bs[from], (m): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state' && m.state.pendingSwap !== null);
+
+    const final = latestState(bs[from]).state;
+    expect(final.pendingSwap).not.toBeNull();
+    expect(final.pendingSwap!.fromSlot).toBe(from);
+    await server.close();
+  });
+
   it('offer then decline clears the offer with no score change', async () => {
     const { server, url } = await freshServer();
     const bs = [await buffered(url), await buffered(url), await buffered(url)] as const;

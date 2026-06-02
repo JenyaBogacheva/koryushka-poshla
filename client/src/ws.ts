@@ -89,7 +89,7 @@ export function connect(): void {
         ) {
           const cells = last.placements.map((p) => ({ row: p.row, col: p.col }));
           lastFlashedMoveTs = last.timestamp;
-          useGameStore.getState().setLastPlaced(cells, Date.now());
+          useGameStore.getState().setLastPlaced(cells, Date.now(), last.slot);
         }
         return;
       }
