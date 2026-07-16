@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { BadgeKind, GameArchive, GameState, Player, Slot } from '@shared/types';
+import { DEFAULT_SETTINGS } from '@shared/types';
 import { Board } from './Board.js';
 import { MoveLog } from './MoveLog.js';
 import { BadgeStrip } from './BadgeStrip.js';
@@ -58,6 +59,7 @@ export function PastGamesDetail({ id }: { id: string }) {
     drawState: null,
     pendingSwap: null,
     help: { revealed: false, suggestions: [] },
+    settings: DEFAULT_SETTINGS,
   };
 
   const scoresMap: Record<Slot, number> = {

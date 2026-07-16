@@ -1,6 +1,9 @@
-import type { GameState, Slot } from '@shared/types';
-import { sendDrawTile } from '../ws.js';
+import type { GameState, GameSettings, Slot } from '@shared/types';
+import { sendDrawTile, sendUpdateSettings } from '../ws.js';
 import { fishForSlot } from '../fish.js';
+
+const SETTING_MIN = 2;
+const SETTING_MAX = 15;
 
 type Props = { state: GameState; mySlot: Slot };
 
@@ -49,8 +52,86 @@ export function DrawForOrderScreen({ state, mySlot }: Props) {
             />
           ))}
         </div>
+
+        <SettingsSection settings={state.settings} accent={myFish.accent} />
       </div>
     </div>
+  );
+}
+
+function SettingsSection({ settings, accent }: { settings: GameSettings; accent: string }) {
+  const update = (patch: Partial<GameSettings>): void => {
+    sendUpdateSettings({ ...settings, ...patch });
+  };
+  return (
+    <div
+      className="relative mt-6 rounded-xl px-4 py-3 text-left"
+      style={{ background: 'rgba(45,36,25,0.05)' }}
+    >
+      <div className="mb-2 text-center text-sm font-semibold uppercase tracking-wider text-ink-soft">
+        Правила игры
+      </div>
+      <SettingRow
+        label="Мин. длина слова"
+        hint="Ходы с более коротким словом не принимаются"
+        value={settings.minWordLen}
+        accent={accent}
+        onChange={(v) => update({ minWordLen: v })}
+      />
+      <SettingRow
+        label="Слово для обмена"
+        hint="Мин. длина «крутого слова» при обмене плитками"
+        value={settings.swapMinWordLen}
+        accent={accent}
+        onChange={(v) => update({ swapMinWordLen: v })}
+      />
+      <p className="mt-2 text-center text-xs italic text-ink-soft">
+        Можно менять только сейчас, до начала игры.
+      </p>
+    </div>
+  );
+}
+
+type SettingRowProps = {
+  label: string;
+  hint: string;
+  value: number;
+  accent: string;
+  onChange: (value: number) => void;
+};
+
+function SettingRow({ label, hint, value, accent, onChange }: SettingRowProps) {
+  const clamp = (v: number): number => Math.max(SETTING_MIN, Math.min(SETTING_MAX, v));
+  return (
+    <div className="flex items-center justify-between gap-3 py-1.5">
+      <div className="min-w-0">
+        <div className="font-heading font-bold leading-tight" style={{ fontSize: 17 }}>
+          {label}
+        </div>
+        <div className="text-xs leading-tight text-ink-soft">{hint}</div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <StepButton label="−" disabled={value <= SETTING_MIN} accent={accent} onClick={() => onChange(clamp(value - 1))} />
+        <span className="font-heading w-6 text-center font-bold" style={{ fontSize: 20 }}>
+          {value}
+        </span>
+        <StepButton label="+" disabled={value >= SETTING_MAX} accent={accent} onClick={() => onChange(clamp(value + 1))} />
+      </div>
+    </div>
+  );
+}
+
+function StepButton({ label, disabled, accent, onClick }: { label: string; disabled: boolean; accent: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="flex h-8 w-8 items-center justify-center rounded-full text-xl font-bold leading-none text-white transition-opacity disabled:opacity-30"
+      style={{ background: accent }}
+    >
+      {label}
+    </button>
   );
 }
 

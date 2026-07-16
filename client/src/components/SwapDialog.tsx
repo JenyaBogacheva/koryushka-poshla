@@ -3,8 +3,6 @@ import type { Player, Slot, Tile } from '@shared/types';
 import { sendOfferSwap } from '../ws.js';
 import { fishForSlot } from '../fish.js';
 
-const MIN_WORD_LEN = 7;
-
 function cyrillicLen(word: string): number {
   return [...word].filter((ch) => /[а-яёА-ЯЁ]/.test(ch)).length;
 }
@@ -13,6 +11,7 @@ type Props = {
   mySlot: Slot;
   myRack: Tile[];
   opponents: Player[]; // the other two players (visible-rack ones are selectable)
+  minWordLen: number;  // house-rule minimum for the declared "cool word"
   onClose: () => void;
 };
 
@@ -31,7 +30,7 @@ function TileChip({ tile, selected, onClick }: { tile: Tile; selected: boolean; 
   );
 }
 
-export function SwapDialog({ mySlot, myRack, opponents, onClose }: Props) {
+export function SwapDialog({ mySlot, myRack, opponents, minWordLen, onClose }: Props) {
   const selectable = opponents.filter((p) => p.rackVisible);
   const [targetSlot, setTargetSlot] = useState<Slot | null>(selectable[0]?.slot ?? null);
   const [giveId, setGiveId] = useState<string | null>(null);
@@ -39,7 +38,7 @@ export function SwapDialog({ mySlot, myRack, opponents, onClose }: Props) {
   const [word, setWord] = useState('');
 
   const target = opponents.find((p) => p.slot === targetSlot) ?? null;
-  const wordOk = cyrillicLen(word) >= MIN_WORD_LEN;
+  const wordOk = cyrillicLen(word) >= minWordLen;
   const canOffer = targetSlot !== null && giveId !== null && takeId !== null && wordOk;
   const myFish = fishForSlot(mySlot);
 
@@ -102,7 +101,7 @@ export function SwapDialog({ mySlot, myRack, opponents, onClose }: Props) {
             )}
 
             <div className="mt-3">
-              <div className="text-sm text-ink-soft">Ради какого слова? (от 7 букв)</div>
+              <div className="text-sm text-ink-soft">Ради какого слова? (от {minWordLen} букв)</div>
               <input
                 value={word}
                 onChange={(e) => setWord(e.target.value)}

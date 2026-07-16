@@ -124,9 +124,44 @@ describe('scoring', () => {
     const result = scoreMove(b, words, placements, { centerBonusUsed: false });
     // sum tile pts at cells: pattern row 7 "w..L...*...L..w"
     // cols 4..10 (chars indices 4..10 of pattern row 7): '.', '.', '.', '*', '.', '.', '.'  => no DL/TL/TW for letters; CENTER = DW once
-    // letter scores: 1+3+1+3+2+1+5 = 16; word *2 = 32; +10 bingo = 42
-    expect(result.totalScore).toBe(42);
+    // letter scores: 1+3+1+3+2+1+5 = 16; word *2 = 32; +10 bingo; +5 long word (7 letters) = 47
+    expect(result.totalScore).toBe(47);
     expect(result.bingoBonus).toBe(true);
+  });
+
+  // Using all-blank words keeps letter points at 0 regardless of which premium
+  // squares are covered, so these isolate the flat +5 long-word bonus cleanly.
+  const blank = (id: string): Tile => tile(id, '', 0, true);
+
+  it('long-word bonus: +5 for a 7-letter word (added flat, past premiums)', () => {
+    const b = createEmptyBoard();
+    // Pre-place one blank at (0,0), then extend to a 7-letter all-blank word.
+    applyPlacements(b, [{ tileId: 'z', row: 0, col: 0, playedAs: 'А' }], [blank('z')]);
+    const ts = ['a', 'b', 'c', 'd', 'e', 'f'].map(blank);
+    const placements: Placement[] = ts.map((t, i) => ({
+      tileId: t.id, row: 0, col: 1 + i, playedAs: 'Б',
+    }));
+    applyPlacements(b, placements, ts);
+    const words = extractWordsFormed(b, placements);
+    const result = scoreMove(b, words, placements, { centerBonusUsed: true });
+    // 7-letter word, all blanks → letter sum 0; +5 long word; only 6 tiles placed → no bingo
+    expect(result.totalScore).toBe(5);
+    expect(result.bingoBonus).toBe(false);
+    expect(result.perWord[0]!.score).toBe(5);
+  });
+
+  it('no long-word bonus for a 6-letter word', () => {
+    const b = createEmptyBoard();
+    applyPlacements(b, [{ tileId: 'z', row: 0, col: 0, playedAs: 'А' }], [blank('z')]);
+    const ts = ['a', 'b', 'c', 'd', 'e'].map(blank);
+    const placements: Placement[] = ts.map((t, i) => ({
+      tileId: t.id, row: 0, col: 1 + i, playedAs: 'Б',
+    }));
+    applyPlacements(b, placements, ts);
+    const words = extractWordsFormed(b, placements);
+    const result = scoreMove(b, words, placements, { centerBonusUsed: true });
+    // 6-letter word, all blanks → letter sum 0; below threshold → no bonus
+    expect(result.totalScore).toBe(0);
   });
 
   it('multi-word move: scores all formed words and sums them', () => {

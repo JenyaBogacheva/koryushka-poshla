@@ -14,6 +14,10 @@ function pointsOfPlayedAs(letter: string): number {
   return POINTS_BY_LETTER.get(letter) ?? 0;
 }
 
+// Flat bonus for a long word — a fixed house rule (not a configurable setting).
+const LONG_WORD_MIN_LEN = 7;
+const LONG_WORD_BONUS = 5;
+
 export type ScoreMoveOpts = { centerBonusUsed: boolean };
 
 export type ScoreMoveResult = {
@@ -48,7 +52,9 @@ export function scoreMove(
       else if (premium === 'TW') wordMult *= 3;
       else if (premium === 'CENTER' && !opts.centerBonusUsed) wordMult *= 2;
     }
-    const wordScore = letterSum * wordMult;
+    let wordScore = letterSum * wordMult;
+    // +5 for a long word (7+ letters), added flat after multipliers, per formed word.
+    if (w.cells.length >= LONG_WORD_MIN_LEN) wordScore += LONG_WORD_BONUS;
     perWord.push({ ...w, score: wordScore });
     total += wordScore;
   }

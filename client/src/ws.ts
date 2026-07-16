@@ -1,4 +1,4 @@
-import type { ClientMessage, ServerMessage, Slot, Placement } from '@shared/types';
+import type { ClientMessage, ServerMessage, Slot, Placement, GameSettings } from '@shared/types';
 import { useGameStore } from './store.js';
 
 const RECONNECT_BASE_MS = 1000;
@@ -205,4 +205,7 @@ export function sendRespondSwap(accept: boolean): void {
 }
 export function sendCancelSwap(): void {
   send({ type: 'cancelSwap' });
+}
+export function sendUpdateSettings(settings: GameSettings): void {
+  send({ type: 'updateSettings', settings });
 }
