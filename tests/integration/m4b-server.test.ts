@@ -343,3 +343,44 @@ describe('integration — cool-word swap', () => {
     await server.close();
   });
 });
+
+describe('M4b server: settings', () => {
+  async function threeJoinedDrawing() {
+    const ctx = await freshServer();
+    const a = await buffered(ctx.url); join(a, 0, 'A');
+    const b = await buffered(ctx.url); join(b, 1, 'B');
+    const c = await buffered(ctx.url); join(c, 2, 'C');
+    const bs = [a, b, c] as const;
+    await Promise.all([
+      waitFor(a, isStateWithPhase('drawing')),
+      waitFor(b, isStateWithPhase('drawing')),
+      waitFor(c, isStateWithPhase('drawing')),
+    ]);
+    return { ...ctx, a, b, c, bs };
+  }
+
+  const hasSettings = (swapMinWordLen: number, minWordLen: number) =>
+    (m: ServerMessage): m is Extract<ServerMessage, { type: 'state' }> =>
+      m.type === 'state' &&
+      m.state.settings.swapMinWordLen === swapMinWordLen &&
+      m.state.settings.minWordLen === minWordLen;
+
+  it('applies updateSettings during drawing, broadcasts it, then locks once playing', async () => {
+    const { server, a, b, bs } = await threeJoinedDrawing();
+    try {
+      send(a, { type: 'updateSettings', settings: { swapMinWordLen: 5, minWordLen: 3 } });
+      // The change reaches the other clients too.
+      const seen = await waitFor(b, hasSettings(5, 3));
+      expect(seen.state.settings).toEqual({ swapMinWordLen: 5, minWordLen: 3 });
+
+      await driveDraws(bs);
+      const playing = await waitFor(a, isStateWithPhase('playing'));
+      expect(playing.state.settings).toEqual({ swapMinWordLen: 5, minWordLen: 3 });
+
+      // Locked now — the engine rejects further edits.
+      send(a, { type: 'updateSettings', settings: { swapMinWordLen: 8, minWordLen: 2 } });
+      const err = await waitFor(a, isError);
+      expect(err.message).toContain('до начала игры');
+    } finally { await server.close(); }
+  });
+});

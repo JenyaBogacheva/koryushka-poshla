@@ -1,4 +1,5 @@
-import type { GameState, Player, Slot, Tile, Placement, MoveRecord, WordFormed, Letter } from '@shared/types';
+import type { GameState, GameSettings, Player, Slot, Tile, Placement, MoveRecord, WordFormed, Letter } from '@shared/types';
+import { DEFAULT_SETTINGS } from '@shared/types.js';
 import { createBag, drawTiles, returnTiles, makeRng, bagFromTiles, type Bag } from './bag.js';
 import { addTilesToRack, removeTilesFromRack, redrawEligible, isAllVowels } from './rack.js';
 import { createEmptyBoard, applyPlacements, isEmpty, extractWordsFormed } from './board.js';
@@ -23,12 +24,24 @@ export type PreviewResult =
     }
   | { ok: false; error: MoveError | { kind: 'not-your-turn' } | { kind: 'not-playing' } };
 
-const SWAP_MIN_WORD_LEN = 7;
 // Only phrases that name the слово itself — keeps the celebratory line on-topic.
 const SWAP_PHRASES = [
   'Какое крутое слово!',
   'Вот это слово так слово!',
 ];
+
+// Configurable settings are bounded to sane, board-sized ranges. Client-supplied
+// values are clamped here rather than trusted, since they arrive over the wire.
+const SETTING_MIN = 2;
+const SETTING_MAX = 15;
+
+function sanitizeSettings(s: GameSettings): GameSettings {
+  const clampInt = (v: number): number => {
+    const n = Number.isFinite(v) ? Math.round(v) : SETTING_MIN;
+    return Math.max(SETTING_MIN, Math.min(SETTING_MAX, n));
+  };
+  return { swapMinWordLen: clampInt(s.swapMinWordLen), minWordLen: clampInt(s.minWordLen) };
+}
 
 export class Game {
   private state: GameState;
@@ -66,6 +79,7 @@ export class Game {
       drawState: null,
       pendingSwap: null,
       help: { revealed: false, suggestions: [] },
+      settings: { ...DEFAULT_SETTINGS },
     };
   }
 
@@ -81,6 +95,9 @@ export class Game {
     }
     if ((cloned as { help?: unknown }).help === undefined) {
       cloned.help = { revealed: false, suggestions: [] };
+    }
+    if ((cloned as { settings?: unknown }).settings === undefined) {
+      cloned.settings = { ...DEFAULT_SETTINGS };
     }
     const bag = bagFromTiles(cloned.bag, makeRng(Date.now()));
     cloned.bag = bag.tiles;
@@ -101,6 +118,17 @@ export class Game {
     const p = this.state.players[slot]!;
     p.name = name;
     p.connected = true;
+  }
+
+  /**
+   * Update house-rule settings. Editable only before play begins (the жребий screen);
+   * once a game is 'playing' the rules are locked so mid-game moves score consistently.
+   */
+  updateSettings(settings: GameSettings): void {
+    if (this.state.phase !== 'drawing') {
+      throw new Error('Настройки можно менять только до начала игры');
+    }
+    this.state.settings = sanitizeSettings(settings);
   }
 
   startGame(): void {
@@ -205,6 +233,24 @@ export class Game {
     this.state.help = { revealed: false, suggestions: [] };
   }
 
+  /**
+   * Check that every word this move would form meets the minimum-word-length setting.
+   * Runs on a scratch board so nothing is committed if the move is rejected.
+   * Returns the offending word as a MoveError, or null if all words are long enough.
+   */
+  private tooShortWord(rack: Tile[], placements: Placement[]): MoveError | null {
+    const min = this.state.settings.minWordLen;
+    if (min <= 2) return null; // words are always ≥ 2 letters, so nothing to reject
+    const scratchRack = structuredClone(rack);
+    const scratchTiles = removeTilesFromRack(scratchRack, placements.map((p) => p.tileId));
+    const scratchBoard = structuredClone(this.state.board);
+    applyPlacements(scratchBoard, placements, scratchTiles);
+    for (const w of extractWordsFormed(scratchBoard, placements)) {
+      if (w.cells.length < min) return { kind: 'word-too-short', word: w.word, min };
+    }
+    return null;
+  }
+
   submitMove(slot: Slot, placements: Placement[]): SubmitResult {
     if (this.state.phase !== 'playing') return { ok: false, error: { kind: 'not-playing' } };
     if (slot !== this.state.turnIndex) return { ok: false, error: { kind: 'not-your-turn' } };
@@ -214,6 +260,9 @@ export class Game {
     const isFirst = isEmpty(this.state.board);
     const validation = validateMove(this.state.board, player.rack, placements, isFirst);
     if (!validation.ok) return { ok: false, error: validation.error };
+
+    const tooShort = this.tooShortWord(player.rack, placements);
+    if (tooShort !== null) return { ok: false, error: tooShort };
 
     this.state.pendingSwap = null;
     this.maybeClearRevertOnActionBy(slot);
@@ -307,8 +356,9 @@ export class Game {
     const from = this.state.players[fromSlot]!;
     if (!from.rack.some((t) => t.id === giveTileId)) throw new Error('Вашей плитки нет на стойке');
     if (!target.rack.some((t) => t.id === takeTileId)) throw new Error('Плитки игрока нет на стойке');
-    if (countCyrillicLetters(word) < SWAP_MIN_WORD_LEN) {
-      throw new Error(`Слово должно быть не короче ${SWAP_MIN_WORD_LEN} букв`);
+    const swapMin = this.state.settings.swapMinWordLen;
+    if (countCyrillicLetters(word) < swapMin) {
+      throw new Error(`Слово должно быть не короче ${swapMin} букв`);
     }
     // Offering is an action by this player: per the revert rule it closes any other
     // player's open undo window, so a later accept can't be wiped by their revert.
@@ -376,6 +426,9 @@ export class Game {
     const isFirst = isEmpty(this.state.board);
     const validation = validateMove(this.state.board, player.rack, placements, isFirst);
     if (!validation.ok) return { ok: false, error: validation.error };
+
+    const tooShort = this.tooShortWord(player.rack, placements);
+    if (tooShort !== null) return { ok: false, error: tooShort };
 
     const tileIds = placements.map((p) => p.tileId);
     const previewRack = structuredClone(player.rack);

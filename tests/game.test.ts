@@ -1005,3 +1005,106 @@ describe('Game — fromState back-fill', () => {
     expect(restored.snapshot().pendingSwap?.word).toBe('КОРЮШКА');
   });
 });
+
+describe('Game — settings', () => {
+  // A game that has started the жребий but has not finished drawing, so settings
+  // are still editable. Mirrors startAndDraw but stops before the draw loop.
+  function makeDrawingGame(seed: number): Game {
+    const g = new Game({ seed });
+    g.joinPlayer(0, 'A'); g.joinPlayer(1, 'B'); g.joinPlayer(2, 'C');
+    g.startGame();
+    return g;
+  }
+
+  function drawToPlaying(g: Game): void {
+    while (g.snapshot().phase === 'drawing') {
+      const ds = g.snapshot().drawState!;
+      for (const slot of ds.candidates) {
+        if (g.snapshot().phase !== 'drawing') break;
+        const cur = g.snapshot().drawState!;
+        if (cur.draws.some((d) => d.slot === slot)) continue;
+        g.drawForOrderTile(slot);
+      }
+    }
+  }
+
+  it('defaults to swapMinWordLen 7 and minWordLen 2', () => {
+    const g = new Game({ seed: 1 });
+    expect(g.snapshot().settings).toEqual({ swapMinWordLen: 7, minWordLen: 2 });
+  });
+
+  it('updates settings during the drawing phase', () => {
+    const g = makeDrawingGame(1);
+    g.updateSettings({ swapMinWordLen: 5, minWordLen: 3 });
+    expect(g.snapshot().settings).toEqual({ swapMinWordLen: 5, minWordLen: 3 });
+  });
+
+  it('clamps out-of-range and non-integer values', () => {
+    const g = makeDrawingGame(1);
+    g.updateSettings({ swapMinWordLen: 99, minWordLen: 0 });
+    expect(g.snapshot().settings).toEqual({ swapMinWordLen: 15, minWordLen: 2 });
+    g.updateSettings({ swapMinWordLen: 4.6, minWordLen: NaN });
+    expect(g.snapshot().settings).toEqual({ swapMinWordLen: 5, minWordLen: 2 });
+  });
+
+  it('refuses to update settings once playing', () => {
+    const g = makeDrawingGame(1);
+    drawToPlaying(g);
+    expect(() => g.updateSettings({ swapMinWordLen: 5, minWordLen: 3 })).toThrow();
+  });
+
+  it('settings survive a fromState round-trip; old saves get defaults', () => {
+    const g = makeDrawingGame(1);
+    g.updateSettings({ swapMinWordLen: 6, minWordLen: 4 });
+    const restored = Game.fromState(g.snapshot());
+    expect(restored.snapshot().settings).toEqual({ swapMinWordLen: 6, minWordLen: 4 });
+
+    const legacy = g.snapshot() as Record<string, unknown>;
+    delete legacy['settings'];
+    const migrated = Game.fromState(legacy as unknown as import('@shared/types').GameState);
+    expect(migrated.snapshot().settings).toEqual({ swapMinWordLen: 7, minWordLen: 2 });
+  });
+
+  it('rejects a move whose word is shorter than minWordLen', () => {
+    const g = makeDrawingGame(3);
+    g.updateSettings({ swapMinWordLen: 7, minWordLen: 3 });
+    drawToPlaying(g);
+    const first = g.snapshot().turnIndex;
+    const rack = g.snapshot().players[first]!.rack;
+    const [t0, t1] = [rack[0]!, rack[1]!];
+    // Two adjacent tiles across the center form a single 2-letter word — below the min.
+    const placements: Placement[] = [
+      { tileId: t0.id, row: 7, col: 7, playedAs: t0.isBlank ? 'А' : t0.letter },
+      { tileId: t1.id, row: 7, col: 8, playedAs: t1.isBlank ? 'Б' : t1.letter },
+    ];
+    const res = g.submitMove(first, placements);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.kind).toBe('word-too-short');
+  });
+
+  it('accepts the same 2-letter move under the default minWordLen of 2', () => {
+    const g = makeReadyGame(3);
+    const first = g.snapshot().turnIndex;
+    const rack = g.snapshot().players[first]!.rack;
+    const [t0, t1] = [rack[0]!, rack[1]!];
+    const placements: Placement[] = [
+      { tileId: t0.id, row: 7, col: 7, playedAs: t0.isBlank ? 'А' : t0.letter },
+      { tileId: t1.id, row: 7, col: 8, playedAs: t1.isBlank ? 'Б' : t1.letter },
+    ];
+    expect(g.submitMove(first, placements).ok).toBe(true);
+  });
+
+  it('honors a custom swapMinWordLen in offerSwap', () => {
+    const g = makeDrawingGame(7);
+    g.updateSettings({ swapMinWordLen: 5, minWordLen: 2 });
+    drawToPlaying(g);
+    const s = g.snapshot();
+    const from = s.turnIndex;
+    const to = nextInTurnOrder(s.turnOrder, from);
+    const giveTileId = s.players[from]!.rack[0]!.id;
+    const takeTileId = s.players[to]!.rack[0]!.id;
+    expect(() => g.offerSwap(from, to, giveTileId, takeTileId, 'КОТИК')).not.toThrow(); // 5 letters
+    g.cancelSwap(from);
+    expect(() => g.offerSwap(from, to, giveTileId, takeTileId, 'КОТ')).toThrow(); // 3 letters
+  });
+});

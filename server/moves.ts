@@ -14,7 +14,8 @@ export type MoveError =
   | { kind: 'illegal-blank-letter'; playedAs: string }
   | { kind: 'first-move-must-cover-center' }
   | { kind: 'first-move-must-be-one-group' }
-  | { kind: 'group-not-connected'; row: number; col: number };
+  | { kind: 'group-not-connected'; row: number; col: number }
+  | { kind: 'word-too-short'; word: string; min: number };
 
 export type MoveValidation = { ok: true } | { ok: false; error: MoveError };
 

@@ -26,6 +26,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
   const phase = useGameStore((s) => s.state?.phase ?? 'waiting');
   const bagLeft = useGameStore((s) => s.state?.bag.length ?? 0);
   const help = useGameStore((s) => s.state?.help);
+  const swapMinWordLen = useGameStore((s) => s.state?.settings?.swapMinWordLen ?? 7);
   const [passOpen, setPassOpen] = useState(false);
   const [swapAllOpen, setSwapAllOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
@@ -306,6 +307,7 @@ export function PlayerCard({ player, isCurrentTurn }: Props) {
           mySlot={player.slot}
           myRack={player.rack}
           opponents={(allPlayers as Player[]).filter((p) => p.slot !== player.slot)}
+          minWordLen={swapMinWordLen}
           onClose={() => setSwapOpen(false)}
         />
       )}

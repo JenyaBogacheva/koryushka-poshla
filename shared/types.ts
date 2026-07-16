@@ -143,6 +143,16 @@ export type Player = {
 
 export type GamePhase = 'waiting' | 'drawing' | 'playing' | 'finished';
 
+// House-rule knobs the family can tweak from the lobby (жребий screen) before play
+// begins. Locked once phase becomes 'playing'. Long-word bonus (+5 for 7+ letters) is
+// an intentionally non-configurable rule, so it does not live here.
+export type GameSettings = {
+  swapMinWordLen: number; // cool-word swap: declared word must be ≥ this many Cyrillic letters
+  minWordLen: number;     // every word a move forms must be ≥ this many letters
+};
+
+export const DEFAULT_SETTINGS: GameSettings = { swapMinWordLen: 7, minWordLen: 2 };
+
 export type HelpSuggestion = { slot: Slot; word: string };
 
 // Per-turn word hints: non-active players queue words privately; nothing is shown
@@ -166,6 +176,7 @@ export type GameState = {
   drawState: DrawState | null;
   pendingSwap: SwapOffer | null;
   help: HelpState;
+  settings: GameSettings;
 };
 
 export type GameSummary = {
@@ -213,6 +224,7 @@ export type ClientMessage =
   | { type: 'respondSwap'; accept: boolean }
   | { type: 'cancelSwap' }
   | { type: 'toggleRackVisible'; visible: boolean }
+  | { type: 'updateSettings'; settings: GameSettings }
   | { type: 'endGame' }
   | { type: 'revertLastTurn' }
   | { type: 'newGame' }

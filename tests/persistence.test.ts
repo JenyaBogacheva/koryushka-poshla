@@ -35,6 +35,7 @@ const sampleState = (): GameState => ({
   drawState: null,
   pendingSwap: null,
   help: { revealed: false, suggestions: [] },
+  settings: { swapMinWordLen: 7, minWordLen: 2 },
 });
 
 describe('persistence', () => {

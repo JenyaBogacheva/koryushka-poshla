@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { ClientMessage, ServerMessage, GameState, LobbySlot, Placement, Slot } from '@shared/types';
+import { DEFAULT_SETTINGS } from '@shared/types.js';
 import { Game } from './game.js';
 import { createEmptyBoard } from './board.js';
 import { createSeats, seat, unseat, allSeated, namesInSlotOrder, type Seats } from './connections.js';
@@ -106,6 +107,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       drawState: null,
       pendingSwap: null,
       help: { revealed: false, suggestions: [] },
+      settings: { ...DEFAULT_SETTINGS },
     };
   }
 
@@ -301,6 +303,9 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         case 'toggleRackVisible':
           sendMsg(ws, { type: 'error', message: 'not yet implemented' });
           return;
+        case 'updateSettings':
+          handleEngineAction(ws, () => game!.updateSettings(msg.settings));
+          return;
         case 'newGame': {
           // Recover from a stuck finished game (e.g. older server build that didn't
           // archive on auto-end): treat it as if endGame had cleaned up.
@@ -481,6 +486,10 @@ function humanReadableReason(error: { kind: string }): string {
     case 'first-move-must-cover-center': return 'Первый ход должен закрывать центральную клетку';
     case 'first-move-must-be-one-group': return 'Первый ход должен быть одной группой';
     case 'group-not-connected': return 'Слова должны соединяться с уже сыгранными';
+    case 'word-too-short': {
+      const e = error as unknown as { word: string; min: number };
+      return `Слово «${e.word}» короче ${e.min} букв`;
+    }
     default: return `Ошибка: ${error.kind}`;
   }
 }
