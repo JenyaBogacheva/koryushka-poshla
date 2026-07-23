@@ -44,10 +44,27 @@ describe('rack', () => {
     expect(redrawEligible(rack)).toBe(false);
   });
 
-  it('rack with a sign (Ъ) is not all-vowels nor all-consonants', () => {
-    const rack = [t('1', 'Б'), t('2', 'В'), t('3', 'Ъ')];
+  it('signs (Ъ/Ь) count as both, so they do not break consonant eligibility', () => {
+    const rack = [t('1', 'Б'), t('2', 'В'), t('3', 'Ъ'), t('4', 'Ь')];
+    expect(isAllConsonants(rack)).toBe(true);
     expect(isAllVowels(rack)).toBe(false);
+    expect(redrawEligible(rack)).toBe(true);
+  });
+
+  it('signs (Ъ/Ь) count as both, so they do not break vowel eligibility', () => {
+    const rack = [t('1', 'А'), t('2', 'Е'), t('3', 'Ь')];
+    expect(isAllVowels(rack)).toBe(true);
     expect(isAllConsonants(rack)).toBe(false);
+    expect(redrawEligible(rack)).toBe(true);
+  });
+
+  it('a rack of only signs is eligible (unplayable)', () => {
+    const rack = [t('1', 'Ъ'), t('2', 'Ь')];
+    expect(redrawEligible(rack)).toBe(true);
+  });
+
+  it('a sign mixed with both a vowel and a consonant is not eligible', () => {
+    const rack = [t('1', 'А'), t('2', 'Б'), t('3', 'Ь')];
     expect(redrawEligible(rack)).toBe(false);
   });
 
