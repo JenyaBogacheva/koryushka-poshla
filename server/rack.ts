@@ -1,5 +1,5 @@
 import type { Tile } from '@shared/types';
-import { isVowel, isConsonant } from './letters.js';
+import { isVowel, isConsonant, isSign } from './letters.js';
 
 export function removeTilesFromRack(rack: Tile[], tileIds: string[]): Tile[] {
   const removed: Tile[] = [];
@@ -17,12 +17,12 @@ export function addTilesToRack(rack: Tile[], tiles: Tile[]): void {
 
 export function isAllVowels(rack: Tile[]): boolean {
   if (rack.length === 0) return false;
-  return rack.every((t) => !t.isBlank && isVowel(t.letter));
+  return rack.every((t) => !t.isBlank && (isVowel(t.letter) || isSign(t.letter)));
 }
 
 export function isAllConsonants(rack: Tile[]): boolean {
   if (rack.length === 0) return false;
-  return rack.every((t) => !t.isBlank && isConsonant(t.letter));
+  return rack.every((t) => !t.isBlank && (isConsonant(t.letter) || isSign(t.letter)));
 }
 
 export function redrawEligible(rack: Tile[]): boolean {

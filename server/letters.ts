@@ -26,6 +26,12 @@ export function isConsonant(letter: Letter): boolean {
   return CONSONANTS.has(letter);
 }
 
+// Ъ/Ь carry no sound and can't stand alone; for redraw eligibility they count as
+// both vowel and consonant, so they never disqualify an otherwise-unplayable rack.
+export function isSign(letter: Letter): boolean {
+  return SIGNS.has(letter);
+}
+
 export function isCyrillicLetter(value: string): boolean {
   return VOWELS.has(value) || CONSONANTS.has(value) || SIGNS.has(value);
 }

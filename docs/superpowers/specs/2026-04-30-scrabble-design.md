@@ -29,7 +29,7 @@ A real-time, online, three-player Russian Scrabble game ("Эрудит") for a f
 | **Bonus squares (DW/TW/DL/TL)** | **Reusable** — apply every turn a tile sits on them, not only when first covered. **Exception:** the center DW only applies the first time it is covered. |
 | **Word scoring** | Standard — every word formed by your move (the main word plus any perpendicular side words containing a new tile) is scored. |
 | **Rack visibility** | Each player can show or hide their rack to opponents. **Default: visible.** Toggleable any time. |
-| **All-vowel / all-consonant rack** | Free redraw — return all 7 tiles, draw 7 fresh ones, **does not consume the turn**. |
+| **All-vowel / all-consonant rack** | Free redraw — return all 7 tiles, draw 7 fresh ones, **does not consume the turn**. The signs **Ъ/Ь** carry no sound and can't stand alone, so they count as **both** vowel and consonant: a rack of vowels-plus-signs still qualifies as all-vowel, consonants-plus-signs as all-consonant, and a rack of only signs qualifies. A blank tile never qualifies (it makes the rack playable). |
 | **Revert last turn** | The player who just submitted an action (place / pass / redraw / claimBlank) may revert it, restoring the pre-action state. The window closes the moment any other player submits any action. One level of undo only; not persisted across server restarts. |
 | **Blank-swap ("claim blank")** | When a blank tile is on the board representing letter X, any player who has a real X tile in their rack may, on their own turn (before submitting a move), claim the blank: the real X takes the cell, the blank moves to the player's rack. **First-come-first-served** — first valid claim wins. |
 | **Helping hand (+5)** | Each player's card shows a **fish + name** button for each of the **other two** players, available throughout play and not tied to any turn. Pressing it awards that player **+5** immediately ("помог +5"). No move required, no cap, no attribution to a specific move, no undo — family honor system. Each award is logged as an `assist` event; the "helper" end-game badge goes to whoever received the most awards. |
@@ -237,6 +237,8 @@ Sent as `claimBlank` (separate from `submitMove`). Allowed only on the sender's 
 ### 9.5 All-vowel / all-consonant redraw
 
 After every rack draw, the server checks the player's 7 tiles. If all vowels or all consonants, the `redraw` action becomes available to that player (advertised in their state snapshot). Using it returns all 7 tiles to the bag, reshuffles, draws 7 fresh ones, and does not consume the turn.
+
+The signs **Ъ** and **Ь** count as both vowel and consonant for this check, since a rack of vowels (or consonants) plus a sign is just as unplayable as the pure case. Blanks disqualify the rack — a blank can stand in for any letter, so the rack is playable.
 
 ### 9.6 Жребий (draw-for-order)
 
