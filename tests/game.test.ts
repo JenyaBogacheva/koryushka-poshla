@@ -1094,6 +1094,42 @@ describe('Game — settings', () => {
     expect(g.submitMove(first, placements).ok).toBe(true);
   });
 
+  it('accepts a 2-letter word once the bag is empty, even with minWordLen 3', () => {
+    // House rule: when there are no tiles left to draw, the minimum-word-length
+    // floor no longer applies — short words become playable.
+    const g = makeReadyGame(5);
+    const s = g.snapshot();
+    s.settings.minWordLen = 3;
+    s.bag = []; // no more letters in the bag
+    s.turnIndex = 0;
+    const rack = s.players[0]!.rack;
+    const [t0, t1] = [rack[0]!, rack[1]!];
+    const g2 = Game.fromState(s);
+    const placements: Placement[] = [
+      { tileId: t0.id, row: 7, col: 7, playedAs: t0.isBlank ? 'А' : t0.letter },
+      { tileId: t1.id, row: 7, col: 8, playedAs: t1.isBlank ? 'Б' : t1.letter },
+    ];
+    expect(g2.submitMove(0, placements).ok).toBe(true);
+  });
+
+  it('still rejects a 2-letter word under minWordLen 3 while the bag has tiles', () => {
+    const g = makeReadyGame(5);
+    const s = g.snapshot();
+    s.settings.minWordLen = 3;
+    s.turnIndex = 0;
+    expect(s.bag.length).toBeGreaterThan(0);
+    const rack = s.players[0]!.rack;
+    const [t0, t1] = [rack[0]!, rack[1]!];
+    const g2 = Game.fromState(s);
+    const placements: Placement[] = [
+      { tileId: t0.id, row: 7, col: 7, playedAs: t0.isBlank ? 'А' : t0.letter },
+      { tileId: t1.id, row: 7, col: 8, playedAs: t1.isBlank ? 'Б' : t1.letter },
+    ];
+    const res = g2.submitMove(0, placements);
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.kind).toBe('word-too-short');
+  });
+
   it('honors a custom swapMinWordLen in offerSwap', () => {
     const g = makeDrawingGame(7);
     g.updateSettings({ swapMinWordLen: 5, minWordLen: 2 });

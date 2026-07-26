@@ -241,6 +241,9 @@ export class Game {
   private tooShortWord(rack: Tile[], placements: Placement[]): MoveError | null {
     const min = this.state.settings.minWordLen;
     if (min <= 2) return null; // words are always ≥ 2 letters, so nothing to reject
+    // House rule: once the bag is empty, the min-word-length floor lifts — short
+    // words (down to the 2-letter geometric minimum) become playable.
+    if (this.bag.tiles.length === 0) return null;
     const scratchRack = structuredClone(rack);
     const scratchTiles = removeTilesFromRack(scratchRack, placements.map((p) => p.tileId));
     const scratchBoard = structuredClone(this.state.board);
